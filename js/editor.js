@@ -1094,7 +1094,7 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     } else if (['>', '<', '^', 'v'].includes(c)) {
         const flow = mockGame.poweredBlocks.get(`${x},${y}`) || null;
         let dir = 0; if(c==='v') dir=1; if(c==='<') dir=2; if(c==='^') dir=3;
-        Graphics.drawBlock(0, 0, dir * Math.PI / 2, flow);
+        Graphics.drawBlock(x, y, dir * Math.PI / 2, flow);
     } else if (['(', ')', '[', ']'].includes(c)) {
         let dir = 2; if(c===')') dir=0; if(c==='[') dir=3; if(c===']') dir=1;
         // Find conveyor in mockGame to get inDir, beltDist and beltLength
@@ -1112,6 +1112,10 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const qf = mockGame.quantumFloors ? mockGame.quantumFloors.find(q => q.x === x && q.y === y) : null;
         Graphics.drawQuantumFloor(x, y, qf ? qf.active : true, animFrame, qf ? qf.flashTimer : 0, qf ? qf.pulseIntensity : 1.0, qf ? qf.entrySide : null, qf ? qf.whiteGlow : 0);
     } else if (c === 'P') {
+
+
+
+
         const btn = mockGame.purpleButtons ? mockGame.purpleButtons.find(b => b.x === x && b.y === y) : null;
         if (btn) Graphics.drawPurpleButton(x, y, btn.isPressed, btn.isToggle);
         else Graphics.drawPurpleButton(x, y, false, false);
