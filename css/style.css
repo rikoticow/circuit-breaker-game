@@ -1,243 +1,226 @@
-/* 
-    CIRCUIT BREAKER - Industrial Aesthetics Design System
-    Focus: CRT Textures, Glowing Gradients, and Industrial Metallics
-*/
-
 :root {
-    --bg-deep: #050810;
-    --panel-bg: rgba(15, 20, 30, 0.9);
-    --primary-cyan: #00f0ff;
-    --accent-green: #00ff9f;
-    --error-red: #ff003c;
-    --warning-yellow: #ffcc00;
-    --industrial-orange: #ed8936;
-    --metal-grey: #4a5568;
-    --glow-cyan: 0 0 15px rgba(0, 240, 255, 0.5);
+    --bg-color: #050a05;
+    --neon-blue: #00f0ff;
+    --neon-orange: #ff8800;
+    --neon-green: #00ff9f;
+    --neon-red: #ff003c;
+    --ui-text: #00ff9f;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
 body {
-    background: var(--bg-deep);
-    color: #fff;
-    font-family: 'VT323', monospace;
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    background-color: #000;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    font-family: 'VT323', monospace;
+    overflow: hidden;
+    user-select: none;
 }
 
 #game-container {
     position: relative;
     width: 640px;
-    height: 560px; /* 480 game + 80 HUD */
-    border: 10px solid #222;
-    border-radius: 8px;
-    box-shadow: 0 0 50px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,240,255,0.1);
+    height: 560px;
+    background-color: var(--bg-color);
+    box-shadow: 0 0 20px var(--neon-blue), inset 0 0 50px #000;
+    border: 4px solid #222;
+    border-radius: 10px;
     overflow: hidden;
 }
 
-canvas {
+#gameCanvas {
+    width: 640px;
+    height: 480px;
     display: block;
-    background: #000;
+    image-rendering: pixelated; /* Essential for crisp pixel art */
 }
 
-#transition-canvas {
+/* UI Bars */
+#ui-top {
+    height: 40px;
+    background: linear-gradient(to bottom, #111, #000);
+    border-bottom: 2px solid var(--neon-blue);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    color: var(--ui-text);
+    font-size: 24px;
+    text-shadow: 0 0 5px var(--neon-green);
+    padding: 0 10px;
+}
+
+#ui-level-name {
+    width: 200px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+#ui-bottom {
+    height: 40px;
+    background: linear-gradient(to top, #111, #000);
+    border-top: 2px solid var(--neon-orange);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    color: var(--ui-text);
+}
+
+#energy-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.energy-label {
+    font-size: 20px;
+    color: var(--neon-orange);
+    text-shadow: 0 0 5px var(--neon-orange);
+}
+
+.energy-track {
+    width: 150px;
+    height: 15px;
+    background-color: #222;
+    border: 2px solid #555;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+#energy-fill {
+    width: 100%;
+    height: 100%;
+    background-color: var(--neon-blue);
+    box-shadow: 0 0 10px var(--neon-blue);
+    transition: width 0.2s ease-out, background-color 0.2s;
+}
+
+#controls-hint {
+    font-size: 18px;
+    color: #888;
+}
+
+/* Screen Overlay (Game Over / Level Complete) */
+#screen-overlay {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    width: 640px;
+    height: 480px;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+}
+
+#screen-overlay.hidden {
+    display: none;
+}
+
+#overlay-title {
+    font-size: 64px;
+    margin: 0;
+    text-shadow: 0 0 20px var(--neon-blue);
+}
+
+#overlay-title.game-over {
+    color: var(--neon-red);
+    text-shadow: 0 0 20px var(--neon-red);
+}
+
+#overlay-title.victory {
+    color: var(--neon-green);
+    text-shadow: 0 0 20px var(--neon-green);
+}
+
+#overlay-text {
+    font-size: 24px;
+    color: #fff;
+    margin-top: 20px;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* CRT Scanlines Effect */
+.scanlines {
     position: absolute;
     top: 0;
     left: 0;
-    pointer-events: none;
-    z-index: 100;
-}
-
-/* HUD STYLES */
-#hud {
-    position: absolute;
-    bottom: 0;
-    left: 0;
     width: 100%;
-    height: 80px;
-    background: #111;
-    border-top: 4px solid var(--metal-grey);
-    display: flex;
-    padding: 10px;
-    z-index: 50;
-    background-image: 
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-    background-size: 20px 20px;
-}
-
-.hud-panel {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 0 15px;
-}
-
-.hud-panel.left { width: 140px; border-right: 1px solid #333; }
-.hud-panel.center { flex-grow: 1; align-items: center; }
-.hud-panel.right { width: 180px; border-left: 1px solid #333; }
-
-.stat-group { margin-bottom: 5px; width: 100%; }
-.stat-group label { display: block; font-size: 14px; color: #888; letter-spacing: 1px; }
-.stat-group .value { font-size: 20px; color: var(--primary-cyan); text-shadow: var(--glow-cyan); }
-
-/* Energy Bar */
-.energy-container { width: 100%; max-width: 200px; }
-.label-row { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 4px; }
-.digital { color: var(--warning-yellow); font-size: 18px; }
-
-.bar-outer {
-    height: 18px;
-    background: #000;
-    border: 2px solid var(--metal-grey);
-    padding: 2px;
-}
-
-.bar-inner {
     height: 100%;
-    background: var(--industrial-orange);
-    box-shadow: 0 0 10px rgba(237, 137, 54, 0.4);
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Segmented Progress Bars (Amps/Lives) */
-.segmented-bar {
-    display: flex;
-    gap: 3px;
-    height: 12px;
-    margin-top: 5px;
-}
-
-.segment {
-    flex-grow: 1;
-    background: var(--accent-green);
-    border: 1px solid rgba(0,0,0,0.3);
-    box-shadow: inset 0 2px 2px rgba(255,255,255,0.2);
-}
-
-.segment.empty { background: #222; opacity: 0.5; box-shadow: none; }
-
-.segmented-bar.red .segment { background: var(--error-red); }
-
-#lives-container {
-    position: absolute;
-    top: -30px;
-    right: 10px;
-    width: 60px;
-}
-
-/* OVERLAYS */
-.overlay {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 480px;
-    background: rgba(5, 8, 16, 0.95);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 200;
-}
-
-.terminal-text {
-    text-align: center;
-    max-width: 80%;
-}
-
-.glitch-title {
-    font-size: 72px;
-    color: var(--primary-cyan);
-    letter-spacing: 5px;
-    position: relative;
-    text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
-}
-
-.subtitle { color: #556688; margin-bottom: 40px; }
-
-.btn-main {
-    background: transparent;
-    border: 2px solid var(--primary-cyan);
-    color: var(--primary-cyan);
-    padding: 15px 40px;
-    font-family: 'VT323', monospace;
-    font-size: 28px;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.2);
-}
-
-.btn-main:hover {
-    background: var(--primary-cyan);
-    color: #000;
-    box-shadow: 0 0 30px rgba(0, 240, 255, 0.6);
-}
-
-.control-hints {
-    margin-top: 30px;
-    color: #4a5568;
-    font-size: 18px;
-    line-height: 1.5;
-}
-
-/* CRT EFFECTS */
-.scanlines {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
     background: linear-gradient(
-        rgba(18, 16, 16, 0) 50%, 
-        rgba(0, 0, 0, 0.1) 50%
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0,0,0,0.1) 50%,
+        rgba(0,0,0,0.1)
     );
     background-size: 100% 4px;
-    z-index: 300;
     pointer-events: none;
+    z-index: 20;
+    opacity: 0.6;
 }
 
-.vignette {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.4) 100%);
-    z-index: 301;
-    pointer-events: none;
+/* Flash effects */
+@keyframes flash-red {
+    0% { background-color: rgba(255, 0, 60, 0.5); }
+    100% { background-color: transparent; }
+}
+.flash-red {
+    animation: flash-red 0.5s ease-out;
 }
 
-/* Animations */
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
-}
-
-.pulse { animation: pulse 2s infinite; }
-
-/* Modal / Level selector customization */
-#level-selector {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.level-node {
-    width: 40px;
-    height: 40px;
-    border: 2px solid #333;
+/* UI Scrap Icon (Gear) */
+.scrap-display {
     display: flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
+    gap: 8px;
 }
 
-.level-node.unlocked { border-color: var(--accent-green); color: var(--accent-green); }
-.level-node.completed { background: var(--accent-green); color: #000; }
-.level-node.selected { border-color: #fff; box-shadow: 0 0 15px #fff; }
+.ui-scrap-icon {
+    width: 20px;
+    height: 20px;
+    background: var(--neon-green);
+    position: relative;
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--neon-green);
+}
 
-/* Custom Scrollbar for Terminal */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #0a0e1a; }
-::-webkit-scrollbar-thumb { background: #222d44; }
-::-webkit-scrollbar-thumb:hover { background: #334466; }
+.ui-scrap-icon::before {
+    content: "";
+    position: absolute;
+    top: -4px; left: -4px; right: -4px; bottom: -4px;
+    background: repeating-conic-gradient(
+        from 0deg,
+        var(--neon-green) 0deg 20deg,
+        transparent 20deg 45deg
+    );
+    mask-image: radial-gradient(circle, transparent 50%, black 51%);
+    -webkit-mask-image: radial-gradient(circle, transparent 50%, black 51%);
+    border-radius: 50%;
+}
+
+.ui-scrap-icon::after {
+    content: "";
+    position: absolute;
+    top: 6px; left: 6px; width: 8px; height: 8px;
+    background: #000;
+    border-radius: 50%;
+}
+
+.ui-separator {
+    color: #333;
+    font-size: 20px;
+    opacity: 0.5;
+}

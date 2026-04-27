@@ -1,210 +1,330 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>CIRCUIT BREAKER - Terminal de Edição</title>
-    <link rel="stylesheet" href="css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuit Breaker - Level Editor</title>
+    <!-- Carrega fontes -->
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    
     <style>
-        body { overflow: hidden; background: #050810; }
-        #editor-container { display: flex; height: 100vh; color: #fff; font-family: 'VT323', monospace; }
-        
-        /* Sidebar / Tools */
-        #sidebar { width: 300px; background: #111522; border-right: 2px solid #00f0ff; display: flex; flex-direction: column; }
-        .sidebar-section { padding: 15px; border-bottom: 1px solid #222d44; }
-        h2 { color: #00f0ff; margin-bottom: 10px; font-size: 24px; text-shadow: 0 0 10px #00f0ff44; }
-        
-        .tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 15px; }
-        .tool-btn, .layer-btn { 
-            background: #1a2233; border: 1px solid #334466; color: #8899bb; 
-            padding: 8px; cursor: pointer; text-align: center;
-        }
-        .tool-btn:hover, .layer-btn:hover { background: #223344; color: #fff; }
-        .tool-btn.active, .layer-btn.active { border-color: #00f0ff; color: #00f0ff; background: #00f0ff11; }
-        
-        #palette { 
-            display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; 
-            max-height: 250px; overflow-y: auto; padding-right: 5px;
-        }
-        .tile-opt { 
-            aspect-ratio: 1; background: #0a0e1a; border: 1px solid #222d44; 
-            display: flex; align-items: center; justify-content: center; 
-            cursor: pointer; font-size: 20px;
-        }
-        .tile-opt:hover { border-color: #556688; }
-        .tile-opt.active { border-color: #00ff9f; box-shadow: inset 0 0 5px #00ff9f44; }
-
-        /* Level List with Reordering */
-        #level-list-container { flex-grow: 1; overflow-y: auto; }
-        .level-item { 
-            padding: 8px 12px; border-bottom: 1px solid #222d44; cursor: pointer;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .level-item:hover { background: #1a2233; }
-        .level-item.active { background: #00f0ff22; border-left: 4px solid #00f0ff; }
-        .level-item .drag-handle { cursor: grab; color: #445577; }
-        .level-item.dragging { opacity: 0.5; background: #00f0ff33; }
-
-        /* Canvas Area */
-        #main-view { flex-grow: 1; display: flex; flex-direction: column; position: relative; background: #000; }
-        #canvas-wrapper { 
-            flex-grow: 1; display: flex; align-items: center; justify-content: center; 
-            overflow: auto; padding: 20px;
-        }
-        canvas { background: #080a12; box-shadow: 0 0 40px rgba(0,0,0,0.5); cursor: crosshair; }
-        
-        #top-bar { 
-            height: 50px; background: #111522; border-bottom: 2px solid #00f0ff;
-            display: flex; align-items: center; padding: 0 20px; justify-content: space-between;
-        }
-        .input-group { display: flex; align-items: center; gap: 10px; }
-        input[type="text"], input[type="number"] { 
-            background: #050810; border: 1px solid #334466; color: #00f0ff; 
-            padding: 5px 10px; font-family: 'VT323', monospace; font-size: 18px;
-        }
-        .btn-action { 
-            background: #00f0ff22; border: 1px solid #00f0ff; color: #00f0ff; 
-            padding: 5px 15px; cursor: pointer; font-family: 'VT323', monospace;
-        }
-        .btn-action:hover { background: #00f0ff44; color: #fff; }
-        .btn-danger { border-color: #ff003c; color: #ff003c; background: #ff003c11; }
-        .btn-danger:hover { background: #ff003c44; color: #fff; }
-
-        /* Floating Properties Panel */
-        #floating-props {
-            position: absolute; background: #111522; border: 2px solid #00f0ff;
-            padding: 10px; display: none; z-index: 100; box-shadow: 0 5px 15px rgba(0,0,0,0.8);
-            width: 150px;
-        }
-        #floating-props .prop-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-        #floating-props label { color: #8899bb; font-size: 14px; }
-        
-        #overlay-ui {
-            position: absolute; bottom: 20px; left: 20px; pointer-events: none;
-            color: #00ff9f; text-shadow: 0 0 5px #000; font-size: 18px;
+        body {
+            background-color: #111;
+            color: #eee;
+            font-family: 'VT323', monospace;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            user-select: none;
+            overflow: hidden; /* No global scroll */
         }
 
-        /* Test Mode Overlay */
-        #test-overlay {
-            position: absolute; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center;
-            z-index: 500;
+        #toolbar {
+            background: #222;
+            padding: 10px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            border-bottom: 2px solid #444;
+            height: 40px;
         }
-        #test-canvas-container { position: relative; border: 4px solid #fff; }
-        #test-notification {
-            position: absolute; top: 20px; width: 100%; text-align: center;
-            color: #ff003c; font-size: 24px; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+
+        button, select, input {
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            font-family: 'VT323', monospace;
+            font-size: 16px;
+            cursor: pointer;
         }
+
+        button:hover { background: #444; }
+        button.active, .layer-btn.active { background: #00ff9f; color: #000; border-color: #00ff9f; }
+
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #sidebar {
+            width: 280px; /* Adjusted */
+            background: #1a1a1a;
+            border-right: 2px solid #333;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        #right-sidebar {
+            width: 250px;
+            background: #1a1a1a;
+            border-left: 2px solid #333;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #level-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding-right: 5px;
+        }
+
+        .level-item {
+            background: #222;
+            border: 1px solid #444;
+            padding: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .level-item:hover { border-color: #666; }
+        .level-item.active { border-color: #00ff9f; background: #111; box-shadow: inset 0 0 10px rgba(0, 255, 159, 0.1); }
+        .level-item .lvl-title { color: #fff; font-weight: bold; }
+        .level-item .lvl-actions { display: flex; gap: 5px; justify-content: flex-end; }
+        .action-btn { background: #333; border: 1px solid #555; padding: 2px 5px; font-size: 12px; cursor: pointer; color: #ccc; }
+        .action-btn:hover { background: #444; color: #fff; border-color: #888; }
+
+        #workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a0a;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #editor-canvas {
+            background-color: #000;
+            image-rendering: pixelated;
+            cursor: crosshair;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            border: 2px solid #333;
+        }
+
+        .palette-group {
+            border: 1px solid #444;
+            padding: 4px; /* Reduced padding */
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px; /* Tighter tiles */
+        }
+
+        .palette-group-title {
+            width: 100%;
+            font-size: 13px; /* Slightly smaller */
+            color: #aaa;
+            margin-bottom: 3px;
+            border-bottom: 1px solid #333;
+        }
+
+        .tile-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #222;
+            border: 2px solid #444;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .tile-btn canvas {
+            display: block;
+        }
+
+        .tile-btn.selected {
+            border-color: #00ff9f;
+            box-shadow: 0 0 8px #00ff9f;
+        }
+
+        .tools-group {
+            display: flex;
+            gap: 5px;
+        }
+
     </style>
 </head>
 <body>
-    <div id="editor-container">
-        <!-- Sidebar Tools -->
+
+    <div id="toolbar">
+        <div style="font-weight: bold; color: #00ff9f; margin-right: 10px;">LEVEL EDITOR</div>
+        <button id="btn-save">💾 Salvar levels.js</button>
+        <button id="btn-new">➕ Novo Level</button>
+        <button onclick="undo()">↩️ Desfazer</button>
+        
+        <div style="display: flex; align-items: center; gap: 8px; background: #111; padding: 2px 10px; border-radius: 4px; border: 1px solid #444; margin-left: 20px;">
+            <span style="color: #00ff9f; font-size: 14px;">TAMANHO:</span>
+            <input type="number" id="map-w" value="20" min="5" max="100" style="width: 45px; border: none; background: transparent; text-align: center; color: #fff; font-family: 'VT323', monospace; font-size: 18px;">
+            <span style="color: #666;">x</span>
+            <input type="number" id="map-h" value="15" min="5" max="100" style="width: 45px; border: none; background: transparent; text-align: center; color: #fff; font-family: 'VT323', monospace; font-size: 18px;">
+            <button onclick="resizeMap()" style="padding: 2px 8px; font-size: 12px; background: #333; margin-left: 5px; border-color: #555;">REDIM</button>
+        </div>
+
+        <div style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
+            <button id="btn-test" style="background: #ff0055; color: #fff; border-color: #ff0055; font-weight: bold;">▶️ TESTAR NÍVEL</button>
+            <input type="text" id="lvl-name" placeholder="Nome da Fase" style="width: 150px;">
+            <span style="font-size: 14px; color: #aaa;">Bateria:</span>
+            <input type="number" id="lvl-battery" placeholder="Bat" style="width: 50px;">
+            <span style="font-size: 14px; color: #aaa;">Tempo:</span>
+            <input type="number" id="lvl-timer" placeholder="Sec" style="width: 50px;">
+        </div>
+    </div>
+
+    <div id="main">
         <div id="sidebar">
-            <div class="sidebar-section">
-                <h2>FERRAMENTAS</h2>
-                <div class="tool-grid">
-                    <button class="tool-btn active" id="tool-brush" title="Pincel (B)">🖌️</button>
-                    <button class="tool-btn" id="tool-rect" title="Retângulo (R)">⬛</button>
-                    <button class="tool-btn" id="tool-line" title="Linha (L)">📏</button>
-                    <button class="tool-btn" id="tool-eraser" title="Borracha (E)">🧽</button>
-                    <button class="tool-btn" id="tool-select" title="Seleção (V)">🔦</button>
-                    <button class="tool-btn" id="tool-undo" title="Desfazer (Ctrl+Z)">↩️</button>
-                </div>
-
-                <h2>CAMADAS</h2>
-                <div class="tool-grid">
-                    <button class="layer-btn active" id="layer-base" title="Base/Paredes">🧱</button>
-                    <button class="layer-btn" id="layer-overlays" title="Fios/Conexões">🔌</button>
-                    <button class="layer-btn" id="layer-blocks" title="Blocos Móveis">📦</button>
-                </div>
+            <div style="color: #00ff9f; font-weight: bold; margin-bottom: 5px; font-size: 14px;">CAMADA ATIVA</div>
+            <div class="tools-group" style="margin-bottom: 15px;">
+                <button id="layer-base" class="layer-btn active" style="flex: 1; font-size: 10px;">⚒️ BASE</button>
+                <button id="layer-overlays" class="layer-btn" style="flex: 1; font-size: 10px;">💨 OVERLAY</button>
+                <button id="layer-blocks" class="layer-btn" style="flex: 1; font-size: 10px;">📦 BLOCOS</button>
             </div>
 
-            <div class="sidebar-section">
-                <h2>PALETA</h2>
-                <div id="palette">
-                    <!-- Dynamic Palette -->
+            <div class="tools-group">
+                <button id="tool-brush" class="tool-btn active">🖌️ Pincel</button>
+                <button id="tool-eraser" class="tool-btn">🧽 Borracha</button>
+                <button id="tool-rect" class="tool-btn">🔲 Quadrado</button>
+                <button id="tool-line" class="tool-btn">📏 Linha</button>
+                <button id="tool-select" class="tool-btn">🔦 Seleção</button>
+            </div>
+            <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 120px;">
+                <div style="color: #00ff9f; font-weight: bold; font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Propriedades</div>
+                <div id="prop-type" style="font-size: 13px; color: #aaa; margin-bottom: 10px;">Tipo: Núcleo Alvo</div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 14px; color: #fff; width: 40px;">Amps:</span>
+                    <input type="number" id="prop-amps" min="1" max="9" style="width: 50px; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 18px; padding: 2px 5px; text-align: center;">
                 </div>
+                <div id="prop-channel-container" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 14px; color: #fff; width: 40px;">Canal:</span>
+                    <input type="number" id="prop-channel" min="0" max="9" value="0" style="width: 50px; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 18px; padding: 2px 5px; text-align: center;">
+                </div>
+                <div id="prop-toggle-container" style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 14px; color: #fff; width: 40px;">Trava:</span>
+                    <input type="checkbox" id="prop-toggle" style="width: 20px; height: 20px; accent-color: #00ff9f;">
+                    <span style="font-size: 12px; color: #666;">(Ativa p/ sempre)</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 11px; color: #666; text-align: right;">ESC p/ fechar</div>
             </div>
 
-            <div class="sidebar-section" style="flex-grow: 1; display: flex; flex-direction: column;">
-                <h2>CAPÍTULOS / NÍVEIS</h2>
-                <select id="chapter-select" style="background:#050810; color:#00f0ff; border:1px solid #334466; padding:5px; margin-bottom:10px; font-family:'VT323';">
-                    <!-- Chapters populated by JS -->
-                </select>
-                <div id="level-list-container">
-                    <div id="level-list">
-                        <!-- Levels populated by JS -->
+            <div style="font-size: 13px; color: #888; background: #000; padding: 6px; border: 1px solid #333; margin-top: 10px; line-height: 1.2;">
+                <b style="color: #00ff9f;">ATALHOS:</b><br>
+                • <b>Click L:</b> Desenha / Sel.<br>
+                • <b>Click R:</b> Apaga<br>
+                • <b>Click M:</b> Propriedades<br>
+                • Q / W / E: Mudar Camada (Base/Overlay/Blocos)<br>
+                • <b>Scroll Mouse:</b> Trocar Tile<br>
+                • <b>Ctrl+C / V:</b> Copiar / Colar<br>
+                • <b>Ctrl+Z:</b> Desfazer
+            </div>
+
+            <div id="palette-container"></div>
+        </div>
+
+        <div id="workspace-wrapper" style="flex: 1; position: relative; overflow: hidden; background: #050a05; display: flex;">
+            <div id="workspace" style="flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start; padding: 100px;">
+                <canvas id="editor-canvas" width="640" height="480" style="background: #000; box-shadow: 0 0 60px rgba(0,0,0,0.8); border: 1px solid #333;"></canvas>
+            </div>
+            
+            <!-- Fixed UI Overlay - Pinned to bottom-right of viewport -->
+            <div id="overlay-ui" style="position: absolute; bottom: 10px; right: 10px; width: fit-content; background: rgba(0, 0, 0, 0.85); color: #00ff9f; padding: 4px 10px; font-family: 'VT323', monospace; font-size: 16px; border: 1px solid #00ff9f; border-radius: 4px; pointer-events: none; box-shadow: 0 0 10px rgba(0, 255, 159, 0.2); backdrop-filter: blur(4px); z-index: 100; white-space: nowrap;">
+                Coord: 0,0 | Sym: 
+            </div>
+
+            <!-- TEST MODE OVERLAY -->
+            <div id="test-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 500; flex-direction: column; align-items: center; justify-content: center;">
+                <div id="test-ui-top" style="width: 640px; background: #111; border-bottom: 2px solid #444; display: flex; align-items: center; padding: 5px 15px; color: #fff; font-size: 18px; gap: 15px;">
+                    <div style="color: #ff0055; font-weight: bold;">MODO TESTE</div>
+                    <div style="flex: 1; text-align: center;" id="ui-level-name">---</div>
+                    <div>TEMPO <span id="ui-time">00:00</span></div>
+                    <div style="color: #00ff9f;">⚡ <span id="ui-score">0/0</span></div>
+                    <button onclick="stopTest()" style="background: #444; color: #fff; border: 1px solid #666; font-size: 12px; padding: 2px 8px;">SAIR (ESC)</button>
+                </div>
+                
+                <div id="test-canvas-container" style="position: relative; border: 4px solid #222; box-shadow: 0 0 50px rgba(0,255,159,0.2);">
+                    <canvas id="test-canvas" width="640" height="480"></canvas>
+                    <!-- Floating Notification in Test Mode -->
+                    <div id="test-notification" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #ff0055; color: #fff; padding: 4px 15px; border: 2px solid #fff; font-size: 14px; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap;">REVERSÃO QUANTICA</div>
+                </div>
+
+                <div id="test-ui-bottom" style="width: 640px; background: #111; border-top: 2px solid #444; padding: 10px; display: flex; justify-content: center; gap: 20px;">
+                    <div class="ui-bar-container horizontal">
+                        <span class="bar-label">VIDAS</span>
+                        <div id="lives-bar" class="segmented-bar horizontal" style="--bar-color: #ffcc00;"></div>
+                    </div>
+                    <div class="ui-bar-container horizontal">
+                        <span class="bar-label">ENERGIA</span>
+                        <div id="energy-bar-seg" class="segmented-bar horizontal" style="--bar-color: #00f0ff;"></div>
+                        <span id="ui-power-count" class="bar-label">00</span>
+                    </div>
+                    <div class="ui-bar-container horizontal">
+                        <span class="bar-label">AMPERES</span>
+                        <div id="amps-bar" class="segmented-bar horizontal fixed-segments" style="--bar-color: #00ff9f;"></div>
                     </div>
                 </div>
-                <div style="padding-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-                    <button class="btn-action" onclick="addNewLevel()">+ NÍVEL</button>
-                    <button class="btn-action btn-danger" onclick="deleteCurrentLevel()">EXCLUIR</button>
+
+                <div style="margin-top: 15px; color: #666; font-size: 14px;">
+                    WASD: Mover | SPACE: Interagir | R: Reiniciar | <b>ESC: Sair do Teste</b>
                 </div>
             </div>
         </div>
 
-        <!-- Main Workspace -->
-        <div id="main-view">
-            <div id="top-bar">
-                <div class="input-group">
-                    <input type="text" id="lvl-name" placeholder="NOME DO NÍVEL" style="width: 200px;">
-                    <label>BAT:</label><input type="number" id="lvl-battery" value="30" style="width: 60px;">
-                    <label>SEC:</label><input type="number" id="lvl-timer" value="60" style="width: 60px;">
-                </div>
-                <div class="input-group">
-                    <button class="btn-action" onclick="startTest()">▶️ TESTAR</button>
-                    <button class="btn-action" id="btn-save" style="border-color: #00ff9f; color: #00ff9f;">💾 SALVAR TUDO</button>
-                </div>
-            </div>
+        <style>
+            /* Test Mode HUD Styles (Matching index.html) */
+            .ui-bar-container.horizontal { display: flex; align-items: center; gap: 8px; }
+            .segmented-bar.horizontal { display: flex; flex-direction: row; height: 10px; gap: 1px; background: #000; border: 1px solid #444; padding: 1px; }
+            #energy-bar-seg { width: 150px; }
+            .segmented-bar.horizontal .segment { flex: 1; height: 100%; min-width: 1px; background: var(--bar-color); }
+            .segment.empty { background: #222 !important; opacity: 0.3; }
+            .fixed-segments .segment { flex: none !important; width: 6px !important; }
+            #lives-bar .segment { flex: none !important; width: 10px !important; }
+            .bar-label { font-size: 12px; color: #aaa; }
+        </style>
 
-            <div id="canvas-wrapper">
-                <canvas id="editor-canvas" width="640" height="480"></canvas>
-            </div>
+        <div id="right-sidebar" style="display: flex; flex-direction: column;">
+            <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">CAPÍTULOS</div>
+            <div id="chapter-list" style="max-height: 150px; overflow-y: auto; border-bottom: 2px solid #333; margin-bottom: 10px; padding-bottom: 10px; display: flex; flex-direction: column; gap: 5px;"></div>
+            <button id="btn-new-chapter" style="width: 100%; font-size: 12px; margin-bottom: 10px;">➕ NOVO CAPÍTULO</button>
 
-            <div id="overlay-ui">Coord: 0,0 | Sym: #</div>
-
-            <!-- Floating Context Menu -->
-            <div id="floating-props">
-                <h3 id="prop-type" style="margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #334466;">OBJETO</h3>
-                <div class="prop-row">
-                    <label>AMPS REQUISITADOS:</label>
-                    <input type="number" id="prop-amps" min="1" max="9" value="1">
-                </div>
-                <div class="prop-row" id="prop-channel-container">
-                    <label>CANAL / LINK:</label>
-                    <input type="number" id="prop-channel" min="0" max="99" value="0">
-                </div>
-                <div class="prop-row" id="prop-toggle-container">
-                    <label style="flex-direction: row; align-items: center; gap: 5px;">
-                        <input type="checkbox" id="prop-toggle"> ALTERNÁVEL (TOGGLE)
-                    </label>
-                </div>
-            </div>
+            <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">FASES DO CAPÍTULO</div>
+            <div id="level-list" style="flex: 1; overflow-y: auto;"></div>
         </div>
+    </div>
 
-        <!-- Fullscreen Test Mode -->
-        <div id="test-overlay">
-            <div id="test-notification">REBOOTING...</div>
-            <div id="test-canvas-container">
-                <canvas id="test-canvas" width="640" height="480"></canvas>
-                <!-- HUD will be rendered into the canvas or via JS -->
-            </div>
-            <div style="position: absolute; bottom: 20px; color: #888;">[ESC] PARA SAIR | [R] REINICIAR | [Z] VOLTAR</div>
-            
-            <!-- Manual UI for Test Mode -->
-            <div id="test-hud" style="position: absolute; top: 0; left: 0; width: 100%; pointer-events: none;">
-                 <!-- We'll reuse the HUD styles from index.html if needed, or draw directly -->
+    <!-- Custom Modal -->
+    <div id="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+        <div id="modal-content" style="background: #111; border: 2px solid #00ff9f; padding: 20px; border-radius: 4px; box-shadow: 0 0 30px rgba(0,255,159,0.2); min-width: 300px; max-width: 450px; text-align: center;">
+            <div id="modal-msg" style="color: #fff; font-size: 18px; margin-bottom: 20px; line-height: 1.4;">Mensagem aqui?</div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="modal-btn-confirm" style="background: #00ff9f; color: #000; border: none; font-weight: bold; min-width: 80px;">OK</button>
+                <button id="modal-btn-cancel" style="background: #444; color: #fff; border: none; min-width: 80px;">CANCELAR</button>
             </div>
         </div>
     </div>
 
-    <!-- Engine Scripts -->
-    <script src="js/levels.js"></script>
-    <script src="js/graphics.js"></script>
-    <script src="js/game.js"></script>
+    <!-- Load game scripts for rendering -->
     <script src="js/audio.js"></script>
-    <!-- Editor Logic -->
+    <script src="js/graphics.js"></script>
+    <script src="js/resultScreen.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/levels.js"></script>
     <script src="js/editor.js"></script>
+
 </body>
 </html>

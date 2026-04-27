@@ -3,12 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 3001;
-const LEVELS_FILE = path.join(__dirname, 'js', 'levels.js');
 
 const server = http.createServer((req, res) => {
-    // Enable CORS
+    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
@@ -19,31 +18,78 @@ const server = http.createServer((req, res) => {
 
     if (req.method === 'POST' && req.url === '/save') {
         let body = '';
-        req.on('data', chunk => body += chunk.toString());
+        req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
-                
+                const jsDir = path.join(__dirname, 'js');
+                const filePath = path.join(jsDir, 'levels.js');
+                const backupDir = path.join(__dirname, 'levels_backup');
+
                 // 1. Create Backup
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const backupPath = path.join(__dirname, 'js', `levels_backup_${timestamp}.js`);
-                if (fs.existsSync(LEVELS_FILE)) {
-                    fs.copyFileSync(LEVELS_FILE, backupPath);
+                if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
+                if (fs.existsSync(filePath)) {
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const backupPath = path.join(backupDir, `levels_backup_${timestamp}.js`);
+                    fs.copyFileSync(filePath, backupPath);
+                    console.log(`[Backup] Criado: ${backupPath}`);
+
+                    // 2. Rotate Backups (Max 15)
+                    const backups = fs.readdirSync(backupDir)
+                        .filter(f => f.startsWith('levels_backup_'))
+                        .map(f => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
+                        .sort((a, b) => a.time - b.time);
+
+                    if (backups.length > 15) {
+                        const toRemove = backups.slice(0, backups.length - 15);
+                        toRemove.forEach(f => {
+                            fs.unlinkSync(path.join(backupDir, f.name));
+                            console.log(`[Backup] Removido antigo: ${f.name}`);
+                        });
+                    }
+                }
+                
+                let jsContent = "// Levels definition\nvar LEVELS = [\n";
+                data.levels.forEach((l, i) => {
+                    jsContent += `  {\n    name: "${l.name}",\n    time: ${l.time},\n    timer: ${l.timer || 60},\n    map: [\n`;
+                    l.map.forEach(row => jsContent += `      "${row}",\n`);
+                    jsContent += `    ]`;
+                    
+                    // Only save blocks layer if it exists and is not just empty space
+                    if (l.blocks && l.blocks.some(row => row.trim() !== "")) {
+                        jsContent += `,\n    blocks: [\n`;
+                        l.blocks.forEach(row => jsContent += `      "${row}",\n`);
+                        jsContent += `    ]`;
+                    }
+
+                    // Only save overlays layer if it exists and is not just empty space
+                    if (l.overlays && l.overlays.some(row => row.trim() !== "")) {
+                        jsContent += `,\n    overlays: [\n`;
+                        l.overlays.forEach(row => jsContent += `      "${row}",\n`);
+                        jsContent += `    ]`;
+                    }
+                    
+                    // Save links if they exist (Door channels, toggle states)
+                    if (l.links) {
+                        jsContent += `,\n    links: ${JSON.stringify(l.links)}`;
+                    }
+                    
+                    jsContent += `\n  }${i < data.levels.length - 1 ? ',' : ''}\n`;
+                });
+                jsContent += "];\n\n";
+                
+                // 3. Save Chapters
+                if (data.chapters) {
+                    jsContent += "var CHAPTERS = " + JSON.stringify(data.chapters, null, 2) + ";\n";
                 }
 
-                // 2. Format JS file content
-                const jsContent = formatLevelsJS(data.levels, data.chapters);
-                
-                // 3. Write to file
-                fs.writeFileSync(LEVELS_FILE, jsContent, 'utf8');
-
-                console.log(`[${new Date().toLocaleTimeString()}] Níveis salvos com sucesso. Backup criado.`);
-                
+                fs.writeFileSync(filePath, jsContent);
+                console.log(`[Editor] Levels salvos com sucesso em ${filePath}`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'ok', message: 'Salvo com sucesso' }));
+                res.end(JSON.stringify({ status: 'ok' }));
             } catch (err) {
-                console.error('Erro ao salvar:', err);
-                res.writeHead(500, { 'Content-Type': 'application/json' });
+                console.error('[Editor] Erro ao salvar:', err);
+                res.writeHead(500);
                 res.end(JSON.stringify({ status: 'error', message: err.message }));
             }
         });
@@ -53,61 +99,7 @@ const server = http.createServer((req, res) => {
     }
 });
 
-function formatLevelsJS(levels, chapters) {
-    let out = `/**\n * CIRCUIT BREAKER - Database de Níveis\n * Gerado automaticamente pelo Editor em ${new Date().toLocaleString()}\n */\n\n`;
-    
-    out += `const LEVELS = [\n`;
-    levels.forEach((lvl, i) => {
-        out += `    {\n`;
-        out += `        name: "${lvl.name}",\n`;
-        out += `        time: ${lvl.time},\n`;
-        out += `        timer: ${lvl.timer || 60},\n`;
-        out += `        map: [\n`;
-        lvl.map.forEach(row => out += `            "${row}",\n`);
-        out += `        ],\n`;
-        
-        if (lvl.blocks) {
-            out += `        blocks: [\n`;
-            lvl.blocks.forEach(row => out += `            "${row}",\n`);
-            out += `        ],\n`;
-        }
-
-        if (lvl.overlays) {
-            out += `        overlays: [\n`;
-            lvl.overlays.forEach(row => out += `            "${row}",\n`);
-            out += `        ],\n`;
-        }
-
-        if (lvl.links) {
-            out += `        links: ${JSON.stringify(lvl.links, null, 12).replace(/}$/, '        }')},\n`;
-        }
-
-        out += `    }${i < levels.length - 1 ? ',' : ''}\n`;
-    });
-    out += `];\n\n`;
-
-    out += `const CHAPTERS = [\n`;
-    chapters.forEach((chap, i) => {
-        out += `    {\n`;
-        out += `        name: "${chap.name}",\n`;
-        out += `        levels: [${chap.levels.join(', ')}],\n`;
-        out += `        map: [\n`;
-        chap.map.forEach(node => {
-            out += `            { lvlIdx: ${node.lvlIdx}, x: ${node.x}, y: ${node.y} },\n`;
-        });
-        out += `        ]\n`;
-        out += `    }${i < chapters.length - 1 ? ',' : ''}\n`;
-    });
-    out += `];\n\n`;
-
-    out += `// Export for Node environments if needed\nif (typeof module !== 'undefined') module.exports = { LEVELS, CHAPTERS };\n`;
-    
-    return out;
-}
-
 server.listen(PORT, () => {
-    console.log(`\n========================================`);
-    console.log(`CIRCUIT BREAKER - Servidor do Editor`);
-    console.log(`Rodando em: http://localhost:${PORT}`);
-    console.log(`========================================\n`);
+    console.log(`🚀 Servidor do Editor rodando em http://localhost:${PORT}`);
+    console.log(`Pronto para salvar automaticamente em levels.js`);
 });
