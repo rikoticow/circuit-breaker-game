@@ -69,9 +69,13 @@ const server = http.createServer((req, res) => {
                         jsContent += `    ]`;
                     }
                     
-                    // Save links if they exist (Door channels, toggle states)
                     if (l.links) {
                         jsContent += `,\n    links: ${JSON.stringify(l.links)}`;
+                    }
+                    
+                    // Save dialogues if they exist
+                    if (l.dialogues) {
+                        jsContent += `,\n    dialogues: ${JSON.stringify(l.dialogues)}`;
                     }
                     
                     jsContent += `\n  }${i < data.levels.length - 1 ? ',' : ''}\n`;

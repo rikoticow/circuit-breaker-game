@@ -6,6 +6,7 @@
     <title>Circuit Breaker - Level Editor</title>
     <!-- Carrega fontes -->
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/dialogue.css">
     
     <style>
         body {
@@ -268,6 +269,7 @@
             <button id="layer-base" class="layer-btn active" style="min-width: 80px;">⚒️ BASE</button>
             <button id="layer-overlays" class="layer-btn" style="min-width: 80px;">💨 OVERLAY</button>
             <button id="layer-blocks" class="layer-btn" style="min-width: 80px;">📦 BLOCOS</button>
+            <button id="layer-events" class="layer-btn" style="min-width: 80px;">💬 FALAS</button>
         </div>
 
         <div style="width: 2px; height: 20px; background: #333;"></div>
@@ -320,6 +322,37 @@
                 <div id="prop-toggle-container" style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 14px; color: #fff; width: 60px;">Inicial On:</span>
                     <input type="checkbox" id="prop-toggle" style="width: 18px; height: 18px; accent-color: #00ff9f;">
+                </div>
+
+                <!-- DIALOGUE PROPERTIES -->
+                <div id="prop-dialogue-container" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    <div style="font-size: 12px; color: #00ff9f;">CONFIGURAÇÃO DE FALA</div>
+                    <textarea id="prop-dialogue-text" placeholder="Digite o diálogo aqui... [pause:500] Use tags!" style="width: 100%; height: 80px; background: #000; color: #00ff9f; border: 1px solid #444; font-family: 'VT323', monospace; font-size: 16px; padding: 5px; resize: vertical;"></textarea>
+                    <div style="display: flex; gap: 5px;">
+                        <select id="prop-dialogue-icon" style="flex: 1; font-size: 12px;">
+                            <option value="central">🔴 CENTRAL (Humano)</option>
+                            <option value="ai">🔵 SYSTEM (IA)</option>
+                            <option value="alert">🟡 ALERTA</option>
+                        </select>
+                        <select id="prop-dialogue-trigger" style="flex: 1; font-size: 12px;">
+                            <option value="walk">Pisar no tile</option>
+                            <option value="start">Início da fase</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px; background: #111; padding: 8px; border-radius: 4px; border: 1px solid #333;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 12px; color: #aaa;">Auto-Fechar:</span>
+                            <input type="checkbox" id="prop-dialogue-autodismiss" checked style="accent-color: #00ff9f;">
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 12px; color: #aaa;">Delay (ms):</span>
+                            <input type="number" id="prop-dialogue-delay" value="1500" step="500" min="500" style="width: 60px; font-size: 12px; background: #000; color: #00ff9f; border: 1px solid #444;">
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 12px; color: #aaa;">Travar Robô:</span>
+                            <input type="checkbox" id="prop-dialogue-lockplayer" checked style="accent-color: #00ff9f;">
+                        </div>
+                    </div>
                 </div>
                 <div style="margin-top: 10px; font-size: 11px; color: #666; text-align: right;">ESC p/ fechar</div>
             </div>
@@ -397,13 +430,39 @@
         </style>
 
         <div id="right-sidebar" style="display: flex; flex-direction: column;">
-            <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">CAPÍTULOS</div>
-            <div id="chapter-list" style="max-height: 150px; overflow-y: auto; border-bottom: 2px solid #333; margin-bottom: 10px; padding-bottom: 10px; display: flex; flex-direction: column; gap: 5px;"></div>
-            <button id="btn-new-chapter" style="width: 100%; font-size: 12px; margin-bottom: 10px;">➕ NOVO CAPÍTULO</button>
+            <div id="sidebar-tabs" style="display: flex; background: #111; border-bottom: 2px solid #333; margin-bottom: 10px;">
+                <div class="sidebar-tab active" onclick="switchTab('tab-structure')" style="flex: 1; text-align: center; padding: 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: #aaa; transition: all 0.2s;">ESTRUTURA</div>
+                <div class="sidebar-tab" onclick="switchTab('tab-dialogues')" style="flex: 1; text-align: center; padding: 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: #aaa; transition: all 0.2s;">DIÁLOGOS</div>
+            </div>
 
-            <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">FASES DO CAPÍTULO</div>
-            <div id="level-list" style="flex: 1; overflow-y: auto;"></div>
-        </div>
+            <style>
+                .sidebar-tab.active {
+                    color: #00ff9f !important;
+                    border-bottom: 2px solid #00ff9f;
+                    background: rgba(0, 255, 159, 0.05);
+                }
+                .sidebar-tab:hover:not(.active) {
+                    color: #fff !important;
+                    background: #222;
+                }
+            </style>
+
+            <div id="tab-structure" class="tab-pane">
+                <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">CAPÍTULOS</div>
+                <div id="chapter-list" style="max-height: 150px; overflow-y: auto; border-bottom: 2px solid #333; margin-bottom: 10px; padding-bottom: 10px; display: flex; flex-direction: column; gap: 5px;"></div>
+                <button id="btn-new-chapter" style="width: 100%; font-size: 12px; margin-bottom: 10px;">➕ NOVO CAPÍTULO</button>
+
+                <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">FASES DO CAPÍTULO</div>
+                <div id="level-list" style="flex: 1; overflow-y: auto;"></div>
+            </div>
+
+            <div id="tab-dialogues" class="tab-pane" style="display: none; flex: 1; flex-direction: column;">
+                <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px; margin-bottom: 10px;">GERENCIADOR DE DIÁLOGOS</div>
+                <div id="dialogue-manager-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px;">
+                    <!-- Diálogos aparecerão aqui -->
+                    <div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum diálogo nesta fase.<br><br>Use a ferramenta de 💬 FALAS para adicionar.</div>
+                </div>
+            </div>
     </div>
 
     <!-- Custom Modal -->
@@ -418,6 +477,9 @@
     </div>
 
     <!-- Load game scripts for rendering -->
+    <script src="js/lib/popper.min.js"></script>
+    <script src="js/lib/tippy-bundle.umd.js"></script>
+    <script src="js/dialogue.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/graphics.js"></script>
     <script src="js/resultScreen.js"></script>

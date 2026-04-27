@@ -38,7 +38,8 @@ var LEVELS = [
       "                    ",
       "                    ",
     ],
-    links: {"17,11_toggle":false,"17,11":1,"17,7":1,"17,9":1,"2,10":2,"2,8":2,"4,8":2}
+    links: {"17,11_toggle":false,"17,11":1,"17,7":1,"17,9":1,"2,10":2,"2,8":2,"4,8":2,"17,6_init":true},
+    dialogues: {"17,6":{"trigger":"start","lockPlayer":true,"autoDismiss":true,"messages":[{"text":"ALERTA! [pause:500] Integridade do <span style='color:red'>NÚCLEO 7</span> comprometida. [pause:300] [speed:10] Reiniciando protocolos...","icon":"alert","trigger":"start","autoDismiss":true,"lockPlayer":true},{"text":"Próxima fala...","icon":"ai","trigger":"start","autoDismiss":true,"lockPlayer":true,"isAI":true},{"text":"3","icon":"human","trigger":"start","autoDismiss":true,"lockPlayer":true,"isAI":false}]}}
   },
   {
     name: "REDIRECT",
@@ -248,13 +249,13 @@ var LEVELS = [
     overlays: [
       "        D     D     ",
       "        _     _     ",
-      "         S          ",
-      "       _   S S      ",
-      "         S  S       ",
-      "          S   S     ",
-      "                    ",
-      "          _         ",
-      "D                   ",
+      "         S       ]  ",
+      "       _   S S   ]  ",
+      "         S  S    ]  ",
+      "          S   S  ]  ",
+      "                 ]  ",
+      "          _      ]  ",
+      "D                ]  ",
       " _   ))))))))))     ",
       "                    ",
       "                    ",
@@ -287,7 +288,7 @@ var LEVELS = [
       "                    ",
       "                    ",
     ],
-    links: {"1,5":2,"7,5":2,"2,5":2,"3,5":2,"4,5":2,"5,5":2,"6,5":2,"7,3":2,"2,9_toggle":true,"1,11_toggle":true,"1,9":1,"0,8":1,"7,3_behavior":"TOGGLE","14,1_behavior":"PERMANENT","14,1":3,"14,0":3,"8,1_behavior":"PRESSURE","8,1":4,"8,0":4,"10,7_behavior":"PRESSURE","10,7_init":true,"10,7":8,"5,9":8,"6,9":8,"7,9":8,"8,9":8,"9,9":8,"10,9":8,"11,9":8,"12,9":8,"13,9":8,"14,9":8}
+    links: {"1,5":2,"7,5":2,"2,5":2,"3,5":2,"4,5":2,"5,5":2,"6,5":2,"7,3":2,"2,9_toggle":true,"1,11_toggle":true,"1,9":1,"0,8":1,"7,3_behavior":"TOGGLE","14,1_behavior":"PERMANENT","14,1":3,"14,0":3,"8,1_behavior":"PRESSURE","8,1":4,"8,0":4,"10,7_behavior":"PRESSURE","10,7_init":true,"10,7":8,"5,9":8,"6,9":8,"7,9":8,"8,9":8,"9,9":8,"10,9":8,"11,9":8,"12,9":8,"13,9":8,"14,9":8,"17,2":15,"17,3":15,"17,4":15,"17,5":15,"17,6":15,"17,7":15,"17,8":15}
   },
   {
     name: "DIVERSION",

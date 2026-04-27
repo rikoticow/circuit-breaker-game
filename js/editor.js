@@ -32,7 +32,8 @@ const PALETTE = [
     { title: "Junções", tiles: [{c: 'u', n: '┻'}, {c: 'd', n: '┳'}, {c: 'l', n: '┫'}, {c: 'r', n: '┣'}] },
     { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}] },
     { title: "Esteiras", tiles: [{c: ')', n: 'Esteira Dir'}, {c: '(', n: 'Esteira Esq'}, {c: ']', n: 'Esteira Baixo'}, {c: '[', n: 'Esteira Cima'}] },
-    { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] }
+    { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] },
+    { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}] }
 ];
 
 let levelsData = [];
@@ -43,7 +44,7 @@ let currentMap = []; // 15x20 (Base objects, wires, robot)
 let currentOverlayMap = []; // 15x20 (Conveyors, Scrap)
 let currentBlocksMap = []; // 15x20 (Amplifier blocks only)
 let selectedTile = '#';
-let activeLayer = 'base'; // base, overlays, blocks
+let activeLayer = 'base'; // base, overlays, blocks, events
 let currentTool = 'brush'; // brush, eraser, rect, line, select
 let isDrawing = false;
 let startX = -1, startY = -1;
@@ -80,6 +81,7 @@ window.onload = () => {
     
     // Initial mock
     mockGame = new GameState();
+    mockGame.isEditor = true;
     window.game = mockGame;
     
     buildPalette();
@@ -124,6 +126,12 @@ function createTilePreview(char) {
         Graphics.drawQuantumFloor(0, 0, true, animFrame);
     } else if (char === 'P') {
         Graphics.drawPurpleButton(0, 0, false);
+    } else if (char === '💬') {
+        tCtx.fillStyle = '#00ff9f';
+        tCtx.font = '20px VT323';
+        tCtx.textAlign = 'center';
+        tCtx.textBaseline = 'middle';
+        tCtx.fillText('💬', 16, 16);
     }
 
     
@@ -140,10 +148,12 @@ function buildPalette() {
         // Filter groups based on activeLayer
         const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
         const isBlockGroup = group.title === "Amplificadores";
+        const isEventGroup = group.title === "Eventos";
         
         if (activeLayer === 'overlays' && !isOverlayGroup) return;
         if (activeLayer === 'blocks' && !isBlockGroup) return;
-        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup)) return;
+        if (activeLayer === 'events' && !isEventGroup) return;
+        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup || isEventGroup)) return;
 
         const gDiv = document.createElement('div');
         gDiv.className = 'palette-group';
@@ -180,6 +190,7 @@ function setLayer(layer) {
     // Set default tile for layer
     if (activeLayer === 'blocks') selectedTile = '>';
     else if (activeLayer === 'overlays') selectedTile = ')';
+    else if (activeLayer === 'events') selectedTile = '💬';
     else selectedTile = '#';
     
     buildPalette();
@@ -188,12 +199,14 @@ function setLayer(layer) {
 function getAvailableTiles() {
     let tiles = [];
     PALETTE.forEach(group => {
-        const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis";
+        const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
         const isBlockGroup = group.title === "Amplificadores";
+        const isEventGroup = group.title === "Eventos";
         
         if (activeLayer === 'overlays' && isOverlayGroup) tiles.push(...group.tiles.map(t => t.c));
         else if (activeLayer === 'blocks' && isBlockGroup) tiles.push(...group.tiles.map(t => t.c));
-        else if (activeLayer === 'base' && !isOverlayGroup && !isBlockGroup) tiles.push(...group.tiles.map(t => t.c));
+        else if (activeLayer === 'events' && isEventGroup) tiles.push(...group.tiles.map(t => t.c));
+        else if (activeLayer === 'base' && !isOverlayGroup && !isBlockGroup && !isEventGroup) tiles.push(...group.tiles.map(t => t.c));
     });
     return tiles;
 }
@@ -435,9 +448,10 @@ function loadLevel(idx) {
         currentOverlayMap = Array(h).fill(0).map(() => Array(w).fill(' '));
     }
     
-    historyStack = [JSON.parse(JSON.stringify({map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap}))];
+    historyStack = [JSON.parse(JSON.stringify({map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap, dialogues: lvl.dialogues || {}}))];
     Graphics.clearParticles();
     updateLevelList();
+    updateDialogueManager();
     rebuildMock();
 }
 
@@ -499,6 +513,7 @@ function rebuildMock() {
     lvl.map = currentMap.map(row => row.join(''));
     lvl.blocks = currentBlocksMap.map(row => row.join(''));
     lvl.overlays = currentOverlayMap.map(row => row.join(''));
+    // dialogues are managed directly in lvl.dialogues
 
     // Inject level data directly into mockGame
     mockGame.map = [];
@@ -664,7 +679,13 @@ function rebuildMock() {
 }
 
 function saveHistory() {
-    historyStack.push(JSON.parse(JSON.stringify({map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap})));
+    const lvl = levelsData[currentLevelIdx];
+    historyStack.push(JSON.parse(JSON.stringify({
+        map: currentMap, 
+        blocks: currentBlocksMap, 
+        overlays: currentOverlayMap,
+        dialogues: lvl.dialogues || {}
+    })));
     if (historyStack.length > 50) historyStack.shift();
 }
 function undo() {
@@ -674,6 +695,7 @@ function undo() {
         currentMap = state.map;
         currentBlocksMap = state.blocks;
         currentOverlayMap = state.overlays;
+        levelsData[currentLevelIdx].dialogues = state.dialogues;
         rebuildMock();
     }
 }
@@ -733,6 +755,60 @@ function setupEvents() {
         levelsData.push({ name: "NEW LEVEL", time: 30, map: Array(h).fill(" ".repeat(w)) });
         loadLevel(levelsData.length - 1);
         updateLevelList();
+    };
+
+    document.getElementById('layer-events').onclick = () => setLayer('events');
+
+    document.getElementById('prop-dialogue-text').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.dialogues) lvl.dialogues = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (!lvl.dialogues[key]) lvl.dialogues[key] = { trigger: 'walk', icon: 'central', autoDismiss: true, lockPlayer: true, dismissDelay: 1500 };
+            lvl.dialogues[key].text = e.target.value;
+        }
+    };
+    document.getElementById('prop-dialogue-icon').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].icon = e.target.value;
+        }
+    };
+    document.getElementById('prop-dialogue-trigger').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].trigger = e.target.value;
+        }
+    };
+    document.getElementById('prop-dialogue-autodismiss').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].autoDismiss = e.target.checked;
+        }
+    };
+    document.getElementById('prop-dialogue-delay').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        const val = parseInt(e.target.value) || 1500;
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].dismissDelay = val;
+        }
+    };
+    document.getElementById('prop-dialogue-lockplayer').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].lockPlayer = e.target.checked;
+        }
     };
 
     document.getElementById('btn-new-chapter').onclick = () => {
@@ -957,11 +1033,24 @@ function setupEvents() {
     canvas.onmousedown = (e) => {
         const p = getGridPos(e);
         
-        // MIDDLE CLICK (Button 1) -> ROTATION or PROPERTIES
+        // MIDDLE CLICK (Button 1) -> ROTATION or DIALOGUE EDITOR
         if (e.button === 1) {
             e.preventDefault();
             
-            // IF IN SELECT TOOL: ONLY PROPERTIES (SAFE ZONE)
+            // PRIORITY: DIALOGUE EDITOR
+            const lvl = levelsData[currentLevelIdx];
+            if (lvl.dialogues && lvl.dialogues[`${p.x},${p.y}`]) {
+                switchTab('tab-dialogues');
+                const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
+                if (card) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    card.style.borderColor = '#00ff9f';
+                    setTimeout(() => card.style.borderColor = '#333', 2000);
+                }
+                return;
+            }
+
+            // FALLBACK: ROTATION (Existing logic)
             if (currentTool === 'select') {
                 let targets = [];
                 let inSelection = false;
@@ -987,7 +1076,7 @@ function setupEvents() {
                         }
                     }
                 }
-                
+
                 // If not in selection or selection empty, just target the clicked cell
                 if (!inSelection || targets.length === 0) {
                     const checkLayers = [currentBlocksMap, currentOverlayMap, currentMap];
@@ -998,6 +1087,12 @@ function setupEvents() {
                             break;
                         }
                     }
+                }
+
+                // Check for dialogues in the clicked tile
+                const lvl = levelsData[currentLevelIdx];
+                if (lvl.dialogues && lvl.dialogues[`${p.x},${p.y}`]) {
+                    targets.push({x: p.x, y: p.y, isDialogue: true});
                 }
 
                 if (targets.length > 0) {
@@ -1017,10 +1112,12 @@ function setupEvents() {
                     const hasCores = targets.some(t => t.char === 'T' || (t.char >= '1' && t.char <= '9'));
                     const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || ['(', ')', '[', ']'].includes(t.char));
                     const hasButtons = targets.some(t => t.char === '_' || t.char === 'P');
+                    const hasDialogue = targets.some(t => t.isDialogue);
 
                     document.getElementById('prop-amps').parentElement.style.display = hasCores ? 'flex' : 'none';
                     document.getElementById('prop-channel-container').style.display = hasLinkables ? 'flex' : 'none';
                     document.getElementById('prop-behavior-container').style.display = hasButtons ? 'flex' : 'none';
+                    document.getElementById('prop-dialogue-container').style.display = hasDialogue ? 'flex' : 'none';
                     
                     const lvl = levelsData[currentLevelIdx];
                     if (hasCores) document.getElementById('prop-amps').value = primary.char === 'T' ? 1 : parseInt(primary.char);
@@ -1034,6 +1131,15 @@ function setupEvents() {
                         document.getElementById('prop-behavior').value = behavior;
                         document.getElementById('prop-toggle').checked = (lvl.links && lvl.links[`${primary.x},${primary.y}_init`]) === true;
                         document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+                    }
+                    if (hasDialogue) {
+                        const diag = lvl.dialogues[`${primary.x},${primary.y}`] || { text: "", icon: "central", trigger: "walk" };
+                        document.getElementById('prop-dialogue-text').value = diag.text;
+                        document.getElementById('prop-dialogue-icon').value = diag.icon;
+                        document.getElementById('prop-dialogue-trigger').value = diag.trigger;
+                        document.getElementById('prop-dialogue-autodismiss').checked = diag.autoDismiss !== false;
+                        document.getElementById('prop-dialogue-delay').value = diag.dismissDelay || 1500;
+                        document.getElementById('prop-dialogue-lockplayer').checked = diag.lockPlayer !== false;
                     }
                 }
             } else {
@@ -1072,13 +1178,31 @@ function setupEvents() {
         if (currentTool === 'brush' || isEraser) {
             if (activeLayer === 'base') currentMap[p.y][p.x] = char;
             else if (activeLayer === 'overlays') currentOverlayMap[p.y][p.x] = char;
+            else if (activeLayer === 'events') {
+                const lvl = levelsData[currentLevelIdx];
+                if (!lvl.dialogues) lvl.dialogues = {};
+                if (isEraser) {
+                    delete lvl.dialogues[`${p.x},${p.y}`];
+                    updateDialogueManager();
+                } else if (!lvl.dialogues[`${p.x},${p.y}`]) {
+                    lvl.dialogues[`${p.x},${p.y}`] = { text: "Nova fala...", icon: "central", trigger: "walk", autoDismiss: true, lockPlayer: true, dismissDelay: 1500 };
+                    switchTab('tab-dialogues');
+                    const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
+                    if (card) {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const textarea = card.querySelector('textarea');
+                        if (textarea) textarea.focus();
+                    }
+                }
+            }
             else currentBlocksMap[p.y][p.x] = char;
             rebuildMock();
         }
     };
 
-    // Disable middle click scroll
+    // Disable middle click scroll and right click menu
     canvas.onauxclick = (e) => { if(e.button === 1) e.preventDefault(); };
+    canvas.oncontextmenu = (e) => { e.preventDefault(); };
     
     canvas.onmousemove = (e) => {
         const p = getGridPos(e); hoverPos = p;
@@ -1220,6 +1344,11 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     } else if (c === '?') {
         const qf = mockGame.quantumFloors ? mockGame.quantumFloors.find(q => q.x === x && q.y === y) : null;
         Graphics.drawQuantumFloor(x, y, qf ? qf.active : true, animFrame, qf ? qf.flashTimer : 0, qf ? qf.pulseIntensity : 1.0, qf ? qf.entrySide : null, qf ? qf.whiteGlow : 0);
+    } else if (c === '💬') {
+        ctx.fillStyle = '#00ff9f';
+        ctx.font = '20px VT323';
+        ctx.textAlign = 'center';
+        ctx.fillText('💬', x * 32 + 16, y * 32 + 24);
     }
 
     ctx.restore();
@@ -1264,6 +1393,18 @@ function renderLoop() {
             // D. Draw structural walls/ceiling LAST (on top of doors)
             if (baseC === '#' || baseC === 'W') {
                 drawChar(x, y, baseC);
+            }
+
+            // E. Draw Dialogue Icon if any
+            const lvl = levelsData[currentLevelIdx];
+            if (lvl.dialogues && lvl.dialogues[`${x},${y}`]) {
+                ctx.save();
+                ctx.fillStyle = '#00ff9f';
+                ctx.font = '20px VT323';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 10; ctx.shadowColor = '#00ff9f';
+                ctx.fillText('💬', x * 32 + 16, y * 32 + 24);
+                ctx.restore();
             }
         }
     }
@@ -1346,7 +1487,8 @@ function startTest() {
         map: currentMap.map(row => row.join('')),
         blocks: currentBlocksMap.map(row => row.join('')),
         overlays: currentOverlayMap.map(row => row.join('')),
-        links: JSON.parse(JSON.stringify(currentLvlData.links || {}))
+        links: JSON.parse(JSON.stringify(currentLvlData.links || {})),
+        dialogues: JSON.parse(JSON.stringify(currentLvlData.dialogues || {}))
     };
 
     console.log("Iniciando Teste:", lvl.name);
@@ -1361,8 +1503,11 @@ function startTest() {
     
     // 5. Create and Force Load
     testGame = new GameState();
+    window.game = testGame; // SET THIS BEFORE DIALOGUES
+    
     testGame.levelIndex = 0;
     testGame.loadLevel(0); // Force load now that LEVELS is [lvl]
+    testGame.checkDialogues('start');
     
     testGame.maxMoves = lvl.time;
     testGame.transitionState = 'NONE';
@@ -1371,7 +1516,6 @@ function startTest() {
     // 6. Graphics Setup
     const testCanvas = document.getElementById('test-canvas');
     Graphics.init(testCanvas);
-    window.game = testGame;
     
     testAnimFrame = 0;
     testLastTime = performance.now();
@@ -1400,6 +1544,7 @@ function handleTestInput(e) {
     }
 
     if (testGame.state === 'PLAYING') {
+        if (testGame.inputLocked) return;
         if (e.key === 'ArrowUp' || e.key === 'w') testGame.movePlayer(0, -1);
         else if (e.key === 'ArrowDown' || e.key === 's') testGame.movePlayer(0, 1);
         else if (e.key === 'ArrowLeft' || e.key === 'a') testGame.movePlayer(-1, 0);
@@ -1570,4 +1715,222 @@ function updateTestUI() {
         totalCurrent += Math.min(t.required, data ? data.charge : 0);
     }
     updateBar('amps-bar', totalCurrent, totalReq);
+}
+
+function switchTab(tabId) {
+    // 1. Update Tabs UI
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+    const clickedTab = document.querySelector(`.sidebar-tab[onclick*="${tabId}"]`);
+    if (clickedTab) clickedTab.classList.add('active');
+
+    // 2. Update Content Panes
+    document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+    const target = document.getElementById(tabId);
+    if (target) target.style.display = tabId === 'tab-dialogues' ? 'flex' : 'block';
+
+    if (tabId === 'tab-dialogues') {
+        updateDialogueManager();
+    }
+}
+
+function updateDialogueManager() {
+    const list = document.getElementById('dialogue-manager-list');
+    if (!list) return;
+    
+    const lvl = levelsData[currentLevelIdx];
+    list.innerHTML = '';
+
+    if (!lvl.dialogues || Object.keys(lvl.dialogues).length === 0) {
+        list.innerHTML = '<div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum diálogo nesta fase.<br><br>Use a ferramenta de 💬 FALAS para adicionar.</div>';
+        return;
+    }
+
+    const sortedKeys = Object.keys(lvl.dialogues).sort((a, b) => {
+        const [ax, ay] = a.split(',').map(Number);
+        const [bx, by] = b.split(',').map(Number);
+        return ay !== by ? ay - by : ax - bx;
+    });
+
+    sortedKeys.forEach(key => {
+        const rawData = lvl.dialogues[key];
+        let eventConfig = {};
+        let messages = [];
+
+        if (Array.isArray(rawData)) {
+            messages = rawData;
+            eventConfig = {
+                trigger: rawData[0]?.trigger || 'walk',
+                lockPlayer: rawData[0]?.lockPlayer !== false,
+                autoDismiss: rawData[0]?.autoDismiss !== false
+            };
+        } else if (rawData.messages) {
+            messages = rawData.messages;
+            eventConfig = rawData;
+        } else {
+            messages = [rawData];
+            eventConfig = rawData;
+        }
+
+        const [x, y] = key.split(',');
+        
+        const card = document.createElement('div');
+        card.id = `diag-card-${x}-${y}`;
+        card.style.background = '#1a1a1a';
+        card.style.border = '1px solid #333';
+        card.style.borderRadius = '4px';
+        card.style.padding = '10px';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '8px';
+        card.style.transition = 'border-color 0.3s';
+
+        let messagesHtml = '';
+        messages.forEach((diag, idx) => {
+            messagesHtml += `
+            <div class="diag-message-entry" style="border-left: 2px solid #333; padding-left: 8px; margin-bottom: 12px; position: relative;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 10px; color: #555;">MENSAGEM #${idx + 1}</span>
+                    ${messages.length > 1 ? `<button onclick="removeDialogueMessage('${key}', ${idx})" style="background: none; border: none; color: #ff0055; cursor: pointer; font-size: 10px; padding: 0 4px;">[REMOVER]</button>` : ''}
+                </div>
+                <textarea style="width: 100%; height: 45px; background: #000; color: #fff; border: 1px solid #444; font-size: 12px; padding: 4px; resize: vertical; font-family: 'Inter', sans-serif;" 
+                    oninput="updateDialogueProp('${key}', 'text', this.value, ${idx})">${diag.text}</textarea>
+                
+                <div style="display: flex; gap: 10px; margin-top: 4px;">
+                    <select style="background: #222; color: #fff; border: 1px solid #444; font-size: 11px; padding: 1px; flex: 1;" 
+                        onchange="updateDialogueProp('${key}', 'icon', this.value, ${idx})">
+                        <option value="central" ${diag.icon === 'central' ? 'selected' : ''}>Ícone: Central</option>
+                        <option value="ai" ${diag.icon === 'ai' ? 'selected' : ''}>Ícone: IA</option>
+                        <option value="human" ${diag.icon === 'human' ? 'selected' : ''}>Ícone: Humano</option>
+                        <option value="alert" ${diag.icon === 'alert' ? 'selected' : ''}>Ícone: Alerta</option>
+                    </select>
+                </div>
+            </div>
+            `;
+        });
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 5px; margin-bottom: 8px;">
+                <span style="color: #00ff9f; font-size: 11px; font-weight: bold;">COORD: ${x}, ${y}</span>
+                <button onclick="removeDialogue('${key}')" style="background: none; border: none; color: #ff0055; cursor: pointer; padding: 0; font-size: 14px;">✖</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; background: #222; padding: 8px; border-radius: 4px;">
+                <div style="grid-column: span 2;">
+                    <select style="width: 100%; background: #000; color: #00ff9f; border: 1px solid #00ff9f; font-size: 11px; padding: 3px; font-weight: bold;"
+                        onchange="updateDialogueProp('${key}', 'trigger', this.value, -1)">
+                        <option value="walk" ${eventConfig.trigger === 'walk' ? 'selected' : ''}>GATILHO: AO PISAR (WALK)</option>
+                        <option value="start" ${eventConfig.trigger === 'start' ? 'selected' : ''}>GATILHO: AO INICIAR (START)</option>
+                    </select>
+                </div>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
+                    <input type="checkbox" ${eventConfig.lockPlayer !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'lockPlayer', this.checked, -1)"> Travar Robô
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
+                    <input type="checkbox" ${eventConfig.autoDismiss !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'autoDismiss', this.checked, -1)"> Auto-Fechar
+                </label>
+            </div>
+            
+            <div class="messages-container">
+                ${messagesHtml}
+            </div>
+
+            <button onclick="addDialogueMessage('${key}')" style="width: 100%; background: rgba(0, 255, 159, 0.1); color: #00ff9f; border: 1px dashed #00ff9f; padding: 8px; font-size: 11px; cursor: pointer; margin-top: 5px; border-radius: 4px; font-weight: bold;">
+                + ADICIONAR NOVA CAIXA NA SEQUÊNCIA
+            </button>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function updateDialogueProp(key, prop, value, idx = 0) {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.dialogues[key]) return;
+    
+    if (Array.isArray(lvl.dialogues[key])) {
+        const oldArr = lvl.dialogues[key];
+        lvl.dialogues[key] = {
+            trigger: oldArr[0]?.trigger || 'walk',
+            lockPlayer: oldArr[0]?.lockPlayer !== false,
+            autoDismiss: oldArr[0]?.autoDismiss !== false,
+            messages: oldArr
+        };
+    } else if (!lvl.dialogues[key].messages) {
+        const oldObj = lvl.dialogues[key];
+        lvl.dialogues[key] = {
+            trigger: oldObj.trigger || 'walk',
+            lockPlayer: oldObj.lockPlayer !== false,
+            autoDismiss: oldObj.autoDismiss !== false,
+            messages: [oldObj]
+        };
+    }
+
+    if (idx === -1) {
+        lvl.dialogues[key][prop] = value;
+    } else {
+        if (lvl.dialogues[key].messages[idx]) {
+            lvl.dialogues[key].messages[idx][prop] = value;
+            if (prop === 'icon') {
+                lvl.dialogues[key].messages[idx].isAI = value !== 'human';
+            }
+        }
+    }
+    saveHistory();
+}
+
+function addDialogueMessage(key) {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.dialogues[key]) return;
+    
+    if (Array.isArray(lvl.dialogues[key])) {
+        const oldArr = lvl.dialogues[key];
+        lvl.dialogues[key] = {
+            trigger: oldArr[0]?.trigger || 'walk',
+            lockPlayer: oldArr[0]?.lockPlayer !== false,
+            autoDismiss: oldArr[0]?.autoDismiss !== false,
+            messages: oldArr
+        };
+    } else if (!lvl.dialogues[key].messages) {
+        const oldObj = lvl.dialogues[key];
+        lvl.dialogues[key] = {
+            trigger: oldObj.trigger || 'walk',
+            lockPlayer: oldObj.lockPlayer !== false,
+            autoDismiss: oldObj.autoDismiss !== false,
+            messages: [oldObj]
+        };
+    }
+    
+    const messages = lvl.dialogues[key].messages;
+    const last = messages[messages.length - 1];
+    const newMsg = JSON.parse(JSON.stringify(last));
+    newMsg.text = "Próxima fala...";
+    
+    messages.push(newMsg);
+    updateDialogueManager();
+    saveHistory();
+}
+
+function removeDialogueMessage(key, idx) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.dialogues && lvl.dialogues[key]) {
+        const messages = lvl.dialogues[key].messages || lvl.dialogues[key];
+        if (Array.isArray(messages)) {
+            messages.splice(idx, 1);
+            if (messages.length === 0) {
+                delete lvl.dialogues[key];
+                rebuildMock();
+            }
+        }
+        updateDialogueManager();
+        saveHistory();
+    }
+}
+
+function removeDialogue(key) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.dialogues && lvl.dialogues[key]) {
+        delete lvl.dialogues[key];
+        updateDialogueManager();
+        saveHistory();
+        rebuildMock();
+    }
 }

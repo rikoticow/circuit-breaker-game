@@ -1,5 +1,5 @@
 // Simple Web Audio API Synthesizer
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioCtx = window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 const AudioSys = window.AudioSys = {
     playTone(freq, type, duration, vol=0.1) {
@@ -732,6 +732,30 @@ const AudioSys = window.AudioSys = {
                 this.playTone(n.f * 0.5, 'square', n.d, 0.04, now + n.t);
             }
         });
+    },
+
+    playVoiceBlip(char, pitch = 1.0, isAI = true) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // Frequência base: IA é mais "quadrada/digital", Humano é mais "senoidal/suave"
+        const baseFreq = isAI ? 200 : 300;
+        const freq = baseFreq * pitch * (0.9 + Math.random() * 0.2); 
+        
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = isAI ? 'square' : 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+        
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(now);
+        osc.stop(now + 0.04);
     },
 
     // Overload playTone to support start time

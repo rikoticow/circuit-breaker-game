@@ -116,7 +116,10 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
 Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação intuitiva de níveis.
 *   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
 *   **High-Fidelity Rendering:** Utiliza a mesma classe `GameState` e `Graphics` do jogo para mostrar o fluxo de energia real durante a edição.
-*   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio**, o editor identifica todos os alvos interativos (Portas, Botões, Núcleos, Chão Quântico) e permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
+*   **Gerenciador de Diálogos Centralizado (Nova Aba):** Uma interface robusta na barra lateral dedicada exclusivamente à gestão de falas. Permite visualizar todos os diálogos da fase em uma lista vertical, facilitando a edição de textos longos, troca de ícones e configuração de triggers (Start/Walk).
+*   **Controle de Comportamento Narrativo:** Cada diálogo agora possui flags individuais para `Travar Robô` (bloqueia input durante a fala) e `Auto-Fechar` (com tempo de dismiss configurável), permitindo maior controle sobre o ritmo do gameplay.
+*   **Navegação Inteligente (Middle-Click):** Clicar com o botão do meio em um evento de fala no mapa redireciona instantaneamente o usuário para a aba de Diálogos e foca no card correspondente.
+*   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio** em elementos interativos (Portas, Botões, Núcleos, Chão Quântico), o editor permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
 *   **Área de Transferência:** Suporte para copiar e colar áreas do mapa via `Ctrl+C` e `Ctrl+V`.
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.
@@ -172,3 +175,14 @@ O sistema de áudio é baseado puramente na Web Audio API, gerando sons de forma
     *   **Quantum Hum:** Zumbido elétrico que diferencia interações. Emite um tom leve e agudo (800Hz) ao caminhar sobre o chão quântico, e um tom **grave e denso (400Hz)** ao tentar empurrar blocos contra a barreira ativa, reforçando a percepção de massa e resistência.
     *   **Toggle Rise/Fall:** Efeitos de "rise up" (ascendente) ao ativar a barreira e "descend" (queda de frequência) ao desativá-la, simulando o carregamento e desligamento de grandes bobinas de indução industrial.
 *   **Ilusão de Aceleração (Escala de Shepard):** As esteiras utilizam um sistema de Escala de Shepard (`updateConveyorShepard`), que cria uma ilusão auditiva de tom ascendente infinito enquanto o robô ou blocos estão em movimento. Isso intensifica a sensação de velocidade e perigo industrial contínuo, gerado procedimentalmente via Web Audio API.
+
+### E. Sistema de Diálogo (js/dialogue.js)
+Sistema de comunicação narrativa utilizando a estética de HUD Industrial:
+*   **Rich Text HUD:** Utiliza a biblioteca `Tippy.js` com elementos virtuais para ancorar caixas de diálogo a coordenadas flutuantes do Canvas.
+*   **Aparência Industrial:** Design inspirado em monitores CRT de alta fidelidade, com bordas neon, scanlines integradas, ícones de status (Central, IA, Alerta) e cursores piscantes.
+*   **Efeito Typewriter Dinâmico:** Texto revelado caractere por caractere com suporte a tags de controle em tempo real:
+    *   `[pause:ms]`: Pausa a digitação por um tempo determinado.
+    *   `[speed:ms]`: Altera a velocidade de escrita para trechos específicos.
+*   **Voz Procedimental (Animal Crossing Style):** Cada caractere gera um "blip" sonoro via Web Audio API com pitch aleatório. O sistema diferencia vozes de IA (onda quadrada, tom metálico) e Humanas (onda triangular, tom mais suave).
+*   **Gatilhos de Mapa:** Diálogos podem ser disparados ao iniciar o nível (`trigger: start`) ou ao pisar em tiles específicos (`trigger: walk`).
+*   **Integração no Editor:** Camada dedicada ("FALAS") que permite posicionar eventos de diálogo visualmente e editar textos e ícones via painel de propriedades.

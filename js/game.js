@@ -42,6 +42,7 @@ class GameState {
         this.scrapCollected = 0;
         this.totalScrap = 0;
         this.scrapPositions = new Set();
+        this.triggeredDialogues = new Set();
 
         // Transition system
         this.transitionState = 'WAITING'; // Start closed
@@ -179,6 +180,7 @@ class GameState {
 
         this.levelIndex = index;
         const levelData = LEVELS[index];
+        this.levelData = levelData;
         this.time = levelData.timer || 60; // seconds countdown from level data
         this.moves = levelData.time; // Movements allowed (battery)
         this.moveCount = 0;
@@ -206,6 +208,7 @@ class GameState {
         this.poweredDoors = new Set();
 
         this.scrapPositions.clear();
+        this.triggeredDialogues.clear();
         this.scrapCollected = 0;
         this.totalScrap = 0;
         this.debris = []; // Initialize persistent debris
@@ -420,6 +423,8 @@ class GameState {
             AudioSys.setMusicIntensity(2); // Levels always play the full "Action" version
             AudioSys.playGameMusic();
         }
+
+        // Trigger start dialogues (Handled in main.js when transition finishes)
     }
 
     isConveyorActive(c) {
@@ -629,8 +634,10 @@ class GameState {
             }
         }
 
-        // Tick-based sliding
         this.updateSliding();
+        if (this.state === 'PLAYING') {
+            this.checkDialogues('walk');
+        }
 
         if (this.state === 'REVERSING') {
             // Process multiple states per frame for a fast "Rewind" look
@@ -1089,6 +1096,9 @@ class GameState {
         if (this.moves <= 0) {
             this.handleDeath(false);
         }
+
+        // Trigger dialogues on walking
+        this.checkDialogues('walk');
     }
 
     interact() {
@@ -1840,5 +1850,85 @@ class GameState {
         if (next && next.beltDist === undefined) {
             this._traceConveyorPath(next, d + 1, chain);
         }
+    }
+
+    checkDialogues(triggerType) {
+        if (this.isEditor) return;
+        if (!this.levelData || !this.levelData.dialogues) return;
+        
+        const key = triggerType === 'start' ? null : `${this.player.x},${this.player.y}`;
+        
+        for (const [coord, data] of Object.entries(this.levelData.dialogues)) {
+            // Support: 1. Array of messages, 2. Object with messages property, 3. Single message object
+            let messages = [];
+            let config = {};
+
+            if (Array.isArray(data)) {
+                messages = data;
+                config = data[0] || {};
+            } else if (data.messages) {
+                messages = data.messages;
+                config = data;
+            } else {
+                messages = [data];
+                config = data;
+            }
+
+            if (messages.length === 0) continue;
+
+            const first = messages[0];
+            const dialogueId = `${triggerType}_${coord}_${first.text.substring(0,10)}`;
+            if (this.triggeredDialogues.has(dialogueId)) continue;
+
+            const trigger = config.trigger || first.trigger || 'walk';
+
+            if (trigger === triggerType) {
+                if (triggerType === 'start' || coord === key) {
+                    const target = this.getDialogueTarget();
+                    if (window.Dialogue) {
+                        this.triggeredDialogues.add(dialogueId);
+                        
+                        messages.forEach(msg => {
+                            Dialogue.show(target, {
+                                text: msg.text,
+                                icon: msg.icon || 'central',
+                                isAI: msg.icon !== 'human',
+                                autoDismiss: config.autoDismiss !== false,
+                                lockPlayer: config.lockPlayer !== false,
+                                dismissDelay: config.dismissDelay || 1500
+                            });
+                        });
+                    }
+                    if (triggerType === 'walk') break; 
+                }
+            }
+        }
+    }
+
+    getDialogueTarget() {
+        const self = this;
+        return {
+            getBoundingClientRect: () => {
+                const canvas = document.getElementById('gameCanvas') || 
+                               document.getElementById('test-canvas') || 
+                               document.getElementById('editor-canvas');
+                if (!canvas) return { width: 0, height: 0, top: 0, left: 0, bottom: 0, right: 0 };
+                
+                const rect = canvas.getBoundingClientRect();
+                const camX = self.camera ? self.camera.x : 0;
+                const camY = self.camera ? self.camera.y : 0;
+                
+                const x = (self.player.visualX * 32) + rect.left - camX;
+                const y = (self.player.visualY * 32) + rect.top - camY;
+                
+                return {
+                    width: 32, height: 32,
+                    top: y, left: x,
+                    bottom: y + 32, right: x + 32,
+                    x: x, y: y
+                };
+            },
+            contextElement: document.body
+        };
     }
 }

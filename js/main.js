@@ -9,19 +9,25 @@ function init() {
     Graphics.init(canvas);
 
     game = new GameState();
+    window.game = game; // Essential for Dialogue system to find the active game
     LevelSelector.init();
 
     // Initial Start Gesture (Fixes AudioContext autoplay policy)
     let initTime = Date.now();
+    const globalAudioResume = () => {
+        if (window.audioCtx && audioCtx.state !== 'running') {
+            audioCtx.resume();
+        }
+    };
+    document.addEventListener('keydown', globalAudioResume);
+    document.addEventListener('mousedown', globalAudioResume);
+
     const startHandler = (e) => {
         // Ignore very early clicks/keys (likely focus or accidental)
         if (Date.now() - initTime < 500) return;
 
         if (game.transitionState === 'WAITING' && game.transitionProgress === 1) {
-            // Attempt to resume audio context
-            if (audioCtx.state !== 'running') {
-                audioCtx.resume().catch(err => console.log("Audio resume deferred:", err));
-            }
+            globalAudioResume();
             game.transitionState = 'OPENING';
             game.transitionStayClosed = false;
             document.removeEventListener('keydown', startHandler);
@@ -90,6 +96,11 @@ function init() {
         }
 
         if (game.state === 'PLAYING') {
+            if (game.inputLocked) {
+                // If there's a manual dismiss dialogue, the Enter key is handled by Dialogue.js
+                // but we block movement here
+                return;
+            }
             if (e.key === 'ç') {
                 console.log("DEBUG: Instant 3-Star Win");
                 game.time = (LEVELS[game.levelIndex].timer || 60); // Set max time for stars
@@ -392,6 +403,9 @@ function updateTransitionLogic() {
             game.transitionProgress = 0;
             game.transitionState = 'NONE';
             game.transitionLabel = 'CIRCUIT BREAKER';
+            
+            // dialogues are triggered in main.js after transition ends
+            game.checkDialogues('start');
         }
     }
 }
