@@ -19,6 +19,7 @@ window.game = {
         return [];
     }
 };
+let hoveredChannel = null;
 
 const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
@@ -51,7 +52,7 @@ let clipboard = null;
 let selectionStart = null;
 let selectionEnd = null;
 let hoverPos = {x: 0, y: 0};
-let editTarget = null; // {x, y} for properties
+let editTargets = []; // New array for batch editing
 let isTestMode = false;
 let testGame = null;
 let testAnimFrame = 0;
@@ -560,7 +561,8 @@ function rebuildMock() {
                 if (c === ')') dir = 0; // RIGHT
                 if (c === '[') dir = 3; // UP
                 if (c === ']') dir = 1; // DOWN
-                mockGame.conveyors.push({ x, y, dir });
+                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
+                mockGame.conveyors.push({ x, y, dir, channel: chan });
             }
 
 
@@ -572,7 +574,8 @@ function rebuildMock() {
             let oc = currentOverlayMap[y][x];
             if (['(', ')', '[', ']'].includes(oc)) {
                 let dir = 2; if (oc === ')') dir = 0; if (oc === '[') dir = 3; if (oc === ']') dir = 1;
-                mockGame.conveyors.push({ x, y, dir });
+                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
+                mockGame.conveyors.push({ x, y, dir, channel: chan });
             } else if (oc === 'S') {
                 mockGame.scrapPositions.add(`${x},${y}`);
                 mockGame.totalScrap++;
@@ -740,39 +743,96 @@ function setupEvents() {
     };
 
     document.getElementById('prop-amps').oninput = (e) => {
-        if (!editTarget) return;
+        if (editTargets.length === 0) return;
         const val = parseInt(e.target.value) || 1;
-        currentMap[editTarget.y][editTarget.x] = val.toString();
+        for (const target of editTargets) {
+            const char = currentMap[target.y][target.x];
+            if (char === 'T' || (char >= '1' && char <= '9')) {
+                currentMap[target.y][target.x] = val.toString();
+            }
+        }
         saveHistory();
         rebuildMock();
     };
 
     document.getElementById('prop-channel').oninput = (e) => {
-        if (!editTarget) return;
-        const chan = parseInt(e.target.value) || 0;
+        if (editTargets.length === 0) return;
+        const chan = parseInt(e.target.value);
+        if (isNaN(chan)) return;
         const lvl = levelsData[currentLevelIdx];
         if (!lvl.links) lvl.links = {};
-        lvl.links[`${editTarget.x},${editTarget.y}`] = chan;
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}`] = chan;
+        }
         saveHistory();
         rebuildMock();
     };
 
+    function updateChannelGrid() {
+        const grid = document.getElementById('channel-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        const lvl = levelsData[currentLevelIdx];
+        const currentChan = parseInt(document.getElementById('prop-channel').value) || 0;
+        
+        // Scan level for used channels
+        const usedChannels = new Set();
+        if (lvl.links) {
+            for (const key in lvl.links) {
+                // Ignore behavior/init keys, just look for the coordinates that store the channel
+                if (!key.endsWith('_init') && !key.endsWith('_behavior')) {
+                    const val = parseInt(lvl.links[key]);
+                    if (!isNaN(val)) usedChannels.add(val);
+                }
+            }
+        }
+
+        for (let i = 0; i < 30; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'chan-cell';
+            if (i === currentChan) cell.classList.add('active');
+            if (usedChannels.has(i)) cell.classList.add('in-use');
+            cell.innerText = i;
+            cell.onclick = (e) => {
+                e.stopPropagation();
+                document.getElementById('prop-channel').value = i;
+                document.getElementById('prop-channel-val').innerText = i;
+                // Trigger the oninput manually to apply to all selected targets
+                document.getElementById('prop-channel').dispatchEvent(new Event('input'));
+                updateChannelGrid(); // Re-highlight
+            };
+            cell.onmouseenter = () => {
+                hoveredChannel = i;
+            };
+            cell.onmouseleave = () => {
+                hoveredChannel = null;
+            };
+            grid.appendChild(cell);
+        }
+        document.getElementById('prop-channel-val').innerText = currentChan;
+        document.getElementById('prop-channel-usage').innerText = usedChannels.has(currentChan) ? 'Em uso' : 'Livre';
+    }
+
     document.getElementById('prop-toggle').onchange = (e) => {
-        if (!editTarget) return;
+        if (editTargets.length === 0) return;
         const val = e.target.checked;
         const lvl = levelsData[currentLevelIdx];
         if (!lvl.links) lvl.links = {};
-        lvl.links[`${editTarget.x},${editTarget.y}_init`] = val;
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_init`] = val;
+        }
         saveHistory();
         rebuildMock();
     };
 
     document.getElementById('prop-behavior').onchange = (e) => {
-        if (!editTarget) return;
+        if (editTargets.length === 0) return;
         const behavior = e.target.value;
         const lvl = levelsData[currentLevelIdx];
         if (!lvl.links) lvl.links = {};
-        lvl.links[`${editTarget.x},${editTarget.y}_behavior`] = behavior;
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_behavior`] = behavior;
+        }
         
         // Refresh panel visibility
         document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
@@ -862,7 +922,7 @@ function setupEvents() {
 
         if (e.key === 'Escape') {
             document.getElementById('floating-props').style.display = 'none';
-            editTarget = null;
+            editTargets = [];
         }
         if (e.ctrlKey && e.key === 'z') { undo(); e.preventDefault(); }
         if (e.ctrlKey && e.key === 'c') { copySelection(); e.preventDefault(); }
@@ -894,102 +954,108 @@ function setupEvents() {
         if (currentTool === 'eraser' || currentTool === 'select') setTool('brush');
     };
 
-    canvas.oncontextmenu = e => e.preventDefault();
-    
     canvas.onmousedown = (e) => {
         const p = getGridPos(e);
         
-        // MIDDLE CLICK (Button 1) -> ROTATION (or properties fallback)
+        // MIDDLE CLICK (Button 1) -> ROTATION or PROPERTIES
         if (e.button === 1) {
             e.preventDefault();
             
-            // First: Try rotation in the ACTIVE layer
-            let activeTarget = currentMap;
-            if (activeLayer === 'overlays') activeTarget = currentOverlayMap;
-            if (activeLayer === 'blocks') activeTarget = currentBlocksMap;
-            
-            const currentActive = activeTarget[p.y][p.x];
-            const next = getNextRotation(currentActive);
-            
-            if (next !== currentActive) {
-                activeTarget[p.y][p.x] = next;
-                saveHistory();
-                rebuildMock();
-                return;
-            }
-
-            // Second: If no rotation, scan ALL layers for interactive objects (Top to Bottom)
-            const checkLayers = [
-                currentBlocksMap,
-                currentOverlayMap,
-                currentMap
-            ];
-
-            let foundChar = null;
-            for (let map of checkLayers) {
-                const char = map[p.y][p.x];
-                if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?') {
-                    foundChar = char;
-                    break;
-                }
-            }
-
-            if (foundChar) {
-                const current = foundChar;
-                // Show Properties Panel for any interactive object (Middle Click)
-                editTarget = p;
-                const panel = document.getElementById('floating-props');
-                const rect = canvas.getBoundingClientRect();
-                panel.style.display = 'block';
-                panel.style.left = `${rect.left + p.x * 32 - 40}px`;
-                panel.style.top = `${rect.top + p.y * 32 - 100}px`;
-
-                if (current === 'T' || (current >= '1' && current <= '9')) {
-                    // Target Core Properties
-                    document.getElementById('prop-type').innerText = `Tipo: Núcleo Alvo`;
-                    document.getElementById('prop-amps').value = current === 'T' ? 1 : parseInt(current);
-                    document.getElementById('prop-amps').parentElement.style.display = 'flex';
-                    document.getElementById('prop-channel-container').style.display = 'none';
-                    document.getElementById('prop-behavior-container').style.display = 'none';
-                    document.getElementById('prop-toggle-container').style.display = 'none';
-                    document.getElementById('prop-amps').focus();
-                } else {
-                    // Interactive Object Linking (Door, Button, etc)
-                    const lvl = levelsData[currentLevelIdx];
-                    const chan = (lvl.links && lvl.links[`${p.x},${p.y}`]) || 0;
-                    const behavior = (lvl.links && lvl.links[`${p.x},${p.y}_behavior`]) || (current === 'P' ? 'PRESSURE' : 'TIMER');
-                    const initState = (lvl.links && lvl.links[`${p.x},${p.y}_init`]) === true;
+            // IF IN SELECT TOOL: ONLY PROPERTIES (SAFE ZONE)
+            if (currentTool === 'select') {
+                let targets = [];
+                let inSelection = false;
+                
+                // Check if p is inside active selection
+                if (selectionStart && selectionEnd) {
+                    const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
+                    const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
+                    if (p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2) inSelection = true;
                     
-                    let typeLabel = 'Objeto';
-                    if (current === 'D') {
-                        typeLabel = 'Porta';
-                        document.getElementById('prop-behavior-container').style.display = 'none';
-                        document.getElementById('prop-toggle-container').style.display = 'none';
-                    } else if (current === '_' || current === 'P') {
-                        typeLabel = `Botão Industrial`;
-                        document.getElementById('prop-behavior-container').style.display = 'flex';
-                        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
-                    } else if (current === '?') {
-                        typeLabel = 'Chão Quântico';
-                        document.getElementById('prop-behavior-container').style.display = 'none';
-                        document.getElementById('prop-toggle-container').style.display = 'none';
+                    if (inSelection) {
+                        for (let y = y1; y <= y2; y++) {
+                            for (let x = x1; x <= x2; x++) {
+                                // Scan all maps for interactive chars
+                                const chars = [currentBlocksMap[y][x], currentOverlayMap[y][x], currentMap[y][x]];
+                                for (let c of chars) {
+                                    if (c === 'T' || (c >= '1' && c <= '9') || c === 'D' || c === '_' || c === 'P' || c === '?' || ['(', ')', '[', ']'].includes(c)) {
+                                        targets.push({x, y, char: c});
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+                
+                // If not in selection or selection empty, just target the clicked cell
+                if (!inSelection || targets.length === 0) {
+                    const checkLayers = [currentBlocksMap, currentOverlayMap, currentMap];
+                    for (let map of checkLayers) {
+                        const char = map[p.y][p.x];
+                        if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?' || ['(', ')', '[', ']'].includes(char)) {
+                            targets.push({x: p.x, y: p.y, char});
+                            break;
+                        }
+                    }
+                }
 
+                if (targets.length > 0) {
+                    editTargets = targets;
+                    const primary = targets[0]; 
+                    const panel = document.getElementById('floating-props');
+                    const rect = canvas.getBoundingClientRect();
+                    panel.style.display = 'block';
+                    panel.style.left = `${rect.left + p.x * 32 - 40}px`;
+                    panel.style.top = `${rect.top + p.y * 32 - 100}px`;
+
+                    const typeLabel = targets.length > 1 ? `Múltiplos (${targets.length})` : 
+                        (primary.char === 'D' ? 'Porta' : (primary.char === '?' ? 'Chão Quântico' : (primary.char === 'T' || (primary.char >= '1' && primary.char <= '9') ? 'Núcleo Alvo' : (['(', ')', '[', ']'].includes(primary.char) ? 'Esteira' : 'Botão Industrial'))));
+                    
                     document.getElementById('prop-type').innerText = `Tipo: ${typeLabel}`;
-                    document.getElementById('prop-amps').parentElement.style.display = 'none';
-                    document.getElementById('prop-channel-container').style.display = 'flex';
+                    
+                    const hasCores = targets.some(t => t.char === 'T' || (t.char >= '1' && t.char <= '9'));
+                    const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || ['(', ')', '[', ']'].includes(t.char));
+                    const hasButtons = targets.some(t => t.char === '_' || t.char === 'P');
 
-                    document.getElementById('prop-channel').value = chan;
-                    document.getElementById('prop-behavior').value = behavior;
-                    document.getElementById('prop-toggle').checked = initState;
-                    document.getElementById('prop-channel').focus();
+                    document.getElementById('prop-amps').parentElement.style.display = hasCores ? 'flex' : 'none';
+                    document.getElementById('prop-channel-container').style.display = hasLinkables ? 'flex' : 'none';
+                    document.getElementById('prop-behavior-container').style.display = hasButtons ? 'flex' : 'none';
+                    
+                    const lvl = levelsData[currentLevelIdx];
+                    if (hasCores) document.getElementById('prop-amps').value = primary.char === 'T' ? 1 : parseInt(primary.char);
+                    if (hasLinkables) {
+                        const chan = (lvl.links && lvl.links[`${primary.x},${primary.y}`]) || 0;
+                        document.getElementById('prop-channel').value = chan;
+                        updateChannelGrid();
+                    }
+                    if (hasButtons) {
+                        const behavior = (lvl.links && lvl.links[`${primary.x},${primary.y}_behavior`]) || (primary.char === 'P' ? 'PRESSURE' : 'TIMER');
+                        document.getElementById('prop-behavior').value = behavior;
+                        document.getElementById('prop-toggle').checked = (lvl.links && lvl.links[`${primary.x},${primary.y}_init`]) === true;
+                        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+                    }
+                }
+            } else {
+                // NOT IN SELECT TOOL: ONLY ROTATION (NO PROPERTIES)
+                let activeTarget = currentMap;
+                if (activeLayer === 'overlays') activeTarget = currentOverlayMap;
+                if (activeLayer === 'blocks') activeTarget = currentBlocksMap;
+                
+                const currentActive = activeTarget[p.y][p.x];
+                const next = getNextRotation(currentActive);
+                
+                if (next !== currentActive) {
+                    activeTarget[p.y][p.x] = next;
+                    saveHistory();
+                    rebuildMock();
                 }
             }
             return;
         }
 
-        // Close properties menu if clicking elsewhere
         document.getElementById('floating-props').style.display = 'none';
+        editTargets = [];
 
         if (currentTool === 'select' || e.ctrlKey) {
             selectionStart = p; selectionEnd = p;
@@ -1141,7 +1207,8 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         let dir = 2; if(c===')') dir=0; if(c==='[') dir=3; if(c===']') dir=1;
         // Find conveyor in mockGame to get inDir, beltDist and beltLength
         const conv = (window.game && window.game.conveyors) ? window.game.conveyors.find(cv => cv.x === x && cv.y === y) : null;
-        Graphics.drawConveyor(x, y, dir, animFrame, conv ? conv.inDir : null, conv ? conv.beltDist : 0, conv ? conv.beltLength : 10);
+        const isActive = (window.game && conv) ? window.game.isConveyorActive(conv) : true;
+        Graphics.drawConveyor(x, y, dir, animFrame, conv ? conv.inDir : null, conv ? conv.beltDist : 0, conv ? conv.beltLength : 10, isActive);
     } else if (c === 'D') {
         const door = mockGame.doors ? mockGame.doors.find(d => d.x === x && d.y === y) : null;
         if (door) Graphics.drawDoor(x, y, door.state, door.error, animFrame, door.orientation, door.pair ? door.pair.side : null);
@@ -1223,7 +1290,41 @@ function renderLoop() {
 
     // 6. Draw Particles (Smoke/Sparks)
     Graphics.drawParticles();
-    
+
+    // 7. Channel Highlight (GODOT STYLE INSPECTOR)
+    if (hoveredChannel !== null) {
+        const lvl = levelsData[currentLevelIdx];
+        if (lvl && lvl.links) {
+            ctx.save();
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 4;
+            const pulse = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
+            ctx.globalAlpha = 0.4 + pulse * 0.5;
+            
+            for (const key in lvl.links) {
+                if (!key.endsWith('_init') && !key.endsWith('_behavior')) {
+                    if (parseInt(lvl.links[key]) === hoveredChannel) {
+                        const [cx, cy] = key.split(',').map(Number);
+                        // Pulse rect
+                        ctx.strokeRect(cx * 32 + 1, cy * 32 + 1, 30, 30);
+                        
+                        // Inner fill
+                        ctx.fillStyle = '#00f0ff';
+                        ctx.globalAlpha = 0.1 * (0.5 + pulse * 0.5);
+                        ctx.fillRect(cx * 32 + 2, cy * 32 + 2, 28, 28);
+                        
+                        // Label
+                        ctx.globalAlpha = 1.0;
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 12px VT323, monospace';
+                        ctx.fillText(`CH:${hoveredChannel}`, cx * 32 + 4, cy * 32 + 14);
+                    }
+                }
+            }
+            ctx.restore();
+        }
+    }
+
     animFrame++;
     requestAnimationFrame(renderLoop);
 }
@@ -1367,7 +1468,10 @@ function testLoop(timestamp) {
         const powered = testGame.poweredStations.has(`${s.x},${s.y}`);
         Graphics.drawChargingStation(s.x, s.y, powered, testAnimFrame);
     }
-    for (const c of testGame.conveyors) Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength);
+    for (const c of testGame.conveyors) {
+        const isActive = testGame.isConveyorActive(c);
+        Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength, isActive);
+    }
 
     // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
     for (const d of testGame.doors) {

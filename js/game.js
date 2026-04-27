@@ -263,7 +263,8 @@ class GameState {
                     if (c === ')') dir = DIRS.RIGHT;
                     if (c === '[') dir = DIRS.UP;
                     if (c === ']') dir = DIRS.DOWN;
-                    this.conveyors.push({ x, y, dir });
+                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                    this.conveyors.push({ x, y, dir, channel: chan });
                 } else if (c === 'D') {
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
                     this.doors.push({ 
@@ -313,7 +314,8 @@ class GameState {
                         if (bc === '[') dir = DIRS.UP;
                         if (bc === ']') dir = DIRS.DOWN;
                         if (!this.conveyors.some(c => c.x === x && c.y === y)) {
-                            this.conveyors.push({ x, y, dir });
+                            const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                            this.conveyors.push({ x, y, dir, channel: chan });
                         }
                     } else if (bc === 'S') {
                         if (!this.scrapPositions.has(`${x},${y}`)) {
@@ -332,7 +334,8 @@ class GameState {
                         if (oc === '[') dir = DIRS.UP;
                         if (oc === ']') dir = DIRS.DOWN;
                         if (!this.conveyors.some(c => c.x === x && c.y === y)) {
-                            this.conveyors.push({ x, y, dir });
+                            const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                            this.conveyors.push({ x, y, dir, channel: chan });
                         }
                     } else if (oc === 'S') {
                         if (!this.scrapPositions.has(`${x},${y}`)) {
@@ -417,6 +420,15 @@ class GameState {
             AudioSys.setMusicIntensity(2); // Levels always play the full "Action" version
             AudioSys.playGameMusic();
         }
+    }
+
+    isConveyorActive(c) {
+        if (!c) return false;
+        const chan = Number(c.channel || 0);
+        const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
+        // If there are NO buttons on this channel, it's ON.
+        // If there ARE buttons, it's ON if at least one is pressed.
+        return chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
     }
 
     update() {
@@ -593,8 +605,10 @@ class GameState {
 
             // --- Conveyor Audio Loop ---
             if (this.state === 'PLAYING') {
-                const playerOnConveyor = this.conveyors.some(c => c.x === this.player.x && c.y === this.player.y);
-                const blockOnConveyor = this.blocks.some(b => this.conveyors.some(c => c.x === b.x && c.y === b.y));
+                const conveyorsWithButtons = this.conveyors.filter(c => this.isConveyorActive(c));
+                
+                const playerOnConveyor = conveyorsWithButtons.some(c => c.x === this.player.x && c.y === this.player.y);
+                const blockOnConveyor = this.blocks.some(b => conveyorsWithButtons.some(c => c.x === b.x && c.y === b.y));
                 const conveyorActive = playerOnConveyor || blockOnConveyor;
 
                 // 1. Shepard Tone (Continuous Illusion)
@@ -979,9 +993,9 @@ class GameState {
         const nx = this.player.x + dx;
         const ny = this.player.y + dy;
 
-        // LOCK CONTROLS IF ON CONVEYOR: The player must follow the belt
-        const onConveyor = this.conveyors.some(c => c.x === this.player.x && c.y === this.player.y);
-        if (onConveyor) return;
+        // LOCK CONTROLS IF ON ACTIVE CONVEYOR: The player must follow the belt
+        const conveyor = this.conveyors.find(c => c.x === this.player.x && c.y === this.player.y);
+        if (conveyor && this.isConveyorActive(conveyor)) return;
 
         if (this.map[ny][nx] === '#' || this.map[ny][nx] === 'W') return;
 
@@ -1230,10 +1244,12 @@ class GameState {
             }
         }
     }
-
     handleEntitySlide(obj, isPlayer) {
         const conveyor = this.conveyors.find(c => c.x === obj.x && c.y === obj.y);
         if (!conveyor) return;
+
+        // Check if conveyor is powered by buttons
+        if (!this.isConveyorActive(conveyor)) return; // Stopped
 
         // Determine direction
         let dx = 0, dy = 0;

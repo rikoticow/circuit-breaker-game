@@ -42,7 +42,31 @@
         }
 
         button:hover { background: #444; }
-        button.active, .layer-btn.active { background: #00ff9f; color: #000; border-color: #00ff9f; }
+        button.active, .layer-btn.active, .tool-btn.active { background: #00ff9f !important; color: #000 !important; border-color: #00ff9f !important; }
+
+        #sub-toolbar {
+            background: #1a1a1a;
+            padding: 5px 15px;
+            display: flex;
+            gap: 25px;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            height: 34px;
+        }
+
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .toolbar-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: bold;
+            margin-right: 5px;
+            text-transform: uppercase;
+        }
 
         #main {
             display: flex;
@@ -160,6 +184,56 @@
             gap: 5px;
         }
 
+        /* Channel Grid Style */
+        #channel-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 3px;
+        }
+        .chan-cell {
+            position: relative;
+            width: 22px;
+            height: 22px;
+            background: #111;
+            border: 1px solid #333;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.1s;
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+        }
+        .chan-cell:hover {
+            background: #222;
+            border-color: #555;
+            color: #fff;
+        }
+        .chan-cell.active {
+            background: #004d30;
+            color: #00ff9f;
+            border-color: #00ff9f;
+            box-shadow: inset 0 0 5px rgba(0,255,159,0.3);
+            z-index: 2;
+        }
+        .chan-cell.in-use::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 4px;
+            height: 4px;
+            background: #00ff9f;
+            border-radius: 50%;
+            box-shadow: 0 0 4px #00ff9f;
+        }
+        .chan-cell.in-use {
+            border-color: #444;
+        }
+
     </style>
 </head>
 <body>
@@ -188,32 +262,51 @@
         </div>
     </div>
 
+    <div id="sub-toolbar">
+        <div class="toolbar-group">
+            <span class="toolbar-label">Camadas</span>
+            <button id="layer-base" class="layer-btn active" style="min-width: 80px;">⚒️ BASE</button>
+            <button id="layer-overlays" class="layer-btn" style="min-width: 80px;">💨 OVERLAY</button>
+            <button id="layer-blocks" class="layer-btn" style="min-width: 80px;">📦 BLOCOS</button>
+        </div>
+
+        <div style="width: 2px; height: 20px; background: #333;"></div>
+
+        <div class="toolbar-group">
+            <span class="toolbar-label">Ferramentas</span>
+            <button id="tool-brush" class="tool-btn active">🖌️ Pincel</button>
+            <button id="tool-eraser" class="tool-btn">🧽 Borracha</button>
+            <button id="tool-rect" class="tool-btn">🔲 Quadrado</button>
+            <button id="tool-line" class="tool-btn">📏 Linha</button>
+            <button id="tool-select" class="tool-btn">🔦 Seleção</button>
+        </div>
+
+        <div style="margin-left: auto; color: #444; font-size: 14px;">
+            DICA: Q/W/E para trocar camadas | Shift+Click para preencher
+        </div>
+    </div>
+
     <div id="main">
         <div id="sidebar">
-            <div style="color: #00ff9f; font-weight: bold; margin-bottom: 5px; font-size: 14px;">CAMADA ATIVA</div>
-            <div class="tools-group" style="margin-bottom: 15px;">
-                <button id="layer-base" class="layer-btn active" style="flex: 1; font-size: 10px;">⚒️ BASE</button>
-                <button id="layer-overlays" class="layer-btn" style="flex: 1; font-size: 10px;">💨 OVERLAY</button>
-                <button id="layer-blocks" class="layer-btn" style="flex: 1; font-size: 10px;">📦 BLOCOS</button>
-            </div>
-
-            <div class="tools-group">
-                <button id="tool-brush" class="tool-btn active">🖌️ Pincel</button>
-                <button id="tool-eraser" class="tool-btn">🧽 Borracha</button>
-                <button id="tool-rect" class="tool-btn">🔲 Quadrado</button>
-                <button id="tool-line" class="tool-btn">📏 Linha</button>
-                <button id="tool-select" class="tool-btn">🔦 Seleção</button>
-            </div>
-            <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 120px;">
+            <div style="color: #00ff9f; font-weight: bold; margin-bottom: 5px; font-size: 14px;">PALETA DE TILES</div>
+            <div id="palette-container" style="flex: 1; overflow-y: auto; padding-right: 5px;"></div>
+            
+            <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 160px;">
                 <div style="color: #00ff9f; font-weight: bold; font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Propriedades</div>
                 <div id="prop-type" style="font-size: 13px; color: #aaa; margin-bottom: 10px;">Tipo: Núcleo Alvo</div>
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                     <span style="font-size: 14px; color: #fff; width: 40px;">Amps:</span>
                     <input type="number" id="prop-amps" min="1" max="9" style="width: 50px; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 18px; padding: 2px 5px; text-align: center;">
                 </div>
-                <div id="prop-channel-container" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                    <span style="font-size: 14px; color: #fff; width: 40px;">Canal:</span>
-                    <input type="number" id="prop-channel" min="0" max="9" value="0" style="width: 50px; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 18px; padding: 2px 5px; text-align: center;">
+                <div id="prop-channel-container" style="margin-bottom: 12px; display: none; flex-direction: column;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 14px; color: #fff;">Canal: <span id="prop-channel-val" style="color: #00ff9f; font-weight: bold;">0</span></span>
+                        <span id="prop-channel-usage" style="font-size: 10px; color: #666; text-transform: uppercase; font-family: sans-serif; padding-top: 4px;"></span>
+                    </div>
+                    <div id="channel-grid">
+                        <!-- Generated by JS -->
+                    </div>
+                    <input type="hidden" id="prop-channel" value="0">
                 </div>
                 <div id="prop-behavior-container" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                     <span style="font-size: 14px; color: #fff; width: 40px;">Tipo:</span>
@@ -241,8 +334,6 @@
                 • <b>Ctrl+C / V:</b> Copiar / Colar<br>
                 • <b>Ctrl+Z:</b> Desfazer
             </div>
-
-            <div id="palette-container"></div>
         </div>
 
         <div id="workspace-wrapper" style="flex: 1; position: relative; overflow: hidden; background: #050a05; display: flex;">

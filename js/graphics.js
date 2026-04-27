@@ -125,20 +125,20 @@ const Graphics = {
         this.ctx.fillRect(px + ts/2 - 2, py + ts/2 - 2, 4, 4);
     },
 
-    drawConveyor(x, y, dir, frame, inDir = null, beltDist = 0, beltLength = 10) {
+    drawConveyor(x, y, dir, frame, inDir = null, beltDist = 0, beltLength = 10, isActive = true) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
         
         // 1. BASE (Belt track)
-        this.ctx.fillStyle = '#222831';
+        this.ctx.fillStyle = isActive ? '#222831' : '#1a1e24';
         this.ctx.fillRect(px, py, ts, ts);
         
         // 2. Animated Belt Texture (Lines moving)
-        this.ctx.strokeStyle = '#393e46';
+        this.ctx.strokeStyle = isActive ? '#393e46' : '#22262b';
         this.ctx.lineWidth = 1;
         this.ctx.beginPath();
-        const offset = (frame * 0.8) % 12;
+        const offset = isActive ? ((frame * 0.8) % 12) : 0;
         
         const isCorner = inDir !== null && inDir !== dir;
 
@@ -176,17 +176,24 @@ const Graphics = {
             else if (inDir === DIRS.LEFT && dir === DIRS.DOWN) { this.ctx.rotate(Math.PI); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.DOWN && dir === DIRS.RIGHT) { this.ctx.rotate(Math.PI/2); this.ctx.scale(1, -1); }
 
+            // Animate corner using line dash offset
+            if (isActive) {
+                this.ctx.setLineDash([4, 8]);
+                this.ctx.lineDashOffset = (frame * 0.8);
+            }
+
             for (let r = 8; r < ts; r += 10) {
                 this.ctx.beginPath();
                 this.ctx.arc(-ts/2, ts/2, r, -Math.PI/2, 0);
                 this.ctx.stroke();
             }
+            this.ctx.setLineDash([]); // Reset
             this.ctx.restore();
         }
         this.ctx.stroke();
 
         // 3. Side Rails
-        this.ctx.fillStyle = '#3a4452';
+        this.ctx.fillStyle = isActive ? '#3a4452' : '#2a3442';
         if (!isCorner) {
             if (dir === DIRS.LEFT || dir === DIRS.RIGHT) {
                 this.ctx.fillRect(px, py, ts, 4); 
@@ -206,7 +213,7 @@ const Graphics = {
             else if (inDir === DIRS.UP && dir === DIRS.LEFT) { this.ctx.rotate(-Math.PI/2); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.LEFT && dir === DIRS.DOWN) { this.ctx.rotate(Math.PI); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.DOWN && dir === DIRS.RIGHT) { this.ctx.rotate(Math.PI/2); this.ctx.scale(1, -1); }
-            this.ctx.strokeStyle = '#3a4452';
+            this.ctx.strokeStyle = isActive ? '#3a4452' : '#2a3442';
             this.ctx.lineWidth = 4;
             this.ctx.beginPath();
             this.ctx.arc(-ts/2, ts/2, ts - 2, -Math.PI/2, 0);
@@ -220,29 +227,31 @@ const Graphics = {
         // 4. Directional Arrows (Single Tile-by-Tile 'Ping' Animation)
         this.ctx.save();
         this.ctx.translate(px + ts/2, py + ts/2);
-        this.ctx.fillStyle = '#00f0ff';
-        this.ctx.shadowColor = '#00f0ff';
-        this.ctx.shadowBlur = 8;
 
-        // Dynamic cycle based on actual belt length + a small pause
-        const cycleLength = beltLength || 10;
-        const pauseLength = Math.max(4, Math.floor(cycleLength * 0.3)); 
-        const totalCycle = cycleLength + pauseLength;
-        
-        // Speed scales slightly with length so it doesn't take forever on long belts
-        const speed = 0.05 + (cycleLength * 0.005);
-        // Shift by -2.0 to allow a smooth fade-in on the first tile
-        const pingPos = ((frame * speed) % totalCycle) - 2.0; 
-        
-        this.ctx.globalAlpha = 0;
-        if (frame === -1) {
-            this.ctx.globalAlpha = 0.9;
-        } else if (pingPos < cycleLength + 2) { 
-            let d = Math.abs(pingPos - beltDist);
-            // Handle wrap-around for loops
-            if (inDir !== null && d > totalCycle / 2) d = Math.abs(d - totalCycle);
+        if (isActive) {
+            this.ctx.fillStyle = '#00f0ff';
+            this.ctx.shadowColor = '#00f0ff';
+            this.ctx.shadowBlur = 8;
+
+            // Dynamic cycle based on actual belt length + a small pause
+            const cycleLength = beltLength || 10;
+            const pauseLength = Math.max(4, Math.floor(cycleLength * 0.3)); 
+            const totalCycle = cycleLength + pauseLength;
             
-            this.ctx.globalAlpha = Math.max(0, 1.0 - d * 0.45) * 0.9;
+            const speed = 0.05 + (cycleLength * 0.005);
+            const pingPos = ((frame * speed) % totalCycle) - 2.0; 
+            
+            this.ctx.globalAlpha = 0;
+            if (frame === -1) {
+                this.ctx.globalAlpha = 0.9;
+            } else if (pingPos < cycleLength + 2) { 
+                let d = Math.abs(pingPos - beltDist);
+                if (inDir !== null && d > totalCycle / 2) d = Math.abs(d - totalCycle);
+                this.ctx.globalAlpha = Math.max(0, 1.0 - d * 0.45) * 0.9;
+            }
+        } else {
+            // COMPLETELY HIDE ARROWS WHEN OFF
+            this.ctx.globalAlpha = 0;
         }
 
         if (isCorner) {

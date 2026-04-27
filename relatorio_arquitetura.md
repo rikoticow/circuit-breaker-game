@@ -26,6 +26,7 @@ O "Cérebro" do jogo. Gerencia:
     *   **Desativação de Controles:** Durante o deslizamento em esteiras, os controles de deslocamento manual são desabilitados para reforçar a mecânica de "fluxo forçado".
     *   **Feedback Sonoro Industrial:** Quando o robô ou um bloco está sobre uma esteira magnética, o sistema de áudio emite um som rítmico de engrenagens mecânicas e cliques metálicos (`playConveyorGear`), reforçando a percepção de maquinário industrial em operação contínua.
     *   **Símbolos:** `(` (Esq), `)` (Dir), `[` (Cima), `]` (Baixo).
+    *   **Sistema de Canais:** Suporta até 30 canais independentes (0-29). Se uma esteira tiver canal e não houver botões vinculados, ela permanece ON. Se houver botões, ela segue o estado lógico (`anyPressed`).
 
 ### B. Graphics (js/graphics.js)
 Responsável por toda a parte visual:
@@ -66,6 +67,7 @@ Responsável por toda a parte visual:
     *   **Mecânica de Esmagamento (Crunch):** Se uma porta fecha sobre o robô, causa Game Over. A animação de fechamento continua sobre os destroços devido ao Z-index superior. Se fecha sobre um bloco, o bloco é destruído (removido do jogo) e a porta entra em estado de erro (BROKEN_OPEN) permanentemente.
     *   **Estado de Enguiço (Jammed):** Portas quebradas possuem uma animação persistente de falha mecânica, onde o anteparo oscila nervosamente tentando fechar. O visual inclui **rachaduras estruturais** no metal, faíscas elétricas **douradas/amarelas** concentradas saindo pelas bordas e ruídos de metal moendo, indicando o dano severo.
     *   **Botões (_ / P):** Sensores de pressão unificados que utilizam o modelo estético de base industrial escura com detalhe central e aro neon.
+    *   **Editor de Canais:** Seletor visual estilo Godot no painel de propriedades, com grid 6x5 e sinalização de canais já utilizados no nível atual.
     *   **Sistemas de Quinas (Feedback Visual):** Todos os botões possuem um array de 4 LEDs nas quinas (cantos do tile) com animação progressiva (chasing clockwise) que cessa ao ser ativado, mantendo-os fixos. A cor do botão (base e LEDs) comunica sua função lógica:
         *   **Amarelo (TIMER):** Temporizador de 1.5s após liberação.
         *   **Verde (TOGGLE):** Alterna estado (On/Off) a cada pressão. Suporta configuração de estado inicial (Ligado/Desligado) via editor.
@@ -107,18 +109,15 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
 *   **Falha Conclusiva (Perma-Death por Tentativa):** O sistema de reversão automática foi removido. Se o robô for destruído ou desativado, o jogador transiciona diretamente para a tela de falha.
     *   **Perigos Físicos (Esmagamento/Explosão):** Causam a perda de 1 Unidade/Vida. O sistema sinaliza a perda com uma **vinheta vermelha pulsante** na tela e o selo **"FALHA"** nos monitores de transição durante o respawn.
     *   **Falha de Sistema (Fim de Energia):** Não consome vidas, mas interrompe a operação instantaneamente.
+*   **Esteiras Dinâmicas:** Podem operar de forma contínua ou ser controladas por **Canais de Comunicação**. Esteiras ligadas a botões param de mover objetos e interrompem sua animação (neon apagado) quando o sinal do canal é interrompido, permitindo a criação de quebra-cabeças de temporização e fluxo.
 
 ## 6. Ferramentas de Desenvolvimento
 ### Level Editor (editor.html)
 Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação intuitiva de níveis.
+*   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
 *   **High-Fidelity Rendering:** Utiliza a mesma classe `GameState` e `Graphics` do jogo para mostrar o fluxo de energia real durante a edição.
-*   **Ferramentas de Desenho:** Pincel, Retângulo, Linha e Seleção.
+*   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio**, o editor identifica todos os alvos interativos (Portas, Botões, Núcleos, Chão Quântico) e permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
 *   **Área de Transferência:** Suporte para copiar e colar áreas do mapa via `Ctrl+C` e `Ctrl+V`.
-*   **Edição Contextual (Propriedades):** Ao clicar com o botão do meio do mouse em um núcleo, porta ou botão, o usuário pode editar:
-    *   **Núcleos:** Amperagem necessária.
-    *   **Portas/Botões:** ID do Canal de comunicação.
-    *   **Botões:** Ciclo de comportamento via **Botão do Meio do Mouse** (Timer -> Toggle -> Permanent -> Pressure). O editor exibe as cores reais e animações de cada tipo em tempo real para validação visual. Suporta configuração de estado inicial para botões Toggle.
-*   **Modo de Teste (Playtest):** Botão "TESTAR NÍVEL" que instancia o motor real do jogo em um overlay, permitindo validar a jogabilidade, física e lógica de circuitos instantaneamente sem sair do editor. Utiliza o `GameState` real com controle por teclado (WASD/Espaço).
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.
 *   **Integração Nativa:** Salva diretamente no arquivo `js/levels.js` através de requisições POST para o servidor local.

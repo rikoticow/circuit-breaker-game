@@ -502,7 +502,8 @@ function gameLoop(timestamp) {
     // Pass 1.5: Draw Conveyors (Above floor, below trails/objects)
     for (const c of game.conveyors) {
         if (c.x >= startX && c.x <= endX && c.y >= startY && c.y <= endY) {
-            Graphics.drawConveyor(c.x, c.y, c.dir, animFrame, c.inDir, c.beltDist, c.beltLength);
+            const isActive = game.isConveyorActive(c);
+            Graphics.drawConveyor(c.x, c.y, c.dir, animFrame, c.inDir, c.beltDist, c.beltLength, isActive);
         }
     }
 
