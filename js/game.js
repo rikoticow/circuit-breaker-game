@@ -274,14 +274,20 @@ class GameState {
                         closeTimer: 0, 
                         channel: chan 
                     });
-                } else if (c === '_') {
+                } else if (c === '_' || c === 'P') {
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                    const isTog = (levelData.links && levelData.links[`${x},${y}_toggle`]) === true;
-                    this.buttons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
-                } else if (c === 'P') {
-                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                    const isTog = (levelData.links && levelData.links[`${x},${y}_toggle`]) === true;
-                    this.purpleButtons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
+                    const behavior = (levelData.links && levelData.links[`${x},${y}_behavior`]) || (c === 'P' ? 'PRESSURE' : 'TIMER');
+                    const initState = (levelData.links && levelData.links[`${x},${y}_init`]) === true;
+                    
+                    this.buttons.push({ 
+                        x, y, 
+                        isPressed: initState, 
+                        channel: chan, 
+                        behavior: behavior,
+                        timer: 0,
+                        wasSteppedOn: false,
+                        energy: initState ? 1.0 : 0
+                    });
                 } else if (c === '?') {
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
                     this.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, whiteGlow: 0, closeTimer: 0 });
@@ -350,17 +356,21 @@ class GameState {
                         if (!this.quantumFloors.some(q => q.x === x && q.y === y)) {
                             this.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, whiteGlow: 0, closeTimer: 0 });
                         }
-                    } else if (oc === '_') {
+                    } else if (oc === '_' || oc === 'P') {
                         const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                        const isTog = (levelData.links && levelData.links[`${x},${y}_toggle`]) === true;
+                        const behavior = (levelData.links && levelData.links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
+                        const initState = (levelData.links && levelData.links[`${x},${y}_init`]) === true;
+
                         if (!this.buttons.some(b => b.x === x && b.y === y)) {
-                            this.buttons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
-                        }
-                    } else if (oc === 'P') {
-                        const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                        const isTog = (levelData.links && levelData.links[`${x},${y}_toggle`]) === true;
-                        if (!this.purpleButtons.some(b => b.x === x && b.y === y)) {
-                            this.purpleButtons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
+                            this.buttons.push({ 
+                                x, y, 
+                                isPressed: initState, 
+                                channel: chan, 
+                                behavior: behavior,
+                                timer: 0,
+                                wasSteppedOn: false,
+                                energy: initState ? 1.0 : 0
+                            });
                         }
                     }
                 }
@@ -746,49 +756,62 @@ class GameState {
             const isSteppedOn = isPlayerOn || isBlockOn;
             
             const wasPressed = btn.isPressed;
-            if (btn.isToggle) {
-                if (isSteppedOn && !wasPressed) {
-                    btn.isPressed = true;
-                    if (window.AudioSys) AudioSys.buttonClick();
-                }
-            } else {
-                btn.isPressed = isSteppedOn;
-                if (isSteppedOn && !wasPressed) {
-                    if (window.AudioSys) AudioSys.buttonClick();
-                }
-            }
-        }
-
-        // Update Purple Button States
-        for (let btn of this.purpleButtons) {
-            const isPlayerOn = this.player.x === btn.x && this.player.y === btn.y;
-            const isBlockOn = this.blocks.some(b => b.x === btn.x && b.y === btn.y);
-            const isSteppedOn = isPlayerOn || isBlockOn;
             
-            if (btn.isToggle) {
-                if (isSteppedOn && !btn.wasSteppedOn) {
-                    btn.isPressed = !btn.isPressed;
-                    if (window.AudioSys) AudioSys.buttonClick(); // New Click Sound
-                }
-                btn.wasSteppedOn = isSteppedOn;
-            } else {
-                const wasPressed = btn.isPressed;
-                btn.isPressed = isSteppedOn;
-                if (isSteppedOn && !wasPressed) {
-                    if (window.AudioSys) AudioSys.buttonClick();
-                }
+            switch (btn.behavior) {
+                case 'TIMER':
+                    if (isSteppedOn) btn.timer = 45; // 1.5s duration
+                    if (btn.timer > 0) btn.timer--;
+                    btn.isPressed = (isSteppedOn || btn.timer > 0);
+                    break;
+                
+                case 'TOGGLE':
+                    if (isSteppedOn && !btn.wasSteppedOn) {
+                        btn.isPressed = !btn.isPressed;
+                        if (window.AudioSys) AudioSys.buttonClick();
+                    }
+                    break;
+                
+                case 'PERMANENT':
+                    if (isSteppedOn) btn.isPressed = true;
+                    break;
+                
+                case 'PRESSURE':
+                    // Charge logic: 3 seconds to fill, 3 seconds to empty
+                    const chargeSpeed = 1 / (3 * 60); 
+                    if (isSteppedOn) {
+                        btn.charge = Math.min(1.0, (btn.charge || 0) + chargeSpeed);
+                    } else {
+                        btn.charge = Math.max(0, (btn.charge || 0) - chargeSpeed);
+                    }
+                    
+                    // Logic: Must reach 1.0 to turn ON. Stays ON until reaches 0.
+                    if (btn.charge >= 1.0) btn.isActive = true;
+                    if (btn.charge <= 0) btn.isActive = false;
+                    
+                    // Sound trigger on activation
+                    if (btn.isActive && !wasPressed) {
+                        if (window.AudioSys) AudioSys.buttonClick();
+                    }
+
+                    btn.isPressed = btn.isActive;
+                    break;
             }
+
+            if (isSteppedOn && !btn.wasSteppedOn) {
+                if (window.AudioSys && btn.behavior !== 'TOGGLE' && btn.behavior !== 'PRESSURE') AudioSys.buttonClick();
+            }
+            btn.wasSteppedOn = isSteppedOn;
         }
 
         // Update Quantum Floor States
         const toggledChannels = new Set();
         for (let qf of this.quantumFloors) {
-            const chanButtons = this.purpleButtons.filter(b => b.channel === qf.channel);
+            const chanButtons = this.buttons.filter(b => b.channel === qf.channel);
             const anyPressed = chanButtons.some(b => b.isPressed);
             
-            // 1.5s Delay logic (45 frames)
+            // Signal is now handled by the button's internal timer
             if (anyPressed) {
-                qf.closeTimer = 45;
+                qf.closeTimer = 5; // Minimal smoothing delay
             }
             
             const shouldBeOpen = anyPressed || (qf.closeTimer > 0);
@@ -843,9 +866,9 @@ class GameState {
             const isPowered = this.poweredDoors.has(`${door.x},${door.y}`);
             // Link door to button: ALL buttons on the same channel must be pressed
             const chanButtons = this.buttons.filter(b => b.channel === door.channel);
-            const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
+            const anyPressed = chanButtons.some(b => b.isPressed);
             
-            const shouldBeOpen = (isPowered || allPressed);
+            const shouldBeOpen = (isPowered || anyPressed);
             const wasOpen = door.state === 'OPEN' || door.state === 'BROKEN_OPEN';
 
             if (door.state === 'BROKEN_OPEN') continue; // Stay open forever
@@ -855,7 +878,7 @@ class GameState {
                     if (window.AudioSys) AudioSys.playDoorOpen();
                 }
                 door.state = 'OPEN';
-                door.closeTimer = 45; // ~1.5 seconds based on user perception
+                door.closeTimer = 5; // Minimal smoothing delay
                 door.error = false;
             } else {
                 if (door.state === 'OPEN') {

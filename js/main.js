@@ -490,10 +490,7 @@ function gameLoop(timestamp) {
 
     // Pass 1.07: Draw Buttons (On floor/quantum fields)
     for (const btn of game.buttons) {
-        Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.isToggle);
-    }
-    for (const btn of game.purpleButtons) {
-        Graphics.drawPurpleButton(btn.x, btn.y, btn.isPressed, btn.isToggle);
+        Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
     }
 
     // Pass 1.1: Draw Charging Stations (Spawn + Extras)
@@ -507,6 +504,11 @@ function gameLoop(timestamp) {
         if (c.x >= startX && c.x <= endX && c.y >= startY && c.y <= endY) {
             Graphics.drawConveyor(c.x, c.y, c.dir, animFrame, c.inDir, c.beltDist, c.beltLength);
         }
+    }
+
+    // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
+    for (const d of game.doors) {
+        Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
     }
 
     // Pass 2: Draw Objects, Walls, and Ceiling
@@ -573,10 +575,6 @@ function gameLoop(timestamp) {
     // Pass 2.08: Draw Particles (Now behind doors)
     Graphics.drawParticles();
     
-    // Pass 2.1: Draw Doors (Drawn after player so crushed pieces stay below)
-    for (const d of game.doors) {
-        Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
-    }
 
     // FINAL PASS: Core Requirements (Always on top of robot/smoke)
     for (const t of game.targets) {

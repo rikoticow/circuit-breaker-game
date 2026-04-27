@@ -22,8 +22,8 @@ window.game = {
 
 const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
-    { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão'}] },
-    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'P', n: 'Botão Roxo'}] },
+    { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}] },
+    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
 
     { title: "Fios", tiles: [{c: 'H', n: 'Horiz'}, {c: 'V', n: 'Vert'}, {c: '+', n: 'Cruz'}] },
@@ -582,14 +582,11 @@ function rebuildMock() {
             } else if (oc === '?') {
                 const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
                 mockGame.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, entrySide: null, whiteGlow: 0 });
-            } else if (oc === '_') {
+            } else if (oc === '_' || oc === 'P') {
                 const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
-                const isTog = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_toggle`]) === true;
-                mockGame.buttons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
-            } else if (oc === 'P') {
-                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
-                const isTog = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_toggle`]) === true;
-                mockGame.purpleButtons.push({ x, y, isPressed: false, channel: chan, isToggle: isTog });
+                const behavior = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
+                const initState = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === true;
+                mockGame.buttons.push({ x, y, isPressed: initState, channel: chan, behavior: behavior });
             }
 
             // Also load from blocks map
@@ -742,17 +739,15 @@ function setupEvents() {
         updateLevelList();
     };
 
-    document.getElementById('prop-amps').onchange = (e) => {
+    document.getElementById('prop-amps').oninput = (e) => {
         if (!editTarget) return;
-        const val = parseInt(e.target.value);
-        if (val >= 1 && val <= 9) {
-            currentMap[editTarget.y][editTarget.x] = val === 1 ? 'T' : val.toString();
-            saveHistory();
-            rebuildMock();
-        }
+        const val = parseInt(e.target.value) || 1;
+        currentMap[editTarget.y][editTarget.x] = val.toString();
+        saveHistory();
+        rebuildMock();
     };
 
-    document.getElementById('prop-channel').onchange = (e) => {
+    document.getElementById('prop-channel').oninput = (e) => {
         if (!editTarget) return;
         const chan = parseInt(e.target.value) || 0;
         const lvl = levelsData[currentLevelIdx];
@@ -764,10 +759,24 @@ function setupEvents() {
 
     document.getElementById('prop-toggle').onchange = (e) => {
         if (!editTarget) return;
-        const isTog = e.target.checked;
+        const val = e.target.checked;
         const lvl = levelsData[currentLevelIdx];
         if (!lvl.links) lvl.links = {};
-        lvl.links[`${editTarget.x},${editTarget.y}_toggle`] = isTog;
+        lvl.links[`${editTarget.x},${editTarget.y}_init`] = val;
+        saveHistory();
+        rebuildMock();
+    };
+
+    document.getElementById('prop-behavior').onchange = (e) => {
+        if (!editTarget) return;
+        const behavior = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        lvl.links[`${editTarget.x},${editTarget.y}_behavior`] = behavior;
+        
+        // Refresh panel visibility
+        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+        
         saveHistory();
         rebuildMock();
     };
@@ -893,19 +902,41 @@ function setupEvents() {
         // MIDDLE CLICK (Button 1) -> ROTATION (or properties fallback)
         if (e.button === 1) {
             e.preventDefault();
-            let target = currentMap;
-            if (activeLayer === 'overlays') target = currentOverlayMap;
-            if (activeLayer === 'blocks') target = currentBlocksMap;
-            const current = target[p.y][p.x];
-            const next = getNextRotation(current);
             
-            if (next !== current) {
-                // Rotatable tile
-                target[p.y][p.x] = next;
+            // First: Try rotation in the ACTIVE layer
+            let activeTarget = currentMap;
+            if (activeLayer === 'overlays') activeTarget = currentOverlayMap;
+            if (activeLayer === 'blocks') activeTarget = currentBlocksMap;
+            
+            const currentActive = activeTarget[p.y][p.x];
+            const next = getNextRotation(currentActive);
+            
+            if (next !== currentActive) {
+                activeTarget[p.y][p.x] = next;
                 saveHistory();
                 rebuildMock();
-            } else if ((current === 'T' || (current >= '1' && current <= '9') || current === 'D' || current === '_' || current === 'P' || current === '?')) {
-                // Show Properties Panel
+                return;
+            }
+
+            // Second: If no rotation, scan ALL layers for interactive objects (Top to Bottom)
+            const checkLayers = [
+                currentBlocksMap,
+                currentOverlayMap,
+                currentMap
+            ];
+
+            let foundChar = null;
+            for (let map of checkLayers) {
+                const char = map[p.y][p.x];
+                if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?') {
+                    foundChar = char;
+                    break;
+                }
+            }
+
+            if (foundChar) {
+                const current = foundChar;
+                // Show Properties Panel for any interactive object (Middle Click)
                 editTarget = p;
                 const panel = document.getElementById('floating-props');
                 const rect = canvas.getBoundingClientRect();
@@ -919,27 +950,38 @@ function setupEvents() {
                     document.getElementById('prop-amps').value = current === 'T' ? 1 : parseInt(current);
                     document.getElementById('prop-amps').parentElement.style.display = 'flex';
                     document.getElementById('prop-channel-container').style.display = 'none';
+                    document.getElementById('prop-behavior-container').style.display = 'none';
                     document.getElementById('prop-toggle-container').style.display = 'none';
                     document.getElementById('prop-amps').focus();
                 } else {
                     // Interactive Object Linking (Door, Button, etc)
                     const lvl = levelsData[currentLevelIdx];
                     const chan = (lvl.links && lvl.links[`${p.x},${p.y}`]) || 0;
-                    const isTog = (lvl.links && lvl.links[`${p.x},${p.y}_toggle`]) === true;
+                    const behavior = (lvl.links && lvl.links[`${p.x},${p.y}_behavior`]) || (current === 'P' ? 'PRESSURE' : 'TIMER');
+                    const initState = (lvl.links && lvl.links[`${p.x},${p.y}_init`]) === true;
                     
                     let typeLabel = 'Objeto';
-                    if (current === 'D') typeLabel = 'Tipo: Porta';
-                    else if (current === '_') typeLabel = 'Tipo: Botão';
-                    else if (current === 'P') typeLabel = 'Tipo: Botão Roxo';
-                    else if (current === '?') typeLabel = 'Tipo: Chão Quântico';
+                    if (current === 'D') {
+                        typeLabel = 'Porta';
+                        document.getElementById('prop-behavior-container').style.display = 'none';
+                        document.getElementById('prop-toggle-container').style.display = 'none';
+                    } else if (current === '_' || current === 'P') {
+                        typeLabel = `Botão Industrial`;
+                        document.getElementById('prop-behavior-container').style.display = 'flex';
+                        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+                    } else if (current === '?') {
+                        typeLabel = 'Chão Quântico';
+                        document.getElementById('prop-behavior-container').style.display = 'none';
+                        document.getElementById('prop-toggle-container').style.display = 'none';
+                    }
 
-                    document.getElementById('prop-type').innerText = typeLabel;
+                    document.getElementById('prop-type').innerText = `Tipo: ${typeLabel}`;
                     document.getElementById('prop-amps').parentElement.style.display = 'none';
                     document.getElementById('prop-channel-container').style.display = 'flex';
-                    document.getElementById('prop-toggle-container').style.display = (current === '_' || current === 'P') ? 'flex' : 'none';
 
                     document.getElementById('prop-channel').value = chan;
-                    document.getElementById('prop-toggle').checked = isTog;
+                    document.getElementById('prop-behavior').value = behavior;
+                    document.getElementById('prop-toggle').checked = initState;
                     document.getElementById('prop-channel').focus();
                 }
             }
@@ -1104,21 +1146,13 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const door = mockGame.doors ? mockGame.doors.find(d => d.x === x && d.y === y) : null;
         if (door) Graphics.drawDoor(x, y, door.state, door.error, animFrame, door.orientation, door.pair ? door.pair.side : null);
         else Graphics.drawDoor(x, y, 'CLOSED', false, 0);
-    } else if (c === '_') {
+    } else if (c === '_' || c === 'P') {
         const btn = mockGame.buttons ? mockGame.buttons.find(b => b.x === x && b.y === y) : null;
-        if (btn) Graphics.drawButton(x, y, btn.isPressed, btn.isToggle);
-        else Graphics.drawButton(x, y, false, false);
+        if (btn) Graphics.drawButton(x, y, btn.isPressed, btn.behavior, btn.charge || 0);
+        else Graphics.drawButton(x, y, false, (c === 'P' ? 'PRESSURE' : 'TIMER'), 0);
     } else if (c === '?') {
         const qf = mockGame.quantumFloors ? mockGame.quantumFloors.find(q => q.x === x && q.y === y) : null;
         Graphics.drawQuantumFloor(x, y, qf ? qf.active : true, animFrame, qf ? qf.flashTimer : 0, qf ? qf.pulseIntensity : 1.0, qf ? qf.entrySide : null, qf ? qf.whiteGlow : 0);
-    } else if (c === 'P') {
-
-
-
-
-        const btn = mockGame.purpleButtons ? mockGame.purpleButtons.find(b => b.x === x && b.y === y) : null;
-        if (btn) Graphics.drawPurpleButton(x, y, btn.isPressed, btn.isToggle);
-        else Graphics.drawPurpleButton(x, y, false, false);
     }
 
     ctx.restore();
@@ -1138,17 +1172,31 @@ function renderLoop() {
     // 2. Draw ALL layers
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-            // Draw base char
-            drawChar(x, y, currentMap[y][x]);
-            // Draw overlay on top
+            const baseC = currentMap[y][x];
+            
+            // A. Draw base char ONLY if it's NOT a wall/ceiling
+            if (baseC !== '#' && baseC !== 'W') {
+                drawChar(x, y, baseC);
+            } else {
+                // For walls/ceilings, draw a floor underneath first
+                Graphics.drawFloor(x, y);
+            }
+
+            // B. Draw overlay on top (Doors, Buttons, etc.)
             const oc = currentOverlayMap[y][x];
             if (oc !== ' ') {
                 drawChar(x, y, oc, 1.0, true);
             }
-            // Draw block on top
+
+            // C. Draw block on top
             const bc = currentBlocksMap[y][x];
             if (bc !== ' ') {
                 drawChar(x, y, bc, 1.0, true);
+            }
+
+            // D. Draw structural walls/ceiling LAST (on top of doors)
+            if (baseC === '#' || baseC === 'W') {
+                drawChar(x, y, baseC);
             }
         }
     }
@@ -1313,14 +1361,18 @@ function testLoop(timestamp) {
 
     Graphics.drawTrails();
     for (const qf of testGame.quantumFloors) Graphics.drawQuantumFloor(qf.x, qf.y, qf.active, testAnimFrame, qf.flashTimer, qf.pulseIntensity, qf.entrySide, qf.whiteGlow);
-    for (const btn of testGame.buttons) Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.isToggle);
-    for (const btn of testGame.purpleButtons) Graphics.drawPurpleButton(btn.x, btn.y, btn.isPressed, btn.isToggle);
+    for (const btn of testGame.buttons) Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
 
     for (const s of testGame.chargingStations) {
         const powered = testGame.poweredStations.has(`${s.x},${s.y}`);
         Graphics.drawChargingStation(s.x, s.y, powered, testAnimFrame);
     }
     for (const c of testGame.conveyors) Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength);
+
+    // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
+    for (const d of testGame.doors) {
+        Graphics.drawDoor(d.x, d.y, d.state, d.error, testAnimFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
+    }
 
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
@@ -1353,7 +1405,6 @@ function testLoop(timestamp) {
 
     for (const p of testGame.debris) Graphics.drawDebris(p);
     Graphics.drawParticles();
-    for (const d of testGame.doors) Graphics.drawDoor(d.x, d.y, d.state, d.error, testAnimFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
     
     for (const t of testGame.targets) {
         const d = testGame.poweredTargets.get(`${t.x},${t.y}`) || { charge: 0 };

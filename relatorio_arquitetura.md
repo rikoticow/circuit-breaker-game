@@ -65,12 +65,13 @@ Responsável por toda a parte visual:
     *   **Animação de Deslizamento:** Utilizam interpolação visual (`visualOpen`) para um movimento suave de abertura e fechamento, em vez de estados binários.
     *   **Mecânica de Esmagamento (Crunch):** Se uma porta fecha sobre o robô, causa Game Over. A animação de fechamento continua sobre os destroços devido ao Z-index superior. Se fecha sobre um bloco, o bloco é destruído (removido do jogo) e a porta entra em estado de erro (BROKEN_OPEN) permanentemente.
     *   **Estado de Enguiço (Jammed):** Portas quebradas possuem uma animação persistente de falha mecânica, onde o anteparo oscila nervosamente tentando fechar. O visual inclui **rachaduras estruturais** no metal, faíscas elétricas **douradas/amarelas** concentradas saindo pelas bordas e ruídos de metal moendo, indicando o dano severo.
-    *   **Botões (_):** Sensores de pressão no chão que ativam portas quando o robô ou um bloco está sobre eles.
-*   **Filtro de Matéria (Barreira de Indução):**
-    *   **Chão Quântico (`?`):** Piso especial de indução. Possui dois estados visuais claros:
-        *   **Ativo (Barreira):** Cor roxa vibrante com grade digital pulsante e bits de energia em movimento. Bloqueia caixas (matéria bruta) mas permite a passagem do Robô.
-        *   **Desativado (Energizado):** Cor **branca** com pulso leve e marcadores angulares. Indica que o sistema foi energizado/aberto, permitindo a livre circulação de caixas.
-    *   **Botão Roxo (`P`):** Sensores de pressão dedicados que controlam o estado das barreiras de indução no mesmo canal (`channel`). Quando pressionados, desativam a barreira (mudando-a de roxo para branco).
+    *   **Botões (_ / P):** Sensores de pressão unificados que utilizam o modelo estético de base industrial escura com detalhe central e aro neon.
+    *   **Sistemas de Quinas (Feedback Visual):** Todos os botões possuem um array de 4 LEDs nas quinas (cantos do tile) com animação progressiva (chasing clockwise) que cessa ao ser ativado, mantendo-os fixos. A cor do botão (base e LEDs) comunica sua função lógica:
+        *   **Amarelo (TIMER):** Temporizador de 1.5s após liberação.
+        *   **Verde (TOGGLE):** Alterna estado (On/Off) a cada pressão. Suporta configuração de estado inicial (Ligado/Desligado) via editor.
+        *   **Vermelho (PERMANENT):** Ativa uma única vez e trava permanentemente na posição ON.
+        *   **Roxo (PRESSURE/CAPACITOR):** Ativo após **3 segundos** de pressão contínua. Possui um capacitor interno que mantém o sinal por mais **3 segundos** após a liberação. O feedback visual é feito por uma **linha de perímetro** que preenche o contorno do botão progressivamente (sentido horário) durante a carga e esvazia durante a descarga, substituindo as luzes de quina.
+    *   **Compatibilidade Universal:** Todos os 4 tipos de botões são intercambiáveis e podem controlar tanto Portas quanto Chão Quântico, dependendo do canal (`channel`) configurado.
 
 
 ### C. Main Loop (js/main.js)
@@ -116,7 +117,7 @@ Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação in
 *   **Edição Contextual (Propriedades):** Ao clicar com o botão do meio do mouse em um núcleo, porta ou botão, o usuário pode editar:
     *   **Núcleos:** Amperagem necessária.
     *   **Portas/Botões:** ID do Canal de comunicação.
-    *   **Botões:** Modo "Trava" (Latching/Toggle).
+    *   **Botões:** Ciclo de comportamento via **Botão do Meio do Mouse** (Timer -> Toggle -> Permanent -> Pressure). O editor exibe as cores reais e animações de cada tipo em tempo real para validação visual. Suporta configuração de estado inicial para botões Toggle.
 *   **Modo de Teste (Playtest):** Botão "TESTAR NÍVEL" que instancia o motor real do jogo em um overlay, permitindo validar a jogabilidade, física e lógica de circuitos instantaneamente sem sair do editor. Utiliza o `GameState` real com controle por teclado (WASD/Espaço).
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.

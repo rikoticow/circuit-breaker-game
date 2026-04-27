@@ -1004,46 +1004,164 @@ const Graphics = {
         this.ctx.restore();
     },
 
-    drawButton(x, y, isPressed, isToggle = false) {
+    drawButton(x, y, isPressed, behavior = 'TIMER', charge = 0) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
 
-        // Base plate (Flush with floor)
-        this.ctx.fillStyle = '#1a202c';
-        this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+        // --- 0. COLOR PALETTE PER BEHAVIOR ---
+        let baseColor = '#1a1a0a'; // Dark base
+        let accentColor = '#ffcc00'; // Yellow (Default)
+        let ledR = 255, ledG = 136, ledB = 0; // Orange-ish LEDs
+        let idleColor = '#443300';
+
+        if (behavior === 'TOGGLE') {
+            baseColor = '#051a0a';
+            accentColor = '#10b981'; // Green
+            ledR = 0; ledG = 255; ledB = 100;
+            idleColor = '#003311';
+        } else if (behavior === 'PERMANENT') {
+            baseColor = '#1a0505';
+            accentColor = '#ef4444'; // Red
+            ledR = 255; ledG = 50; ledB = 0;
+            idleColor = '#330000';
+        } else if (behavior === 'PRESSURE') {
+            baseColor = '#10051a';
+            accentColor = '#a855f7'; // Purple
+            ledR = 180; ledG = 0; ledB = 255;
+            idleColor = '#220033';
+        }
+
+        // --- 1. PROGRESSIVE LEDs (Chasing Effect) ---
+        // Sequential clockwise animation (TL -> TR -> BR -> BL)
+        const time = Date.now() * 0.004; // Slower speed
+        const ledS = 2; 
+        const pad = 1;
         
-        // Button circular part
+        const ledPositions = [
+            { x: pad, y: pad },           // 0: TL
+            { x: ts - pad - ledS, y: pad },// 1: TR
+            { x: ts - pad - ledS, y: ts - pad - ledS }, // 2: BR
+            { x: pad, y: ts - pad - ledS } // 3: BL
+        ];
+        
+        // --- 1. BASE PLATE (Quantum Model Style) ---
+        this.ctx.fillStyle = baseColor;
+        this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+
+        // --- 2. PROGRESSIVE FEEDBACK (LEDs or Border) ---
+        this.ctx.save();
+        
+        if (behavior === 'PRESSURE') {
+            // Draw a perimeter line that fills up
+            const bPad = 2;
+            const bSize = ts - bPad * 2;
+            this.ctx.strokeStyle = `rgba(${ledR}, ${ledG}, ${ledB}, 0.3)`;
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(px + bPad, py + bPad, bSize, bSize);
+
+            if (charge > 0) {
+                this.ctx.strokeStyle = `rgb(${ledR}, ${ledG}, ${ledB})`;
+                this.ctx.shadowColor = `rgb(${ledR}, ${ledG}, ${ledB})`;
+                this.ctx.shadowBlur = 8;
+                this.ctx.lineWidth = 2.5; // Thicker for better feedback
+                this.ctx.lineCap = 'square';
+                
+                // Clockwise path around the square
+                const p = charge; // 0 to 1
+                this.ctx.beginPath();
+                this.ctx.moveTo(px + bPad + bSize/2, py + bPad); // Start Top Center
+                
+                // Top Right
+                if (p > 0) {
+                    const segment = Math.min(p, 0.125) / 0.125;
+                    this.ctx.lineTo(px + bPad + bSize/2 + (bSize/2) * segment, py + bPad);
+                }
+                // Right Side
+                if (p > 0.125) {
+                    const segment = Math.min(p, 0.375) - 0.125;
+                    const factor = segment / 0.25;
+                    this.ctx.lineTo(px + bPad + bSize, py + bPad + bSize * factor);
+                }
+                // Bottom
+                if (p > 0.375) {
+                    const segment = Math.min(p, 0.625) - 0.375;
+                    const factor = segment / 0.25;
+                    this.ctx.lineTo(px + bPad + bSize - bSize * factor, py + bPad + bSize);
+                }
+                // Left
+                if (p > 0.625) {
+                    const segment = Math.min(p, 0.875) - 0.625;
+                    const factor = segment / 0.25;
+                    this.ctx.lineTo(px + bPad, py + bPad + bSize - bSize * factor);
+                }
+                // Back to Top Center
+                if (p > 0.875) {
+                    const segment = Math.min(p, 1.0) - 0.875;
+                    const factor = segment / 0.125;
+                    this.ctx.lineTo(px + bPad + bSize * 0.5 * factor, py + bPad);
+                }
+                this.ctx.stroke();
+            }
+        } else {
+            // Draw corner LEDs for other types
+            ledPositions.forEach((pos, i) => {
+                let ledPulse;
+                if (isPressed) {
+                    ledPulse = 1.0; // Stay ON when pressed
+                } else {
+                    // Phase shift based on index (i * 1.57 creates a clockwise flow for 4 points)
+                    ledPulse = Math.pow(0.5 + Math.sin(time - i * 1.57) * 0.5, 3);
+                }
+
+                const alpha = ledPulse * 0.9;
+                const color = `rgba(${ledR}, ${ledG}, ${ledB}, ${alpha})`;
+                
+                this.ctx.fillStyle = color;
+                this.ctx.shadowColor = color;
+                this.ctx.shadowBlur = ledPulse * 5;
+                this.ctx.fillRect(px + pos.x, py + pos.y, ledS, ledS);
+            });
+        }
+        this.ctx.restore();
+        
         const cx = px + ts/2;
         const cy = py + ts/2;
         const radius = isPressed ? 7 : 9;
         
-        const activeColor = isToggle ? '#ff003c' : '#ffcc00';
-        const idleColor = isToggle ? '#440011' : '#443300';
-
-        this.ctx.fillStyle = isPressed ? activeColor : idleColor;
+        this.ctx.fillStyle = isPressed ? accentColor : idleColor;
         this.ctx.beginPath();
         this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         this.ctx.fill();
         
-        // Glowing ring when pressed
         if (isPressed) {
             this.ctx.save();
-            this.ctx.strokeStyle = activeColor;
+            this.ctx.strokeStyle = accentColor;
             this.ctx.lineWidth = 2;
-            this.ctx.shadowColor = activeColor;
+            this.ctx.shadowColor = accentColor;
             this.ctx.shadowBlur = 10;
             this.ctx.beginPath();
             this.ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
             this.ctx.stroke();
             this.ctx.restore();
         } else {
-            this.ctx.strokeStyle = '#000';
-            this.ctx.lineWidth = 1;
+            this.ctx.strokeStyle = isPressed ? accentColor : '#2d2d2d';
+            this.ctx.lineWidth = 2;
             this.ctx.beginPath();
             this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
             this.ctx.stroke();
         }
+
+        // --- 3. INNER DETAIL (Quantum Model Aesthetic) ---
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        this.ctx.beginPath();
+        this.ctx.arc(cx - 2, cy - 2, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+    },
+
+    drawPurpleButton(x, y, isPressed, isToggle = false) {
+        // Compatibility wrapper for the new unified drawButton
+        this.drawButton(x, y, isPressed, isToggle ? 'TOGGLE' : 'PRESSURE');
     },
 
     drawQuantumFloor(x, y, isActive, frame, flashTimer = 0, intensity = 1.0, entrySide = null, whiteGlow = 0) {
@@ -1147,51 +1265,6 @@ const Graphics = {
         this.ctx.restore();
     },
 
-    drawPurpleButton(x, y, isPressed) {
-        const px = x * this.tileSize;
-        const py = y * this.tileSize;
-        const ts = this.tileSize;
-
-        // Base plate
-        this.ctx.fillStyle = '#1a0a1f'; // Dark purple-tinted base
-        this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
-        
-        const cx = px + ts/2;
-        const cy = py + ts/2;
-        const radius = isPressed ? 7 : 9;
-        
-        const activeColor = '#bf00ff'; // Neon Purple
-        const idleColor = '#4b0082'; // Indigo
-
-        this.ctx.fillStyle = isPressed ? activeColor : idleColor;
-        this.ctx.beginPath();
-        this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        if (isPressed) {
-            this.ctx.save();
-            this.ctx.strokeStyle = activeColor;
-            this.ctx.lineWidth = 2;
-            this.ctx.shadowColor = activeColor;
-            this.ctx.shadowBlur = 10;
-            this.ctx.beginPath();
-            this.ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
-            this.ctx.stroke();
-            this.ctx.restore();
-        } else {
-            this.ctx.strokeStyle = '#2d004d';
-            this.ctx.lineWidth = 2;
-            this.ctx.beginPath();
-            this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            this.ctx.stroke();
-        }
-
-        // Inner detail
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        this.ctx.beginPath();
-        this.ctx.arc(cx - 2, cy - 2, 2, 0, Math.PI * 2);
-        this.ctx.fill();
-    },
 
     drawHUD(game) {
         // Draw Result Vignette (Red for death/gameOver, Green for win)

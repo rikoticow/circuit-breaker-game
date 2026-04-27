@@ -215,10 +215,18 @@
                     <span style="font-size: 14px; color: #fff; width: 40px;">Canal:</span>
                     <input type="number" id="prop-channel" min="0" max="9" value="0" style="width: 50px; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 18px; padding: 2px 5px; text-align: center;">
                 </div>
+                <div id="prop-behavior-container" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 14px; color: #fff; width: 40px;">Tipo:</span>
+                    <select id="prop-behavior" style="flex: 1; background: #000; border: 1px solid #00ff9f; color: #00ff9f; font-family: 'VT323', monospace; font-size: 14px; padding: 2px;">
+                        <option value="TIMER">🟡 TIMER (AMARELO)</option>
+                        <option value="TOGGLE">🟢 TOGGLE (VERDE)</option>
+                        <option value="PERMANENT">🔴 FIXO (VERMELHO)</option>
+                        <option value="PRESSURE">🟣 PRESSÃO (ROXO)</option>
+                    </select>
+                </div>
                 <div id="prop-toggle-container" style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 14px; color: #fff; width: 40px;">Trava:</span>
-                    <input type="checkbox" id="prop-toggle" style="width: 20px; height: 20px; accent-color: #00ff9f;">
-                    <span style="font-size: 12px; color: #666;">(Ativa p/ sempre)</span>
+                    <span style="font-size: 14px; color: #fff; width: 60px;">Inicial On:</span>
+                    <input type="checkbox" id="prop-toggle" style="width: 18px; height: 18px; accent-color: #00ff9f;">
                 </div>
                 <div style="margin-top: 10px; font-size: 11px; color: #666; text-align: right;">ESC p/ fechar</div>
             </div>
