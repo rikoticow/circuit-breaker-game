@@ -1420,7 +1420,7 @@ class GameState {
                         obj.x = lx;
                         obj.y = ly;
                         // Spawn some sparks at each step of the launch
-                        for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#00f0ff', 'spark');
+                        for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#bf00ff', 'spark');
                     } else {
                         break; // Hit a wall or immovable object
                     }
@@ -1527,9 +1527,9 @@ class GameState {
                         // Standard block - destroyed
                         const b = this.blocks.splice(blockIndex, 1)[0];
                         if (window.AudioSys) AudioSys.playCubeCrush();
-                        this.spawnDebris(b.x * 32 + 16, b.y * 32 + 16, 12, '#00f0ff', { x: dx, y: dy });
+                        this.spawnDebris(b.x * 32 + 16, b.y * 32 + 16, 12, '#bf00ff', { x: dx, y: dy });
                         for (let i = 0; i < 15; i++) {
-                            Graphics.spawnParticle(b.x * 32 + 16, b.y * 32 + 16, '#00f0ff', 'spark');
+                            Graphics.spawnParticle(b.x * 32 + 16, b.y * 32 + 16, '#bf00ff', 'spark');
                         }
                         this.updateEnergy();
                         e.laserPath.push({ x: cx, y: cy, type: 'BLOCK' });

@@ -5,10 +5,29 @@
 const Dialogue = {
     activeTippy: null,
     isTyping: false,
+    isDone: false,
+    skipRequested: false,
     queue: [],
     
     // Default typing speed (ms per char)
     defaultSpeed: 30, 
+    
+    handleInput(e) {
+        if (!Dialogue.activeTippy) return;
+        
+        if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            
+            // If still typing (not done), trigger Turbo Mode
+            if (!Dialogue.isDone) {
+                Dialogue.skipRequested = true;
+            } 
+            // If text is fully written, proceed to hide/next
+            else {
+                Dialogue.hide();
+            }
+        }
+    },
     
     /**
      * Show a dialogue box
@@ -38,6 +57,8 @@ const Dialogue = {
         const fullTheme = `${theme} ${voiceTheme}`;
 
         this.isTyping = true;
+        this.isDone = false;
+        this.skipRequested = false;
         this.currentConfig = config;
         
         // Block player if needed
@@ -97,6 +118,9 @@ const Dialogue = {
         });
 
         this.activeTippy.show();
+
+        // Register global input listener
+        document.addEventListener('keydown', this.handleInput);
     },
 
     /**
@@ -106,8 +130,11 @@ const Dialogue = {
         if (this.activeTippy) {
             this.activeTippy.hide();
             this.isTyping = false;
+            this.isDone = false;
+            this.skipRequested = false;
             
-            // Release player
+            // Remove listener
+            document.removeEventListener('keydown', this.handleInput);
             if (window.game && this.currentConfig && this.currentConfig.lockPlayer) {
                 window.game.inputLocked = false;
             }
@@ -143,8 +170,12 @@ const Dialogue = {
         let speed = config.speed || this.defaultSpeed;
         let isAI = config.isAI;
         this.onCompleteCallback = onComplete;
+        this.isDone = false;
+        this.skipRequested = false;
         
         while (i < fullText.length) {
+            // "Turbo Mode" - if skip is requested, speed up significantly instead of instant jump
+            let effectiveSpeed = this.skipRequested ? Math.min(speed, 5) : speed;
             let char = fullText[i];
             
             // Tag Handling
@@ -155,7 +186,9 @@ const Dialogue = {
                     const [tag, val] = tagContent.split(':');
                     
                     if (tag === 'pause') {
-                        await new Promise(r => setTimeout(r, parseInt(val)));
+                        if (!this.skipRequested) {
+                            await new Promise(r => setTimeout(r, parseInt(val)));
+                        }
                     } else if (tag === 'speed') {
                         speed = parseInt(val);
                     } else if (tag === 'color') {
@@ -191,26 +224,30 @@ const Dialogue = {
             }
 
             i++;
-            await new Promise(r => setTimeout(r, speed));
+            if (effectiveSpeed > 0) {
+                await new Promise(r => setTimeout(r, effectiveSpeed));
+            }
         }
 
+        this.isDone = true;
+        this.isTyping = true; // Still "active" but done typing
         element.innerHTML = currentText; // Remove cursor when done
 
-        // Finish
-        if (config.autoDismiss) {
-            setTimeout(() => this.hide(), config.dismissDelay || 1500);
-        } else {
-            // Wait for manual input
-            indicator.innerHTML = "[PRESS ENTER]";
+        // Update indicator
+        if (!config.autoDismiss) {
+            indicator.innerHTML = "[SPACE TO CONTINUE]";
             indicator.classList.add('visible');
+        } else {
+            // Even if autoDismiss is on, we allow manual skip
+            indicator.innerHTML = "[SPACE TO SKIP]";
+            indicator.classList.add('visible');
+            indicator.style.opacity = "0.5";
             
-            const waitInput = (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    document.removeEventListener('keydown', waitInput);
+            setTimeout(() => {
+                if (this.isDone && this.activeTippy && config.autoDismiss) {
                     this.hide();
                 }
-            };
-            document.addEventListener('keydown', waitInput);
+            }, config.dismissDelay || 1500);
         }
     }
 };
