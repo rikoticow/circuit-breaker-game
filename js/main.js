@@ -526,6 +526,11 @@ function gameLoop(timestamp) {
         Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
     }
 
+    // Pass 1.85: Draw Lasers (Above doors/conveyors, below walls)
+    for (const e of game.emitters) {
+        Graphics.drawLaser(e, animFrame);
+    }
+
     // Pass 2: Draw Objects, Walls, and Ceiling
     for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
@@ -541,6 +546,16 @@ function gameLoop(timestamp) {
                 }
             }
         }
+    }
+
+    // Pass 2.02: Draw Emitters (Structures)
+    for (const e of game.emitters) {
+        Graphics.drawEmitter(e.x, e.y, e.dir, animFrame);
+    }
+
+    // Pass 2.03: Draw Quantum Catalysts
+    for (const cat of game.catalysts) {
+        Graphics.drawCatalyst(cat.x, cat.y, cat.active, animFrame);
     }
 
     // Draw Cores
@@ -565,13 +580,14 @@ function gameLoop(timestamp) {
         Graphics.drawBrokenCore(bc.x, bc.y, animFrame);
     }
 
-    // Draw Blocks (Spring Physics)
+        // Draw Blocks (Spring Physics)
     for (const b of game.blocks) {
         const powerData = game.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
         // Pass both visualAngle (for the arrow) and logical b.dir (for the lightning)
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir);
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir, b.type);
     }
+
 
     // Draw Player
     if (game.state !== 'GAMEOVER') {

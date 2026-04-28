@@ -109,7 +109,25 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
 *   **Falha Conclusiva (Perma-Death por Tentativa):** O sistema de reversão automática foi removido. Se o robô for destruído ou desativado, o jogador transiciona diretamente para a tela de falha.
     *   **Perigos Físicos (Esmagamento/Explosão):** Causam a perda de 1 Unidade/Vida. O sistema sinaliza a perda com uma **vinheta vermelha pulsante** na tela e o selo **"FALHA"** nos monitores de transição durante o respawn.
     *   **Falha de Sistema (Fim de Energia):** Não consome vidas, mas interrompe a operação instantaneamente.
-*   **Esteiras Dinâmicas:** Podem operar de forma contínua ou ser controladas por **Canais de Comunicação**. Esteiras ligadas a botões param de mover objetos e interrompem sua animação (neon apagado) quando o sinal do canal é interrompido, permitindo a criação de quebra-cabeças de temporização e fluxo.
+    *   **Esteiras Dinâmicas:** Podem operar de forma contínua ou ser controladas por **Canais de Comunicação**. Esteiras ligadas a botões param de mover objetos e interrompem sua animação (neon apagado) quando o sinal do canal is interrompido, permitindo a criação de quebra-cabeças de temporização e fluxo.
+*   **Emissores (E - Emitters):** Canhões fixos industriais que disparam feixes de laser contínuos.
+    *   **Imobilidade:** Ocupam um tile fixo e não podem ser movidos ou empurrados pelo jogador ou esteiras.
+    *   **Letalidade Crítica:** O feixe de laser é instantaneamente fatal para o Robô e destrói permanentemente Blocos Amplificadores que cruzarem seu caminho.
+    *   **Regras de Obstrução:** Paredes, Portas Fechadas e outros Emissores bloqueiam o feixe, projetando zonas de segurança (sombra) atrás do obstáculo.
+    *   **Visual Industrial:** O canhão possui um design de barril metálico com anéis de reforço e um núcleo de energia pulsante. O laser é um feixe grosso e brilhante (Ciano) que preenche quase um tile inteiro, gerando faíscas elétricas constantes no ponto de impacto. O sistema de áudio detecta colisões via propriedade `laserTarget` no emissor para disparar o efeito sonoro de vaporização.
+    *   **Sistema de Trajetória (LaserPath):** O laser não é mais uma linha única; ele agora utiliza um sistema de segmentos (`laserPath`) que permite desvios angulares ao interagir com prismas, calculando colisões em cada novo segmento.
+    *   **Bloco Prismático (M - Prism):** Cubo de material refratário que redireciona o laser.
+        *   **Imunidade Térmica:** Único objeto móvel que não é destruído pelo laser.
+        *   **Redirecionamento (Refração):** Captura o feixe por uma de suas duas faces ativas e o desvia em 90 graus. A direção depende da rotação (`dir`) do bloco.
+        *   **Faces Inativas:** Se atingido por uma face sem espelho, o laser é bloqueado e o feixe termina.
+        *   **Estética Industrial "Rainbow Core":** O prisma agora segue o padrão visual dos blocos de metal (base escura #3a3a4a e cantoneiras de aço), mas com uma "janela" central que revela o cristal. Quando ativo, o espelho interno exibe um efeito **arco-íris progressivo** (gradiente HSL dinâmico) com brilho neon e faíscas coloridas, indicando a alta energia da refração.
+    *   **Catalisador Quântico (Q - Quantum Catalyst):** Componente industrial fixo que atua como ponte entre a mecânica de luz e a rede elétrica.
+        *   **Mecânica de Conversão:** Ao ser atingido por um feixe de laser (de qualquer direção), o catalisador absorve a energia luminosa e torna-se uma **fonte de energia elétrica estável (OCEAN - Ciano)** para todas as suas 4 faces adjacentes, alimentando fios, portas e núcleos com uma carga de **100 Amps**.
+        *   **Bloqueio Térmico:** Diferente do Prisma, o Catalisador não reflete o laser; ele o consome totalmente, servindo também como um anteparo seguro para o robô.
+        *   **Visual de Núcleo Ativo:** Apresenta um chassi metálico reforçado com um núcleo octogonal de cristal e bordas neon persistentes. Quando energizado pelo laser, o núcleo exibe um brilho ciano intenso com um **vórtice interno de energia**, bloom pulsante e emite partículas de faíscas quânticas.
+        *   **Persistência de Mapa:** O caractere 'Q' é preservado na malha lógica do mapa para garantir que sistemas de detecção de proximidade e renderização identifiquem a estrutura mesmo em estados de transição.
+    *   **Sincronização Editor/Jogo:** O editor preserva o tipo de bloco durante o modo de teste, garantindo que o Prisma mantenha suas propriedades físicas e visuais através do mapeamento de propriedades `links`.
+
 
 ## 6. Ferramentas de Desenvolvimento
 ### Level Editor (editor.html)
@@ -117,7 +135,10 @@ Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação in
 *   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
 *   **High-Fidelity Rendering:** Utiliza a mesma classe `GameState` e `Graphics` do jogo para mostrar o fluxo de energia real durante a edição.
 *   **Gerenciador de Diálogos Centralizado (Nova Aba):** Uma interface robusta na barra lateral dedicada exclusivamente à gestão de falas. Permite visualizar todos os diálogos da fase em uma lista vertical, facilitando a edição de textos longos, troca de ícones e configuração de triggers (Start/Walk).
-*   **Controle de Comportamento Narrativo:** Cada diálogo agora possui flags individuais para `Travar Robô` (bloqueia input durante a fala) e `Auto-Fechar` (com tempo de dismiss configurável), permitindo maior controle sobre o ritmo do gameplay.
+*   **Controle de Comportamento Narrativo:** Cada diálogo possui flags individuais para `Travar Robô` e `Auto-Fechar`. Eventos de fala suportam múltiplas mensagens sequenciais.
+*   **Gatilhos Espaciais e Persistência:**
+    *   `Raio (Radius)`: Permite definir uma área circular (distância Manhattan) ao redor do tile de origem para disparar o diálogo.
+    *   `Disparo Único (One-Shot)`: Define se o evento ocorre apenas uma vez por nível ou se repete sempre que o jogador entra na área de gatilho.
 *   **Navegação Inteligente (Middle-Click):** Clicar com o botão do meio em um evento de fala no mapa redireciona instantaneamente o usuário para a aba de Diálogos e foca no card correspondente.
 *   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio** em elementos interativos (Portas, Botões, Núcleos, Chão Quântico), o editor permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
 *   **Área de Transferência:** Suporte para copiar e colar áreas do mapa via `Ctrl+C` e `Ctrl+V`.
@@ -174,6 +195,9 @@ O sistema de áudio é baseado puramente na Web Audio API, gerando sons de forma
 *   **Audio Quântico Especializado:**
     *   **Quantum Hum:** Zumbido elétrico que diferencia interações. Emite um tom leve e agudo (800Hz) ao caminhar sobre o chão quântico, e um tom **grave e denso (400Hz)** ao tentar empurrar blocos contra a barreira ativa, reforçando a percepção de massa e resistência.
     *   **Toggle Rise/Fall:** Efeitos de "rise up" (ascendente) ao ativar a barreira e "descend" (queda de frequência) ao desativá-la, simulando o carregamento e desligamento de grandes bobinas de indução industrial.
+*   **Laser Audio Dinâmico:**
+    *   **Laser Hum ("Woooowm"):** Um som imponente gerado por osciladores sawtooth e square (55Hz/110Hz). Utiliza um filtro passa-baixas altamente ressonante (Q=12) com varredura (sweep) lenta para criar o efeito "wooooow" e micro-modulação de pitch (LFO 40Hz) para a vibração "wmmm".
+    *   **Impacto Sizzle ("Tssss"):** Quando o laser atinge uma superfície sólida, um loop de ruído branco com filtro passa-altas (6500Hz) é ativado, simulando o metal sendo vaporizado. Possui variações sutis de frequência para evitar repetição mecânica.
 *   **Ilusão de Aceleração (Escala de Shepard):** As esteiras utilizam um sistema de Escala de Shepard (`updateConveyorShepard`), que cria uma ilusão auditiva de tom ascendente infinito enquanto o robô ou blocos estão em movimento. Isso intensifica a sensação de velocidade e perigo industrial contínuo, gerado procedimentalmente via Web Audio API.
 
 ### E. Sistema de Diálogo (js/dialogue.js)

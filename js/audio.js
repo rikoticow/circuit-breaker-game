@@ -545,6 +545,64 @@ const AudioSys = window.AudioSys = {
         noise.start(now);
     },
 
+    playPrismRotate() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        // 1. Crystal "Resonance" - Much deeper pings (Heavier glass/crystal feel)
+        const pings = [
+            { f: 800, t: 0, d: 0.4 },
+            { f: 1100, t: 0.05, d: 0.3 },
+            { f: 950, t: 0.1, d: 0.5 }
+        ];
+
+        pings.forEach(p => {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            // Randomize timbre: vary type and detune
+            osc.type = Math.random() > 0.8 ? 'sine' : 'triangle';
+            osc.frequency.setValueAtTime(p.f + (Math.random() - 0.5) * 60, now + p.t);
+            osc.detune.setValueAtTime((Math.random() - 0.5) * 50, now + p.t);
+            
+            filter.type = 'lowpass';
+            filter.frequency.value = 1800 + Math.random() * 600;
+            filter.Q.value = 2 + Math.random() * 12; // Vary resonance for "timbre" change
+
+            const randomDecay = p.d * (0.8 + Math.random() * 0.4);
+            g.gain.setValueAtTime(0, now + p.t);
+            g.gain.linearRampToValueAtTime(0.06, now + p.t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.001, now + p.t + randomDecay);
+
+            osc.connect(filter);
+            filter.connect(g);
+            g.connect(audioCtx.destination);
+            
+            osc.start(now + p.t);
+            osc.stop(now + p.t + randomDecay);
+        });
+
+        // 2. SUB-BASS IMPACT (Randomized slightly for each rotation)
+        const sub = audioCtx.createOscillator();
+        const subG = audioCtx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(75 + Math.random() * 10, now);
+        sub.frequency.exponentialRampToValueAtTime(35 + Math.random() * 10, now + 0.3);
+        
+        subG.gain.setValueAtTime(0.15, now);
+        subG.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        
+        sub.connect(subG);
+        subG.connect(audioCtx.destination);
+        sub.start(now);
+        sub.stop(now + 0.4);
+
+        // 3. Low mechanical grind (Internal engine - randomized)
+        const grindFreq = 110 + Math.random() * 20;
+        this.playTone(grindFreq, 'square', 0.2, 0.04);
+    },
+
     undo() {
         this.playTone(300, 'square', 0.1, 0.05);
         setTimeout(() => this.playTone(200, 'square', 0.15, 0.05), 50);
@@ -1010,6 +1068,103 @@ const AudioSys = window.AudioSys = {
         } else if (!hasActiveBlocks && this.crackleInterval) {
             clearInterval(this.crackleInterval);
             this.crackleInterval = null;
+        }
+    },
+
+    laserNodes: [],
+    laserGain: null,
+    laserHitNodes: [],
+    laserHitGain: null,
+
+    updateLaserAudio(activeEmitters) {
+        if (audioCtx.state !== 'running') return;
+        
+        // 1. LASER HUM ("wooooowwmmm")
+        const isLaserActive = activeEmitters.length > 0;
+        if (isLaserActive && !this.laserGain) {
+            this.laserGain = audioCtx.createGain();
+            this.laserGain.gain.value = 0;
+            
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            osc1.type = 'sawtooth';
+            osc1.frequency.value = 55; // A1 - Deep base
+            osc2.type = 'square';
+            osc2.frequency.value = 110; // A2 - Harmonic
+            
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 800;
+            filter.Q.value = 12; // High resonance for the "woooow"
+
+            osc1.connect(filter);
+            osc2.connect(filter);
+            filter.connect(this.laserGain);
+            this.laserGain.connect(audioCtx.destination);
+            
+            osc1.start();
+            osc2.start();
+            this.laserNodes = [osc1, osc2, filter];
+        }
+
+        if (this.laserGain) {
+            const targetVol = isLaserActive ? 0.06 : 0; // Reduced from 0.12
+            this.laserGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+            
+            if (isLaserActive) {
+                // "Wooooow" sweep - slow resonant filter oscillation
+                const sweep = 1000 + Math.sin(audioCtx.currentTime * 2.5) * 600;
+                this.laserNodes[2].frequency.setTargetAtTime(sweep, audioCtx.currentTime, 0.1);
+                
+                // "Wmmm" vibration - rapid pitch micro-modulation
+                const lfo = Math.sin(audioCtx.currentTime * 40) * 1.5;
+                this.laserNodes[0].frequency.setTargetAtTime(55 + lfo, audioCtx.currentTime, 0.05);
+                this.laserNodes[1].frequency.setTargetAtTime(110 + lfo * 2, audioCtx.currentTime, 0.05);
+            }
+        }
+
+        // 2. LASER HIT ("tsssssssss")
+        // Check if any active laser is hitting something (excluding the player which has its own death sound)
+        const isHitting = activeEmitters.some(e => e.laserTarget && e.laserTarget.type !== 'NONE' && e.laserTarget.type !== 'PLAYER');
+        
+        if (isHitting && !this.laserHitGain) {
+            this.laserHitGain = audioCtx.createGain();
+            this.laserHitGain.gain.value = 0;
+            
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            noise.loop = true;
+            
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 6500;
+            
+            const lpf = audioCtx.createBiquadFilter();
+            lpf.type = 'lowpass';
+            lpf.frequency.value = 12000;
+ 
+            noise.connect(filter);
+            filter.connect(lpf);
+            lpf.connect(this.laserHitGain);
+            this.laserHitGain.connect(audioCtx.destination);
+            noise.start();
+            this.laserHitNodes = [noise, filter];
+        }
+ 
+        if (this.laserHitGain) {
+            const targetHitVol = isHitting ? 0.03 : 0; // Reduced from 0.06
+            this.laserHitGain.gain.setTargetAtTime(targetHitVol, audioCtx.currentTime, 0.1);
+            
+            if (isHitting) {
+                // Subtle sizzle variation
+                const sizzle = 6500 + Math.sin(audioCtx.currentTime * 10) * 500;
+                this.laserHitNodes[1].frequency.setTargetAtTime(sizzle, audioCtx.currentTime, 0.05);
+            }
         }
     },
 

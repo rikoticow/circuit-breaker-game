@@ -23,14 +23,14 @@ let hoveredChannel = null;
 
 const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
-    { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}] },
-    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}] },
+    { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
+    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
 
     { title: "Fios", tiles: [{c: 'H', n: 'Horiz'}, {c: 'V', n: 'Vert'}, {c: '+', n: 'Cruz'}] },
     { title: "Curvas", tiles: [{c: 'L', n: '└'}, {c: 'J', n: '┘'}, {c: 'C', n: '┐'}, {c: 'F', n: '┌'}] },
     { title: "Junções", tiles: [{c: 'u', n: '┻'}, {c: 'd', n: '┳'}, {c: 'l', n: '┫'}, {c: 'r', n: '┣'}] },
-    { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}] },
+    { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}, {c: 'M', n: 'Prisma'}] },
     { title: "Esteiras", tiles: [{c: ')', n: 'Esteira Dir'}, {c: '(', n: 'Esteira Esq'}, {c: ']', n: 'Esteira Baixo'}, {c: '[', n: 'Esteira Cima'}] },
     { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] },
     { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}] }
@@ -126,6 +126,12 @@ function createTilePreview(char) {
         Graphics.drawQuantumFloor(0, 0, true, animFrame);
     } else if (char === 'P') {
         Graphics.drawPurpleButton(0, 0, false);
+    } else if (char === 'E') {
+        Graphics.drawEmitter(0, 0, 0, animFrame);
+    } else if (char === 'M') {
+        Graphics.drawBlock(0, 0, 0, null, 0, 0, 'PRISM');
+    } else if (char === 'Q') {
+        Graphics.drawCatalyst(0, 0, true, animFrame);
     } else if (char === '💬') {
         tCtx.fillStyle = '#00ff9f';
         tCtx.font = '20px VT323';
@@ -530,6 +536,8 @@ function rebuildMock() {
     mockGame.buttons = [];
     mockGame.purpleButtons = [];
     mockGame.quantumFloors = [];
+    mockGame.emitters = [];
+    mockGame.catalysts = [];
 
 
     const h = currentMap.length;
@@ -578,6 +586,13 @@ function rebuildMock() {
                 if (c === ']') dir = 1; // DOWN
                 const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
                 mockGame.conveyors.push({ x, y, dir, channel: chan });
+            } else if (c === 'E' || c === 'M') {
+                const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
+                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
+                if (c === 'E') mockGame.emitters.push({ x, y, dir, channel: chan });
+                else mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
+            } else if (c === 'Q') {
+                mockGame.catalysts.push({ x, y, active: false });
             }
 
 
@@ -605,6 +620,13 @@ function rebuildMock() {
                 const behavior = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
                 const initState = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === true;
                 mockGame.buttons.push({ x, y, isPressed: initState, channel: chan, behavior: behavior });
+            } else if (oc === 'E' || oc === 'M') {
+                const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
+                if (oc === 'E') {
+                    if (!mockGame.emitters.some(e => e.x === x && e.y === y)) mockGame.emitters.push({ x, y, dir });
+                } else {
+                    if (!mockGame.blocks.some(b => b.x === x && b.y === y)) mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
+                }
             }
 
             // Also load from blocks map
@@ -617,6 +639,11 @@ function rebuildMock() {
                 // Avoid duplicates
                 if (!mockGame.blocks.some(b => b.x === x && b.y === y)) {
                     mockGame.blocks.push({ x, y, dir });
+                }
+            } else if (bc === 'M') {
+                const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
+                if (!mockGame.blocks.some(b => b.x === x && b.y === y)) {
+                    mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
                 }
             }
         }
@@ -676,6 +703,7 @@ function rebuildMock() {
         mockGame.chargingStations.push({ ...mockGame.startPos });
     }
     mockGame.updateEnergy();
+    mockGame.updateEmitters();
 }
 
 function saveHistory() {
@@ -733,6 +761,8 @@ function getNextRotation(c) {
     if (c === '[') return ')';
     if (c === ')') return ']';
     if (c === ']') return '(';
+    if (c === 'E') return 'E';
+    if (c === 'M') return 'M';
     return c;
 }
 
@@ -855,8 +885,8 @@ function setupEvents() {
         const usedChannels = new Set();
         if (lvl.links) {
             for (const key in lvl.links) {
-                // Ignore behavior/init keys, just look for the coordinates that store the channel
-                if (!key.endsWith('_init') && !key.endsWith('_behavior')) {
+                // Ignore behavior/init/dir keys, just look for the coordinates that store the channel
+                if (!key.endsWith('_init') && !key.endsWith('_behavior') && !key.endsWith('_dir')) {
                     const val = parseInt(lvl.links[key]);
                     if (!isNaN(val)) usedChannels.add(val);
                 }
@@ -907,11 +937,18 @@ function setupEvents() {
         const lvl = levelsData[currentLevelIdx];
         if (!lvl.links) lvl.links = {};
         for (const target of editTargets) {
-            lvl.links[`${target.x},${target.y}_behavior`] = behavior;
+            const char = [currentBlocksMap[target.y][target.x], currentOverlayMap[target.y][target.x], currentMap[target.y][target.x]].find(c => c !== ' ');
+            if (char === 'E' || char === 'M') {
+                lvl.links[`${target.x},${target.y}_dir`] = parseInt(behavior);
+            } else {
+                lvl.links[`${target.x},${target.y}_behavior`] = behavior;
+            }
         }
         
         // Refresh panel visibility
-        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+        if (editTargets[0].char !== 'E') {
+            document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+        }
         
         saveHistory();
         rebuildMock();
@@ -1067,7 +1104,7 @@ function setupEvents() {
                                 // Scan all maps for interactive chars
                                 const chars = [currentBlocksMap[y][x], currentOverlayMap[y][x], currentMap[y][x]];
                                 for (let c of chars) {
-                                    if (c === 'T' || (c >= '1' && c <= '9') || c === 'D' || c === '_' || c === 'P' || c === '?' || ['(', ')', '[', ']'].includes(c)) {
+                                    if (c === 'T' || (c >= '1' && c <= '9') || c === 'D' || c === '_' || c === 'P' || c === '?' || c === 'E' || ['(', ')', '[', ']'].includes(c)) {
                                         targets.push({x, y, char: c});
                                         break; 
                                     }
@@ -1082,7 +1119,7 @@ function setupEvents() {
                     const checkLayers = [currentBlocksMap, currentOverlayMap, currentMap];
                     for (let map of checkLayers) {
                         const char = map[p.y][p.x];
-                        if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?' || ['(', ')', '[', ']'].includes(char)) {
+                        if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?' || char === 'E' || char === 'M' || ['(', ')', '[', ']'].includes(char)) {
                             targets.push({x: p.x, y: p.y, char});
                             break;
                         }
@@ -1105,18 +1142,18 @@ function setupEvents() {
                     panel.style.top = `${rect.top + p.y * 32 - 100}px`;
 
                     const typeLabel = targets.length > 1 ? `Múltiplos (${targets.length})` : 
-                        (primary.char === 'D' ? 'Porta' : (primary.char === '?' ? 'Chão Quântico' : (primary.char === 'T' || (primary.char >= '1' && primary.char <= '9') ? 'Núcleo Alvo' : (['(', ')', '[', ']'].includes(primary.char) ? 'Esteira' : 'Botão Industrial'))));
+                        (primary.char === 'D' ? 'Porta' : (primary.char === '?' ? 'Chão Quântico' : (primary.char === 'E' ? 'Emissor (Canhão)' : (primary.char === 'M' ? 'Prisma' : (primary.char === 'T' || (primary.char >= '1' && primary.char <= '9') ? 'Núcleo Alvo' : (['(', ')', '[', ']'].includes(primary.char) ? 'Esteira' : 'Botão Industrial'))))));
                     
                     document.getElementById('prop-type').innerText = `Tipo: ${typeLabel}`;
                     
                     const hasCores = targets.some(t => t.char === 'T' || (t.char >= '1' && t.char <= '9'));
-                    const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || ['(', ')', '[', ']'].includes(t.char));
+                    const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || t.char === 'E' || t.char === 'M' || ['(', ')', '[', ']'].includes(t.char));
                     const hasButtons = targets.some(t => t.char === '_' || t.char === 'P');
                     const hasDialogue = targets.some(t => t.isDialogue);
 
                     document.getElementById('prop-amps').parentElement.style.display = hasCores ? 'flex' : 'none';
-                    document.getElementById('prop-channel-container').style.display = hasLinkables ? 'flex' : 'none';
-                    document.getElementById('prop-behavior-container').style.display = hasButtons ? 'flex' : 'none';
+                    document.getElementById('prop-channel-container').style.display = (hasLinkables) ? 'flex' : 'none';
+                    document.getElementById('prop-behavior-container').style.display = (hasButtons || primary.char === 'E' || primary.char === 'M') ? 'flex' : 'none';
                     document.getElementById('prop-dialogue-container').style.display = hasDialogue ? 'flex' : 'none';
                     
                     const lvl = levelsData[currentLevelIdx];
@@ -1126,11 +1163,30 @@ function setupEvents() {
                         document.getElementById('prop-channel').value = chan;
                         updateChannelGrid();
                     }
-                    if (hasButtons) {
-                        const behavior = (lvl.links && lvl.links[`${primary.x},${primary.y}_behavior`]) || (primary.char === 'P' ? 'PRESSURE' : 'TIMER');
-                        document.getElementById('prop-behavior').value = behavior;
-                        document.getElementById('prop-toggle').checked = (lvl.links && lvl.links[`${primary.x},${primary.y}_init`]) === true;
-                        document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+                    if (hasButtons || primary.char === 'E' || primary.char === 'M') {
+                        const behaviorSelect = document.getElementById('prop-behavior');
+                        if (primary.char === 'E' || primary.char === 'M') {
+                            behaviorSelect.innerHTML = `
+                                <option value="0">DIREITA (0)</option>
+                                <option value="1">BAIXO (1)</option>
+                                <option value="2">ESQUERDA (2)</option>
+                                <option value="3">CIMA (3)</option>
+                            `;
+                            const dir = (lvl.links && lvl.links[`${primary.x},${primary.y}_dir`]) || 0;
+                            behaviorSelect.value = dir;
+                            document.getElementById('prop-toggle-container').style.display = 'none';
+                        } else {
+                            behaviorSelect.innerHTML = `
+                                <option value="TIMER">🟡 TIMER (AMARELO)</option>
+                                <option value="TOGGLE">🟢 TOGGLE (VERDE)</option>
+                                <option value="PERMANENT">🔴 FIXO (VERMELHO)</option>
+                                <option value="PRESSURE">🟣 PRESSÃO (ROXO)</option>
+                            `;
+                            const behavior = (lvl.links && lvl.links[`${primary.x},${primary.y}_behavior`]) || (primary.char === 'P' ? 'PRESSURE' : 'TIMER');
+                            behaviorSelect.value = behavior;
+                            document.getElementById('prop-toggle').checked = (lvl.links && lvl.links[`${primary.x},${primary.y}_init`]) === true;
+                            document.getElementById('prop-toggle-container').style.display = (behavior === 'TOGGLE') ? 'flex' : 'none';
+                        }
                     }
                     if (hasDialogue) {
                         const diag = lvl.dialogues[`${primary.x},${primary.y}`] || { text: "", icon: "central", trigger: "walk" };
@@ -1151,7 +1207,14 @@ function setupEvents() {
                 const currentActive = activeTarget[p.y][p.x];
                 const next = getNextRotation(currentActive);
                 
-                if (next !== currentActive) {
+                if (currentActive === 'E' || currentActive === 'M') {
+                    const lvl = levelsData[currentLevelIdx];
+                    if (!lvl.links) lvl.links = {};
+                    let dir = (lvl.links[`${p.x},${p.y}_dir`] || 0);
+                    lvl.links[`${p.x},${p.y}_dir`] = (dir + 1) % 4;
+                    saveHistory();
+                    rebuildMock();
+                } else if (next !== currentActive) {
                     activeTarget[p.y][p.x] = next;
                     saveHistory();
                     rebuildMock();
@@ -1341,9 +1404,20 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const btn = mockGame.buttons ? mockGame.buttons.find(b => b.x === x && b.y === y) : null;
         if (btn) Graphics.drawButton(x, y, btn.isPressed, btn.behavior, btn.charge || 0);
         else Graphics.drawButton(x, y, false, (c === 'P' ? 'PRESSURE' : 'TIMER'), 0);
+    } else if (c === 'E') {
+        const emitter = mockGame.emitters ? mockGame.emitters.find(e => e.x === x && e.y === y) : null;
+        const dir = emitter ? emitter.dir : 0;
+        Graphics.drawEmitter(x, y, dir, animFrame);
     } else if (c === '?') {
         const qf = mockGame.quantumFloors ? mockGame.quantumFloors.find(q => q.x === x && q.y === y) : null;
         Graphics.drawQuantumFloor(x, y, qf ? qf.active : true, animFrame, qf ? qf.flashTimer : 0, qf ? qf.pulseIntensity : 1.0, qf ? qf.entrySide : null, qf ? qf.whiteGlow : 0);
+    } else if (c === 'Q') {
+        const cat = mockGame.catalysts ? mockGame.catalysts.find(q => q.x === x && q.y === y) : null;
+        Graphics.drawCatalyst(x, y, cat ? cat.active : false, animFrame);
+    } else if (c === 'M') {
+        const block = mockGame.blocks ? mockGame.blocks.find(b => b.x === x && b.y === y) : null;
+        const dir = block ? block.dir : 0;
+        Graphics.drawBlock(x, y, dir * (Math.PI / 2), null, 0, dir, 'PRISM');
     } else if (c === '💬') {
         ctx.fillStyle = '#00ff9f';
         ctx.font = '20px VT323';
@@ -1365,37 +1439,56 @@ function renderLoop() {
     const h = currentMap.length;
     const w = currentMap[0].length;
     
-    // 2. Draw ALL layers
+    // 2. Draw ALL layers in Passes (Matches main.js logic for occlusion)
+    
+    // PASS 1: Floor and Base Char (not walls)
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const baseC = currentMap[y][x];
-            
-            // A. Draw base char ONLY if it's NOT a wall/ceiling
             if (baseC !== '#' && baseC !== 'W') {
                 drawChar(x, y, baseC);
             } else {
-                // For walls/ceilings, draw a floor underneath first
                 Graphics.drawFloor(x, y);
             }
+        }
+    }
 
-            // B. Draw overlay on top (Doors, Buttons, etc.)
+    // PASS 2: Overlays
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
             const oc = currentOverlayMap[y][x];
-            if (oc !== ' ') {
-                drawChar(x, y, oc, 1.0, true);
-            }
+            if (oc !== ' ') drawChar(x, y, oc, 1.0, true);
+        }
+    }
 
-            // C. Draw block on top
+    // PASS 3: Lasers (Above overlays, below walls)
+    if (mockGame.emitters) {
+        for (const e of mockGame.emitters) {
+            Graphics.drawLaser(e, animFrame);
+        }
+    }
+
+    // PASS 4: Blocks
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
             const bc = currentBlocksMap[y][x];
-            if (bc !== ' ') {
-                drawChar(x, y, bc, 1.0, true);
-            }
+            if (bc !== ' ') drawChar(x, y, bc, 1.0, true);
+        }
+    }
 
-            // D. Draw structural walls/ceiling LAST (on top of doors)
+    // PASS 5: Structural Walls/Ceiling
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const baseC = currentMap[y][x];
             if (baseC === '#' || baseC === 'W') {
                 drawChar(x, y, baseC);
             }
+        }
+    }
 
-            // E. Draw Dialogue Icon if any
+    // PASS 6: Dialogue Icons
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
             const lvl = levelsData[currentLevelIdx];
             if (lvl.dialogues && lvl.dialogues[`${x},${y}`]) {
                 ctx.save();
@@ -1586,8 +1679,6 @@ function testLoop(timestamp) {
     
     // Center camera if map is larger than 640x480 (optional for editor test)
     ctx.save();
-    // In editor test we usually don't have a moving camera unless user made huge map
-    // but let's just keep it simple for now or follow game.js camera logic
     ctx.translate(-Math.floor(testGame.camera.x), -Math.floor(testGame.camera.y));
 
     // Pass 1: Floor
@@ -1618,6 +1709,11 @@ function testLoop(timestamp) {
         Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength, isActive);
     }
 
+    // Pass 1.8: Lasers (Above overlays, below walls)
+    for (const e of testGame.emitters) {
+        Graphics.drawLaser(e, testAnimFrame);
+    }
+
     // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
     for (const d of testGame.doors) {
         Graphics.drawDoor(d.x, d.y, d.state, d.error, testAnimFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
@@ -1632,6 +1728,25 @@ function testLoop(timestamp) {
         }
     }
 
+    // Pass 2.02: Draw Emitters (Structures)
+    for (const e of testGame.emitters) {
+        Graphics.drawEmitter(e.x, e.y, e.dir, testAnimFrame);
+    }
+
+    // Pass 2.03: Draw Quantum Catalysts (Entity Loop)
+    for (const cat of testGame.catalysts) {
+        Graphics.drawCatalyst(cat.x, cat.y, cat.active, testAnimFrame);
+    }
+
+    // Safety Pass: Draw from map if not in array (ensures visibility)
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (testGame.map[y][x] === 'Q' && !testGame.catalysts.some(c => c.x === x && c.y === y)) {
+                Graphics.drawCatalyst(x, y, false, testAnimFrame);
+            }
+        }
+    }
+
     for (const s of testGame.sources) Graphics.drawCore(s.x, s.y, 'B', true);
     for (const s of testGame.redSources) Graphics.drawCore(s.x, s.y, 'X', true);
     for (const t of testGame.targets) {
@@ -1643,7 +1758,7 @@ function testLoop(timestamp) {
     for (const b of testGame.blocks) {
         const power = testGame.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir);
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type);
     }
 
     if (testGame.state !== 'GAMEOVER') {
@@ -1760,6 +1875,8 @@ function updateDialogueManager() {
             messages = rawData;
             eventConfig = {
                 trigger: rawData[0]?.trigger || 'walk',
+                radius: rawData[0]?.radius || 0,
+                oneShot: rawData[0]?.oneShot !== false,
                 lockPlayer: rawData[0]?.lockPlayer !== false,
                 autoDismiss: rawData[0]?.autoDismiss !== false
             };
@@ -1822,11 +1939,23 @@ function updateDialogueManager() {
                         <option value="start" ${eventConfig.trigger === 'start' ? 'selected' : ''}>GATILHO: AO INICIAR (START)</option>
                     </select>
                 </div>
+                
+                <div style="grid-column: span 2; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 5px;">
+                    <span style="font-size: 10px; color: #aaa;">RAIO DA ÁREA:</span>
+                    <input type="number" min="0" max="10" value="${eventConfig.radius || 0}" 
+                        style="width: 40px; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;"
+                        onchange="updateDialogueProp('${key}', 'radius', parseInt(this.value), -1)">
+                    <span style="font-size: 9px; color: #666;">(0 = apenas o tile)</span>
+                </div>
+
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
                     <input type="checkbox" ${eventConfig.lockPlayer !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'lockPlayer', this.checked, -1)"> Travar Robô
                 </label>
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
                     <input type="checkbox" ${eventConfig.autoDismiss !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'autoDismiss', this.checked, -1)"> Auto-Fechar
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #00ff9f; grid-column: span 2; border-top: 1px solid #333; padding-top: 5px; margin-top: 2px;">
+                    <input type="checkbox" ${eventConfig.oneShot !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'oneShot', this.checked, -1)"> Disparo Único (One-Shot)
                 </label>
             </div>
             
@@ -1850,6 +1979,8 @@ function updateDialogueProp(key, prop, value, idx = 0) {
         const oldArr = lvl.dialogues[key];
         lvl.dialogues[key] = {
             trigger: oldArr[0]?.trigger || 'walk',
+            radius: oldArr[0]?.radius || 0,
+            oneShot: oldArr[0]?.oneShot !== false,
             lockPlayer: oldArr[0]?.lockPlayer !== false,
             autoDismiss: oldArr[0]?.autoDismiss !== false,
             messages: oldArr
@@ -1858,6 +1989,8 @@ function updateDialogueProp(key, prop, value, idx = 0) {
         const oldObj = lvl.dialogues[key];
         lvl.dialogues[key] = {
             trigger: oldObj.trigger || 'walk',
+            radius: oldObj.radius || 0,
+            oneShot: oldObj.oneShot !== false,
             lockPlayer: oldObj.lockPlayer !== false,
             autoDismiss: oldObj.autoDismiss !== false,
             messages: [oldObj]
@@ -1885,6 +2018,8 @@ function addDialogueMessage(key) {
         const oldArr = lvl.dialogues[key];
         lvl.dialogues[key] = {
             trigger: oldArr[0]?.trigger || 'walk',
+            radius: oldArr[0]?.radius || 0,
+            oneShot: oldArr[0]?.oneShot !== false,
             lockPlayer: oldArr[0]?.lockPlayer !== false,
             autoDismiss: oldArr[0]?.autoDismiss !== false,
             messages: oldArr
@@ -1893,6 +2028,8 @@ function addDialogueMessage(key) {
         const oldObj = lvl.dialogues[key];
         lvl.dialogues[key] = {
             trigger: oldObj.trigger || 'walk',
+            radius: oldObj.radius || 0,
+            oneShot: oldObj.oneShot !== false,
             lockPlayer: oldObj.lockPlayer !== false,
             autoDismiss: oldObj.autoDismiss !== false,
             messages: [oldObj]

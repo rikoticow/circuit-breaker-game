@@ -1,5 +1,5 @@
 class GameState {
-    constructor() {
+    constructor(levelData = null) {
         this.levelIndex = 0;
         this.map = [];
         this.player = { x: 0, y: 0, visualX: 0, visualY: 0, dir: DIRS.DOWN, visorTimer: 0, visorColor: '#00ff41' };
@@ -13,6 +13,9 @@ class GameState {
         this.buttons = [];
         this.purpleButtons = [];
         this.quantumFloors = [];
+        this.emitters = [];
+        this.catalysts = [];
+        this.debris = [];
 
 
         this.score = 0;
@@ -58,7 +61,11 @@ class GameState {
             lerp: 0.1
         };
 
-        this.loadLevel(0);
+        if (levelData) {
+            this.loadLevel(levelData);
+        } else {
+            this.loadLevel(0);
+        }
     }
 
     startTransition(callback, stayClosed = false, customLabel = null) {
@@ -96,10 +103,13 @@ class GameState {
             buttons: this.buttons.map(b => ({ ...b })),
             purpleButtons: this.purpleButtons.map(b => ({ ...b })),
             quantumFloors: this.quantumFloors.map(q => ({ ...q })),
-            doors: this.doors.map(d => ({ ...d }))
-
+            doors: this.doors.map(d => ({ ...d })),
+            emitters: this.emitters.map(e => ({ ...e })),
+            catalysts: this.catalysts.map(c => ({ ...c }))
         };
     }
+
+
 
     saveUndo() {
         this.undoStack.push(this.cloneState());
@@ -168,18 +178,30 @@ class GameState {
         if (state.doors) {
             this.doors = state.doors.map(d => ({ ...d }));
         }
-
+        if (state.emitters) {
+            this.emitters = state.emitters.map(e => ({ ...e }));
+        }
+        if (state.catalysts) {
+            this.catalysts = state.catalysts.map(c => ({ ...c }));
+        }
+        
         this.updateEnergy();
     }
 
-    loadLevel(index, keepLives = false) {
-        if (index >= LEVELS.length) {
-            this.state = 'VICTORY';
-            return;
+    loadLevel(indexOrData, keepLives = false) {
+        let levelData;
+        if (typeof indexOrData === 'object') {
+            levelData = indexOrData;
+            this.levelIndex = -1; // Test Mode indicator
+        } else {
+            if (indexOrData >= LEVELS.length) {
+                this.state = 'VICTORY';
+                return;
+            }
+            this.levelIndex = indexOrData;
+            levelData = LEVELS[indexOrData];
         }
-
-        this.levelIndex = index;
-        const levelData = LEVELS[index];
+        
         this.levelData = levelData;
         this.time = levelData.timer || 60; // seconds countdown from level data
         this.moves = levelData.time; // Movements allowed (battery)
@@ -205,6 +227,8 @@ class GameState {
         this.buttons = [];
         this.purpleButtons = [];
         this.quantumFloors = [];
+        this.emitters = [];
+        this.catalysts = [];
         this.poweredDoors = new Set();
 
         this.scrapPositions.clear();
@@ -224,7 +248,7 @@ class GameState {
             let row = [];
             for (let x = 0; x < mapW; x++) {
                 let c = charMap[y][x];
-                row.push((c === '#' || c === 'W') ? c : ' ');
+                row.push((c === '#' || c === 'W' || c === 'Q') ? c : ' ');
 
                 if (c === '@') {
                     this.player.x = x;
@@ -295,6 +319,15 @@ class GameState {
                 } else if (c === '?') {
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
                     this.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, whiteGlow: 0, closeTimer: 0 });
+                } else if (c === 'M') {
+                    const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || DIRS.RIGHT;
+                    this.blocks.push({ x, y, dir, origX: x, origY: y, type: 'PRISM' });
+                } else if (c === 'E') {
+                    const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || DIRS.RIGHT;
+                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                    this.emitters.push({ x, y, dir, laserTarget: null, channel: chan });
+                } else if (c === 'Q') {
+                    this.catalysts.push({ x, y, active: false });
                 }
 
 
@@ -319,6 +352,11 @@ class GameState {
                         if (!this.conveyors.some(c => c.x === x && c.y === y)) {
                             const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
                             this.conveyors.push({ x, y, dir, channel: chan });
+                        }
+                    } else if (bc === 'M') {
+                        const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || 0;
+                        if (!this.blocks.some(b => b.x === x && b.y === y)) {
+                            this.blocks.push({ x, y, dir, origX: x, origY: y, type: 'PRISM' });
                         }
                     } else if (bc === 'S') {
                         if (!this.scrapPositions.has(`${x},${y}`)) {
@@ -378,6 +416,21 @@ class GameState {
                                 energy: initState ? 1.0 : 0
                             });
                         }
+                    } else if (oc === 'E') {
+                        const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || DIRS.RIGHT;
+                        const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                        if (!this.emitters.some(e => e.x === x && e.y === y)) {
+                            this.emitters.push({ x, y, dir, channel: chan, laserTarget: null, isActive: true });
+                        }
+                    } else if (oc === 'M') {
+                        const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || 0;
+                        if (!this.blocks.some(b => b.x === x && b.y === y)) {
+                            this.blocks.push({ x, y, dir, origX: x, origY: y, type: 'PRISM' });
+                        }
+                    } else if (oc === 'Q') {
+                        if (!this.catalysts.some(c => c.x === x && c.y === y)) {
+                            this.catalysts.push({ x, y, active: false });
+                        }
                     }
                 }
             }
@@ -433,6 +486,13 @@ class GameState {
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         // If there are NO buttons on this channel, it's ON.
         // If there ARE buttons, it's ON if at least one is pressed.
+        return chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
+    }
+
+    isEmitterActive(e) {
+        if (!e) return false;
+        const chan = Number(e.channel || 0);
+        const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         return chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
     }
 
@@ -608,6 +668,13 @@ class GameState {
         if (window.AudioSys) {
             AudioSys.updateHum(this.audioState.anyActive, this.audioState.progress, this.audioState.contaminated);
 
+            // --- Laser Audio ---
+            if (this.state === 'PLAYING') {
+                AudioSys.updateLaserAudio(this.emitters.filter(e => e.isActive));
+            } else {
+                AudioSys.updateLaserAudio([]);
+            }
+
             // --- Conveyor Audio Loop ---
             if (this.state === 'PLAYING') {
                 const conveyorsWithButtons = this.conveyors.filter(c => this.isConveyorActive(c));
@@ -633,7 +700,8 @@ class GameState {
                 AudioSys.updateConveyorShepard(false);
             }
         }
-
+        
+        this.updateEmitters();
         this.updateSliding();
         if (this.state === 'PLAYING') {
             this.checkDialogues('walk');
@@ -950,6 +1018,16 @@ class GameState {
                 }
             }
         }
+
+        // Update Emitter States (ON/OFF via Channel)
+        for (let e of this.emitters) {
+            if (e.channel === 0) {
+                e.isActive = true;
+            } else {
+                const chanButtons = this.buttons.filter(b => b.channel === e.channel);
+                e.isActive = chanButtons.some(b => b.isPressed);
+            }
+        }
     }
 
     triggerQuantumPulse(x, y, power = 1.0, delay = 0, distance = 0, visited = new Set(), dx = 0, dy = 0) {
@@ -1126,7 +1204,8 @@ class GameState {
             b.dir = (b.dir + 1) % 4;
             this.player.visorTimer = 15;
             this.player.visorColor = '#00ff41'; // Success Green
-            AudioSys.rotate();
+            if (b.type === 'PRISM') AudioSys.playPrismRotate();
+            else AudioSys.rotate();
             this.updateEnergy();
             actionTaken = true;
         }
@@ -1216,6 +1295,7 @@ class GameState {
         if (this.targets.some(t => t.x === x && t.y === y)) return false;
         if (this.forbiddens.some(f => f.x === x && f.y === y)) return false;
         if (this.brokenCores.some(b => b.x === x && b.y === y)) return false;
+        if (this.emitters.some(e => e.x === x && e.y === y)) return false;
         
         // Check player (unless player is the one moving)
         if (this.player.x === x && this.player.y === y && !ignores.includes(this.player)) return false;
@@ -1363,6 +1443,195 @@ class GameState {
             }
             this.updateEnergy();
         }
+    }
+
+    updateEmitters() {
+        // Reset hit status for all prisms
+        for (let b of this.blocks) if (b.type === 'PRISM') b.isHit = false;
+        
+        // Reset catalysts before tracing
+        this.catalysts.forEach(c => c.active = false);
+
+        for (const e of this.emitters) {
+            if (!this.isEmitterActive(e)) {
+                e.isActive = false;
+                e.laserPath = [];
+                continue;
+            }
+            e.isActive = true;
+            let lx = e.x;
+            let ly = e.y;
+            let dx = 0, dy = 0;
+            if (e.dir === DIRS.RIGHT) dx = 1;
+            else if (e.dir === DIRS.LEFT) dx = -1;
+            else if (e.dir === DIRS.UP) dy = -1;
+            else if (e.dir === DIRS.DOWN) dy = 1;
+
+            e.laserPath = [{ x: lx, y: ly, dx, dy }];
+            let steps = 0;
+            let cx = lx, cy = ly;
+
+            while (steps < 100) {
+                steps++;
+                cx += dx;
+                cy += dy;
+
+                // Bounds check
+                if (cx < 0 || cx >= this.map[0].length || cy < 0 || cy >= this.map.length) {
+                    e.laserPath.push({ x: cx, y: cy, type: 'BOUNDS' });
+                    break;
+                }
+
+                // Wall/Door check
+                const char = this.map[cy][cx];
+                if (char === '#' || char === 'W') {
+                    e.laserPath.push({ x: cx, y: cy, type: 'WALL' });
+                    break;
+                }
+                const catalyst = this.catalysts.find(c => c.x === cx && c.y === cy);
+                if (catalyst) {
+                    catalyst.active = true;
+                    e.laserPath.push({ x: cx, y: cy, type: 'CATALYST' });
+                    break;
+                }
+                const door = this.doors.find(d => d.x === cx && d.y === cy);
+                if (door && door.state === 'CLOSED') {
+                    e.laserPath.push({ x: cx, y: cy, type: 'DOOR' });
+                    break;
+                }
+                
+                // Player collision
+                if (this.player.x === cx && this.player.y === cy && !this.player.isDead) {
+                    this.handleDeath(true, 'LASER');
+                    e.laserPath.push({ x: cx, y: cy, type: 'PLAYER' });
+                    break;
+                }
+
+                // Block collision
+                const blockIndex = this.blocks.findIndex(b => b.x === cx && b.y === cy);
+                if (blockIndex !== -1) {
+                    const block = this.blocks[blockIndex];
+                    if (block.type === 'PRISM') {
+                        const reflection = this.getPrismReflection(block, dx, dy);
+                        if (reflection) {
+                            block.isHit = true;
+                            dx = reflection.dx;
+                            dy = reflection.dy;
+                            e.laserPath.push({ x: cx, y: cy, type: 'PRISM', nextDx: dx, nextDy: dy });
+                            continue; // Bends and continues
+                        } else {
+                            e.laserPath.push({ x: cx, y: cy, type: 'BLOCK' });
+                            break;
+                        }
+                    } else {
+                        // Standard block - destroyed
+                        const b = this.blocks.splice(blockIndex, 1)[0];
+                        if (window.AudioSys) AudioSys.playCubeCrush();
+                        this.spawnDebris(b.x * 32 + 16, b.y * 32 + 16, 12, '#00f0ff', { x: dx, y: dy });
+                        for (let i = 0; i < 15; i++) {
+                            Graphics.spawnParticle(b.x * 32 + 16, b.y * 32 + 16, '#00f0ff', 'spark');
+                        }
+                        this.updateEnergy();
+                        e.laserPath.push({ x: cx, y: cy, type: 'BLOCK' });
+                        break;
+                    }
+                }
+                
+                // Other Emitter collision
+                if (this.emitters.some(other => other !== e && other.x === cx && other.y === cy)) {
+                    e.laserPath.push({ x: cx, y: cy, type: 'EMITTER' });
+                    break;
+                }
+
+                // Empty space - continue
+                if (steps >= 99) {
+                    e.laserPath.push({ x: cx, y: cy, type: 'NONE' });
+                }
+            }
+            
+            // Set laserTarget for AudioSys hit detection
+            if (e.laserPath && e.laserPath.length > 0) {
+                e.laserTarget = e.laserPath[e.laserPath.length - 1];
+            } else {
+                e.laserTarget = null;
+            }
+        }
+
+        // Trigger energy update if ANY catalyst or prism status changed this frame
+        // to ensure components like doors react immediately to lasers.
+        const currentActive = this.catalysts.map(c => c.active);
+        const currentPrisms = this.blocks.filter(b => b.type === 'PRISM').map(b => b.isHit);
+        
+        let needsUpdate = false;
+        if (!this._lastCatStates || this._lastCatStates.length !== currentActive.length) {
+            needsUpdate = true;
+        } else {
+            for (let i = 0; i < currentActive.length; i++) {
+                if (currentActive[i] !== this._lastCatStates[i]) { needsUpdate = true; break; }
+            }
+        }
+        
+        if (!needsUpdate) {
+            if (!this._lastPrismStates || this._lastPrismStates.length !== currentPrisms.length) {
+                needsUpdate = true;
+            } else {
+                for (let i = 0; i < currentPrisms.length; i++) {
+                    if (currentPrisms[i] !== this._lastPrismStates[i]) { needsUpdate = true; break; }
+                }
+            }
+        }
+
+        if (needsUpdate) {
+            this.updateEnergy();
+        }
+        
+        this._lastCatStates = currentActive;
+        this._lastPrismStates = currentPrisms;
+    }
+
+    getPrismReflection(block, dx, dy) {
+        // Only active if rotation is almost finished
+        const targetAngle = block.dir * (Math.PI / 2);
+        const currentAngle = block.visualAngle !== undefined ? block.visualAngle : targetAngle;
+        
+        let diff = Math.abs(currentAngle - targetAngle);
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        if (Math.abs(diff) > 0.1) return null;
+
+        // dx, dy is the laser direction
+        // entryDir is where the laser is coming from relative to the block
+        const entrySide = this.getDirectionFromVector(-dx, -dy);
+        
+        // ┏ (dir 1): Reflects Left <-> Down
+        if (block.dir === 1) {
+            if (entrySide === DIRS.LEFT) return { dx: 0, dy: 1 }; 
+            if (entrySide === DIRS.DOWN) return { dx: -1, dy: 0 };
+        }
+        // ┗ (dir 2): Reflects Left <-> Up
+        if (block.dir === 2) {
+            if (entrySide === DIRS.LEFT) return { dx: 0, dy: -1 };
+            if (entrySide === DIRS.UP) return { dx: -1, dy: 0 };
+        }
+        // ┛ (dir 3): Reflects Right <-> Up
+        if (block.dir === 3) {
+            if (entrySide === DIRS.RIGHT) return { dx: 0, dy: -1 };
+            if (entrySide === DIRS.UP) return { dx: 1, dy: 0 };
+        }
+        // ┓ (dir 0): Reflects Right <-> Down
+        if (block.dir === 0) {
+            if (entrySide === DIRS.RIGHT) return { dx: 0, dy: 1 };
+            if (entrySide === DIRS.DOWN) return { dx: 1, dy: 0 };
+        }
+        
+        return null; // Blocked
+    }
+
+    getDirectionFromVector(dx, dy) {
+        if (dx === 1) return DIRS.RIGHT;
+        if (dx === -1) return DIRS.LEFT;
+        if (dy === 1) return DIRS.DOWN;
+        if (dy === -1) return DIRS.UP;
+        return -1;
     }
 
     updateEnergy() {
@@ -1536,6 +1805,10 @@ class GameState {
             this.poweredWires.clear();
             this.poweredBlocks.clear();
             this.poweredTargets.clear();
+            this.poweredDoors.clear();
+            this.poweredStations.clear();
+            this.poweredForbiddens.clear();
+            this.isStationPowered = false;
 
             // Pass 1: Standard trace from all sources to find validity
             const startAll = (forceOceanMap) => {
@@ -1561,6 +1834,18 @@ class GameState {
                         else if (d === DIRS.LEFT) snx--;
                         else if (d === DIRS.RIGHT) snx++;
                         trace(snx, sny, d, 'RED', 0, [], false, true);
+                    }
+                }
+                for (const cat of this.catalysts) {
+                    if (cat.active) {
+                        for (let d of [DIRS.UP, DIRS.RIGHT, DIRS.DOWN, DIRS.LEFT]) {
+                            let snx = cat.x, sny = cat.y;
+                            if (d === DIRS.UP) sny--;
+                            else if (d === DIRS.DOWN) sny++;
+                            else if (d === DIRS.LEFT) snx--;
+                            else if (d === DIRS.RIGHT) snx++;
+                            trace(snx, sny, d, 'BLUE', 100, [], true, true);
+                        }
                     }
                 }
                 for (const t of relaySources) {
@@ -1856,10 +2141,8 @@ class GameState {
         if (this.isEditor) return;
         if (!this.levelData || !this.levelData.dialogues) return;
         
-        const key = triggerType === 'start' ? null : `${this.player.x},${this.player.y}`;
-        
         for (const [coord, data] of Object.entries(this.levelData.dialogues)) {
-            // Support: 1. Array of messages, 2. Object with messages property, 3. Single message object
+            // Support formats
             let messages = [];
             let config = {};
 
@@ -1876,30 +2159,46 @@ class GameState {
 
             if (messages.length === 0) continue;
 
-            const first = messages[0];
-            const dialogueId = `${triggerType}_${coord}_${first.text.substring(0,10)}`;
-            if (this.triggeredDialogues.has(dialogueId)) continue;
+            const trigger = config.trigger || messages[0].trigger || 'walk';
+            if (trigger !== triggerType) continue;
 
-            const trigger = config.trigger || first.trigger || 'walk';
+            // Spatial check
+            const [tx, ty] = coord.split(',').map(Number);
+            const radius = config.radius || 0;
+            const dist = Math.abs(this.player.x - tx) + Math.abs(this.player.y - ty);
+            const isInside = (triggerType === 'start') ? true : (dist <= radius);
 
-            if (trigger === triggerType) {
-                if (triggerType === 'start' || coord === key) {
-                    const target = this.getDialogueTarget();
-                    if (window.Dialogue) {
-                        this.triggeredDialogues.add(dialogueId);
-                        
-                        messages.forEach(msg => {
-                            Dialogue.show(target, {
-                                text: msg.text,
-                                icon: msg.icon || 'central',
-                                isAI: msg.icon !== 'human',
-                                autoDismiss: config.autoDismiss !== false,
-                                lockPlayer: config.lockPlayer !== false,
-                                dismissDelay: config.dismissDelay || 1500
-                            });
+            const dialogueId = `${triggerType}_${coord}_${messages[0].text.substring(0,10)}`;
+            const isOneShot = config.oneShot !== false; // Default to oneShot: true
+
+            if (isInside) {
+                // If oneShot and already triggered, skip
+                if (isOneShot && this.triggeredDialogues.has(dialogueId)) continue;
+                
+                // If not oneShot, we trigger only if we were NOT inside previously (entering)
+                // or if it was never triggered at all.
+                if (!isOneShot && this.triggeredDialogues.has(dialogueId)) continue;
+
+                const target = this.getDialogueTarget();
+                if (window.Dialogue) {
+                    this.triggeredDialogues.add(dialogueId);
+                    
+                    messages.forEach(msg => {
+                        Dialogue.show(target, {
+                            text: msg.text,
+                            icon: msg.icon || 'central',
+                            isAI: msg.icon !== 'human',
+                            autoDismiss: config.autoDismiss !== false,
+                            lockPlayer: config.lockPlayer !== false,
+                            dismissDelay: config.dismissDelay || 1500
                         });
-                    }
-                    if (triggerType === 'walk') break; 
+                    });
+                }
+                if (triggerType === 'walk' && radius === 0) break; 
+            } else {
+                // If player is OUTSIDE and it's NOT a oneShot, reset the trigger so it can fire again upon re-entry
+                if (!isOneShot && this.triggeredDialogues.has(dialogueId)) {
+                    this.triggeredDialogues.delete(dialogueId);
                 }
             }
         }

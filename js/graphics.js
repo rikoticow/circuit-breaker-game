@@ -999,17 +999,106 @@ const Graphics = {
         
         // Side glowing edges (If open or opening)
         if (openPct > 0) {
+            this.ctx.save();
+            this.ctx.globalAlpha = openPct * 0.5;
             this.ctx.shadowColor = '#00f0ff';
             this.ctx.shadowBlur = 10;
-            this.ctx.fillStyle = '#00f0ff';
-            // Edge that faces the opening
-            if (side === 'LEFT') this.ctx.fillRect(ts - 2, 0, 2, ts);
-            else if (side === 'RIGHT') this.ctx.fillRect(0, 0, 2, ts);
-            else if (side === 'TOP') this.ctx.fillRect(0, ts - 2, ts, 2);
-            else if (side === 'BOTTOM') this.ctx.fillRect(0, 0, ts, 2);
-            this.ctx.shadowBlur = 0;
+            this.ctx.strokeStyle = '#00f0ff';
+            this.ctx.lineWidth = 4;
+            
+            this.ctx.beginPath();
+            if (side === 'LEFT' || side === 'RIGHT') {
+                this.ctx.moveTo(0, 0); this.ctx.lineTo(0, ts);
+                this.ctx.moveTo(ts, 0); this.ctx.lineTo(ts, ts);
+            } else {
+                this.ctx.moveTo(0, 0); this.ctx.lineTo(ts, 0);
+                this.ctx.moveTo(0, ts); this.ctx.lineTo(ts, ts);
+            }
+            this.ctx.stroke();
+            this.ctx.restore();
         }
+        this.ctx.restore();
+    },
 
+    drawCatalyst(x, y, active, frame) {
+        const px = x * this.tileSize;
+        const py = y * this.tileSize;
+        const ts = this.tileSize;
+        const cx = px + ts/2;
+        const cy = py + ts/2;
+
+        this.ctx.save();
+
+        // 1. Industrial Base
+        this.ctx.fillStyle = '#3a3a4a';
+        this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+        
+        // Glowing Border (Always visible for clarity)
+        this.ctx.strokeStyle = active ? '#00f0ff' : '#5a5a6a';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(px + 3, py + 3, ts - 6, ts - 6);
+        
+        // Corner details (Darker)
+        this.ctx.fillStyle = '#1a1a2a';
+        this.ctx.fillRect(px + 2, py + 2, 8, 8);
+        this.ctx.fillRect(px + ts - 10, py + 2, 8, 8);
+        this.ctx.fillRect(px + 2, py + ts - 10, 8, 8);
+        this.ctx.fillRect(px + ts - 10, py + ts - 10, 8, 8);
+
+        // 2. Output Ports (4 directions)
+        this.ctx.fillStyle = active ? '#00f0ff' : '#1a1a1a';
+        const portW = 8;
+        const portH = 4;
+        // Top
+        this.ctx.fillRect(cx - portW/2, py, portW, portH);
+        // Bottom
+        this.ctx.fillRect(cx - portW/2, py + ts - portH, portW, portH);
+        // Left
+        this.ctx.fillRect(px, cy - portW/2, portH, portW);
+        // Right
+        this.ctx.fillRect(px + ts - portH, cy - portW/2, portH, portW);
+
+        // 3. Central Quantum Core
+        this.ctx.save();
+        if (active) {
+            this.ctx.shadowColor = '#00f0ff';
+            this.ctx.shadowBlur = 10 + Math.sin(frame * 0.1) * 5;
+            this.ctx.fillStyle = '#00f0ff';
+        } else {
+            this.ctx.fillStyle = '#1a1a1a';
+        }
+        
+        // Draw octagon/diamond core
+        this.ctx.beginPath();
+        const r = 8;
+        this.ctx.moveTo(cx, cy - r - 2);
+        this.ctx.lineTo(cx + r, cy - r);
+        this.ctx.lineTo(cx + r + 2, cy);
+        this.ctx.lineTo(cx + r, cy + r);
+        this.ctx.lineTo(cx, cy + r + 2);
+        this.ctx.lineTo(cx - r, cy + r);
+        this.ctx.lineTo(cx - r - 2, cy);
+        this.ctx.lineTo(cx - r, cy - r);
+        this.ctx.closePath();
+        this.ctx.fill();
+        
+        if (active) {
+            // Internal energy swirl
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 1;
+            this.ctx.globalAlpha = 0.6;
+            this.ctx.beginPath();
+            const angle = frame * 0.1;
+            this.ctx.arc(cx, cy, 5, angle, angle + Math.PI);
+            this.ctx.stroke();
+            
+            // Random sparks
+            if (Math.random() > 0.8) {
+                this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, '#00f0ff', 'spark');
+            }
+        }
+        
+        this.ctx.restore();
         this.ctx.restore();
     },
 
@@ -1274,6 +1363,206 @@ const Graphics = {
         this.ctx.restore();
     },
 
+    drawEmitter(x, y, dir, frame) {
+        const px = x * this.tileSize;
+        const py = y * this.tileSize;
+        const ts = this.tileSize;
+        
+        this.ctx.save();
+        this.ctx.translate(px + ts/2, py + ts/2);
+        this.ctx.rotate(dir * Math.PI/2);
+        
+        // --- 1. BASE (Barrel mount) ---
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 14, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // --- 2. BARREL BODY (Metallic cylinder) ---
+        const grad = this.ctx.createLinearGradient(0, -12, 0, 12);
+        grad.addColorStop(0, '#2d3436');
+        grad.addColorStop(0.5, '#636e72');
+        grad.addColorStop(1, '#2d3436');
+        
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(-12, -10, 24, 20);
+        
+        // Metal rings
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(-12, -10, 24, 20);
+        this.ctx.strokeRect(-4, -10, 8, 20);
+        
+        // --- 3. FRONT MUZZLE ---
+        this.ctx.fillStyle = '#34495e';
+        this.ctx.fillRect(8, -12, 6, 24);
+        this.ctx.strokeRect(8, -12, 6, 24);
+        
+        // Interior glow (Muzzle energy)
+        const muzzleGlow = 0.6 + Math.sin(frame * 0.4) * 0.3;
+        this.ctx.fillStyle = `rgba(191, 0, 255, ${muzzleGlow})`;
+        this.ctx.fillRect(10, -6, 4, 12);
+        
+        // Extra bloom at the very tip
+        this.ctx.shadowBlur = 15;
+        this.ctx.shadowColor = '#bf00ff';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.beginPath();
+        this.ctx.arc(14, 0, 3 + Math.sin(frame * 0.5) * 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // --- 4. BACK CAP ---
+        this.ctx.shadowBlur = 0;
+        this.ctx.fillStyle = '#2c3e50';
+        this.ctx.fillRect(-14, -8, 2, 16);
+        
+        this.ctx.restore();
+    },
+
+    drawLaser(e, frame) {
+        if (!e.laserPath || e.laserPath.length < 2) return;
+
+        const ts = this.tileSize;
+        const pixelPath = [];
+
+        // 1. Calculate Pixel Path
+        for (let i = 0; i < e.laserPath.length; i++) {
+            const node = e.laserPath[i];
+            let px = node.x * ts + 16;
+            let py = node.y * ts + 16;
+
+            if (i === 0) {
+                // Emitter start offset
+                let ox = 0, oy = 0;
+                if (e.dir === DIRS.RIGHT) ox = 14;
+                else if (e.dir === DIRS.LEFT) ox = -14;
+                else if (e.dir === DIRS.UP) oy = -14;
+                else if (e.dir === DIRS.DOWN) oy = 14;
+                px = node.x * ts + 16 + ox;
+                py = node.y * ts + 16 + oy;
+            } else if (i === e.laserPath.length - 1) {
+                // Final hit point (refine to edge)
+                const prev = e.laserPath[i-1];
+                const dx = node.x - prev.x;
+                const dy = node.y - prev.y;
+                const edgeOffset = 2;
+                
+                if (dx > 0) px = node.x * ts - edgeOffset;
+                else if (dx < 0) px = (node.x + 1) * ts + edgeOffset;
+                else if (dy > 0) py = node.y * ts - edgeOffset;
+                else if (dy < 0) py = (node.y + 1) * ts + edgeOffset;
+            }
+            // Prism nodes hit the center (no adjustment needed)
+            
+            pixelPath.push({ x: px, y: py });
+        }
+
+        this.ctx.save();
+        
+        // COMMON VALUES
+        const flicker = (Math.random() - 0.5) * 10;
+        const beamIntensity = 0.4 + Math.random() * 0.4;
+        const targetNode = e.laserPath[e.laserPath.length - 1];
+
+        // --- LAYER 1: CHAOTIC OUTER GLOW ---
+        this.ctx.shadowBlur = 15 + Math.random() * 10;
+        this.ctx.shadowColor = '#bf00ff';
+        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.1 * beamIntensity})`;
+        this.ctx.lineWidth = 35 + flicker;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
+        for (let i = 1; i < pixelPath.length; i++) {
+            this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
+        }
+        this.ctx.stroke();
+
+        // --- LAYER 2: ELECTRIC ARCS (Chaotic segments) ---
+        this.ctx.strokeStyle = `rgba(230, 180, 255, ${0.8 * beamIntensity})`;
+        this.ctx.lineWidth = 2;
+        this.ctx.shadowBlur = 0;
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
+        
+        for (let i = 0; i < pixelPath.length - 1; i++) {
+            const start = pixelPath[i];
+            const end = pixelPath[i+1];
+            const segments = 8;
+            const sdx = (end.x - start.x) / segments;
+            const sdy = (end.y - start.y) / segments;
+            const isVert = Math.abs(end.x - start.x) < 1;
+
+            for (let j = 1; j < segments; j++) {
+                const jitter = (Math.random() - 0.5) * 12;
+                const jx = start.x + sdx * j + (isVert ? jitter : 0);
+                const jy = start.y + sdy * j + (!isVert ? jitter : 0);
+                this.ctx.lineTo(jx, jy);
+            }
+            this.ctx.lineTo(end.x, end.y);
+        }
+        this.ctx.stroke();
+
+        // --- LAYER 3: MAIN BEAM (Core energy) ---
+        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.6 * beamIntensity})`;
+        this.ctx.lineWidth = 14 + (Math.random() - 0.5) * 6;
+        this.ctx.beginPath();
+        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
+        for (let i = 1; i < pixelPath.length; i++) {
+            this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
+        }
+        this.ctx.stroke();
+
+        // --- LAYER 4: WHITE HOT CORE ---
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 4 + (Math.random() - 0.5) * 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
+        for (let i = 1; i < pixelPath.length; i++) {
+            this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
+        }
+        this.ctx.stroke();
+
+        // --- LAYER 5: IMPACT FLARE & SPARKS ---
+        if (targetNode.type !== 'NONE') {
+            const tx = pixelPath[pixelPath.length - 1].x;
+            const ty = pixelPath[pixelPath.length - 1].y;
+            
+            // Flare
+            const flareSize = 10 + Math.random() * 15;
+            const grad = this.ctx.createRadialGradient(tx, ty, 0, tx, ty, flareSize);
+            grad.addColorStop(0, '#fff');
+            grad.addColorStop(0.3, 'rgba(191, 0, 255, 0.8)');
+            grad.addColorStop(1, 'rgba(191, 0, 255, 0)');
+            
+            this.ctx.fillStyle = grad;
+            this.ctx.beginPath();
+            this.ctx.arc(tx, ty, flareSize, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Sparks
+            if (frame % 2 === 0) {
+                this.spawnParticle(tx, ty, '#bf00ff', 'spark');
+                if (Math.random() > 0.5) this.spawnParticle(tx, ty, '#ffffff', 'spark');
+            }
+
+            // Impact Rays
+            this.ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            this.ctx.lineWidth = 1;
+            for(let i=0; i<6; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const l = 5 + Math.random() * 15;
+                this.ctx.beginPath();
+                this.ctx.moveTo(tx, ty);
+                this.ctx.lineTo(tx + Math.cos(ang)*l, ty + Math.sin(ang)*l);
+                this.ctx.stroke();
+            }
+        }
+
+        this.ctx.restore();
+    },
 
     drawHUD(game) {
         // Draw Result Vignette (Red for death/gameOver, Green for win)
@@ -1507,13 +1796,110 @@ const Graphics = {
         ctx.stroke();
     },
 
-    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0) {
+    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL') {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
         const cx = px + ts/2;
         const cy = py + ts/2;
         
+        if (type === 'PRISM' || type === 'prism') {
+            // --- PRISMATIC INDUSTRIAL BLOCK ---
+            let isHit = false;
+            if (window.game && window.game.blocks) {
+                const block = window.game.blocks.find(b => (b.visualX === x || b.x === x) && (b.visualY === y || b.y === y));
+                if (block) isHit = block.isHit;
+            }
+
+            this.ctx.save();
+            
+            // 1. Industrial Dark Metal Base
+            this.ctx.fillStyle = '#3a3a4a';
+            this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+            
+            // 2. Corner Plates (Industrial Blue/Steel instead of Orange to differentiate)
+            this.ctx.fillStyle = '#4a5568';
+            const cs = 8;
+            this.ctx.fillRect(px + 2, py + 2, cs, cs); // TL
+            this.ctx.fillRect(px + ts - cs - 2, py + 2, cs, cs); // TR
+            this.ctx.fillRect(px + 2, py + ts - cs - 2, cs, cs); // BL
+            this.ctx.fillRect(px + ts - cs - 2, py + ts - cs - 2, cs, cs); // BR
+
+            // 3. Central Crystal "Window"
+            const winMargin = 6;
+            this.ctx.fillStyle = 'rgba(20, 25, 40, 0.9)'; // Deep Crystal Background
+            this.ctx.fillRect(px + winMargin, py + winMargin, ts - winMargin*2, ts - winMargin*2);
+            
+            // Crystal Bevels
+            this.ctx.strokeStyle = 'rgba(100, 150, 255, 0.3)';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(px + winMargin, py + winMargin, ts - winMargin*2, ts - winMargin*2);
+
+            // 4. INTERNAL MIRROR CORE (The Deflector)
+            this.ctx.save();
+            this.ctx.translate(cx, cy);
+            
+            // Use visualAngle for smooth interpolated rotation of the mirror only
+            const mirrorRotation = visualAngle !== undefined ? visualAngle : (logicalDir * (Math.PI / 2));
+            this.ctx.rotate(mirrorRotation);
+            
+            // 3.5 Black Mirror Backing (Non-reflective side)
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = isHit ? 9 : 6;
+            this.ctx.beginPath();
+            this.ctx.moveTo(8, -12);
+            this.ctx.lineTo(-12, 8);
+            this.ctx.stroke();
+
+            // 4. Reflective Mirror Line (The surface)
+            if (isHit) {
+                // Progressive Rainbow Glow
+                const hue = (Date.now() / 10) % 360;
+                const grad = this.ctx.createLinearGradient(12, -12, -12, 12);
+                grad.addColorStop(0, `hsl(${hue}, 100%, 70%)`);
+                grad.addColorStop(0.5, `hsl(${(hue + 60) % 360}, 100%, 80%)`);
+                grad.addColorStop(1, `hsl(${(hue + 120) % 360}, 100%, 70%)`);
+                
+                this.ctx.strokeStyle = grad;
+                this.ctx.lineWidth = 5;
+                this.ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+                this.ctx.shadowBlur = 12; // Reduced blur to keep black line visible
+            } else {
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 3;
+            }
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(10, -10);
+            this.ctx.lineTo(-10, 10);
+            this.ctx.stroke();
+
+            // Reset shadow so it doesn't bleed into other elements
+            this.ctx.shadowBlur = 0;
+
+            if (isHit) {
+                // Particle sparks inside the crystal window
+                if (Math.random() > 0.8) {
+                    const sparkHue = (Date.now() / 10) % 360;
+                    this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, `hsl(${sparkHue}, 100%, 75%)`, 'spark');
+                }
+            }
+            
+            this.ctx.restore();
+            
+            // Bolts (Industrial detail)
+            this.ctx.fillStyle = '#1a1a1a';
+            const bs = 2;
+            this.ctx.fillRect(px + 4, py + 4, bs, bs);
+            this.ctx.fillRect(px + ts - 6, py + 4, bs, bs);
+            this.ctx.fillRect(px + 4, py + ts - 6, bs, bs);
+            this.ctx.fillRect(px + ts - 6, py + ts - 6, bs, bs);
+
+            this.ctx.restore();
+            return;
+        }
+
+        // --- STANDARD METAL BLOCK ---
         // 1. Dark Metal Base
         this.ctx.fillStyle = '#3a3a4a';
         this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
