@@ -101,6 +101,84 @@ const Graphics = {
         this.ctx.stroke();
     },
 
+    drawHole(x, y, neighbors = 0) {
+        const px = x * this.tileSize;
+        const py = y * this.tileSize;
+        const ts = this.tileSize;
+
+        // 1. TOTAL VOID
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(px, py, ts, ts);
+
+        // Neighbors bitmask: 1: Up, 2: Right, 4: Down, 8: Left
+        const hasUp = neighbors & 1;
+        const hasRight = neighbors & 2;
+        const hasDown = neighbors & 4;
+        const hasLeft = neighbors & 8;
+
+        // 2. LAYERED ORGANIC RIMS (High detail, varied distortion)
+        const layers = [
+            { color: '#2a2a35', width: 2.5, intensity: 3.0, seed: 123, offset: 0.5 }, 
+            { color: '#3b3b4a', width: 1.5, intensity: 2.0, seed: 456, offset: 1.0 }, 
+            { color: '#15151a', width: 0.8, intensity: 4.5, seed: 789, offset: 0.0 },
+            { color: '#0a0a0f', width: 2.0, intensity: 1.5, seed: 321, offset: 1.5 }
+        ];
+
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineCap = 'round';
+
+        layers.forEach(layer => {
+            this.ctx.strokeStyle = layer.color;
+            this.ctx.lineWidth = layer.width;
+            
+            // Multi-octave jitter for a more "cracked" edge
+            const jitter = (s, i) => {
+                const noise = Math.sin(s * 11.0 + layer.seed) * 0.6 + 
+                              Math.sin(s * 27.0 + layer.seed) * 0.3 +
+                              Math.sin(s * 53.0 + layer.seed) * 0.1;
+                return Math.max(0, noise * i);
+            };
+
+            this.ctx.beginPath();
+            
+            // TOP
+            if (!hasUp) {
+                this.ctx.moveTo(px, py + layer.offset + jitter(x, layer.intensity));
+                for (let i = 2; i <= ts; i += 2) {
+                    this.ctx.lineTo(px + i, py + layer.offset + jitter(x + i/ts, layer.intensity));
+                }
+            }
+
+            // RIGHT
+            if (!hasRight) {
+                const startY = hasUp ? py : py + layer.offset;
+                this.ctx.moveTo(px + ts - layer.offset - jitter(y, layer.intensity), startY);
+                for (let i = 2; i <= ts; i += 2) {
+                    this.ctx.lineTo(px + ts - layer.offset - jitter(y + i/ts, layer.intensity), py + i);
+                }
+            }
+
+            // BOTTOM
+            if (!hasDown) {
+                const startX = hasRight ? px + ts : px + ts - layer.offset;
+                this.ctx.moveTo(startX, py + ts - layer.offset - jitter(x + 1, layer.intensity));
+                for (let i = ts; i >= 0; i -= 2) {
+                    this.ctx.lineTo(px + i, py + ts - layer.offset - jitter(x + i/ts, layer.intensity));
+                }
+            }
+            // LEFT
+            if (!hasLeft) {
+                const startY = hasDown ? py + ts : py + ts - layer.offset;
+                this.ctx.moveTo(px + layer.offset + jitter(y + 1, layer.intensity), startY);
+                for (let i = ts; i >= 0; i -= 2) {
+                    this.ctx.lineTo(px + layer.offset + jitter(y + i/ts, layer.intensity), py + i);
+                }
+            }
+
+            this.ctx.stroke();
+        });
+    },
+
     drawCeiling(x, y) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
@@ -125,25 +203,30 @@ const Graphics = {
         this.ctx.fillRect(px + ts/2 - 2, py + ts/2 - 2, 4, 4);
     },
 
-    drawConveyor(x, y, dir, frame, inDir = null, beltDist = 0, beltLength = 10, isActive = true) {
+    drawConveyor(x, y, dir, frame, inDir = null, beltDist = 0, beltLength = 10, isActive = true, overHole = false) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
         
-        // 1. BASE (Belt track)
-        this.ctx.fillStyle = isActive ? '#222831' : '#1a1e24';
-        this.ctx.fillRect(px, py, ts, ts);
-        
-        // 2. Animated Belt Texture (Lines moving)
-        this.ctx.strokeStyle = isActive ? '#393e46' : '#22262b';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        const offset = isActive ? ((frame * 0.8) % 12) : 0;
-        
         const isCorner = inDir !== null && inDir !== dir;
 
+        // 1. BASE (Belt track) - Unified Color
+        this.ctx.fillStyle = isActive ? '#2c3440' : '#1e252e';
+        
         if (!isCorner) {
-            // Straight belt logic
+            // Straight belt logic: Background only between rails (28px wide)
+            if (dir === DIRS.LEFT || dir === DIRS.RIGHT) {
+                this.ctx.fillRect(px, py + 4, ts, ts - 8);
+            } else {
+                this.ctx.fillRect(px + 4, py, ts - 8, ts);
+            }
+
+            // 2. Animated Belt Texture (Lines moving)
+            this.ctx.strokeStyle = isActive ? 'rgba(100, 150, 255, 0.4)' : 'rgba(70, 80, 90, 0.3)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            const offset = isActive ? ((frame * 0.8) % 12) : 0;
+
             if (dir === DIRS.LEFT || dir === DIRS.RIGHT) {
                 for (let i = -12; i < ts + 12; i += 12) {
                     const ox = i + (dir === DIRS.RIGHT ? offset : -offset);
@@ -161,6 +244,7 @@ const Graphics = {
                     }
                 }
             }
+            this.ctx.stroke();
         } else {
             // Corner logic (Curved lines)
             this.ctx.save();
@@ -176,24 +260,50 @@ const Graphics = {
             else if (inDir === DIRS.LEFT && dir === DIRS.DOWN) { this.ctx.rotate(Math.PI); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.DOWN && dir === DIRS.RIGHT) { this.ctx.rotate(Math.PI/2); this.ctx.scale(1, -1); }
 
-            // Animate corner using line dash offset
-            if (isActive) {
-                this.ctx.setLineDash([4, 8]);
-                this.ctx.lineDashOffset = (frame * 0.8);
-            }
+            // DRAW CURVED TRACK BACKGROUND (Between rails: Radius 2 to Radius 30)
+            this.ctx.beginPath();
+            this.ctx.arc(-ts/2, ts/2, ts - 2, -Math.PI/2, 0);
+            this.ctx.arc(-ts/2, ts/2, 2, 0, -Math.PI/2, true);
+            this.ctx.closePath();
+            this.ctx.fill();
 
-            for (let r = 8; r < ts; r += 10) {
-                this.ctx.beginPath();
-                this.ctx.arc(-ts/2, ts/2, r, -Math.PI/2, 0);
-                this.ctx.stroke();
+            // 2. Animated Belt Texture
+            this.ctx.strokeStyle = isActive ? 'rgba(100, 150, 255, 0.4)' : 'rgba(70, 80, 90, 0.3)';
+            this.ctx.lineWidth = 1;
+
+            if (isActive) {
+                const angStep = 0.75; 
+                const angOffset = (frame * 0.05) % angStep;
+
+                for (let a = -Math.PI/2 - angStep; a <= 0 + angStep; a += angStep) {
+                    const angle = a + angOffset;
+                    if (angle >= -Math.PI/2 && angle <= 0) {
+                        const cos = Math.cos(angle);
+                        const sin = Math.sin(angle);
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-ts/2 + cos * 4, ts/2 + sin * 4);
+                        this.ctx.lineTo(-ts/2 + cos * (ts - 4), ts/2 + sin * (ts - 4));
+                        this.ctx.stroke();
+                    }
+                }
+            } else {
+                const angStep = 0.75;
+                for (let a = -Math.PI/2; a <= 0; a += angStep) {
+                    const cos = Math.cos(a);
+                    const sin = Math.sin(a);
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(-ts/2 + cos * 4, ts/2 + sin * 4);
+                    this.ctx.lineTo(-ts/2 + cos * (ts - 4), ts/2 + sin * (ts - 4));
+                    this.ctx.stroke();
+                }
             }
-            this.ctx.setLineDash([]); // Reset
             this.ctx.restore();
         }
-        this.ctx.stroke();
 
         // 3. Side Rails
-        this.ctx.fillStyle = isActive ? '#3a4452' : '#2a3442';
+        const railColor = isActive ? '#4a5568' : '#2d3748';
+        this.ctx.fillStyle = railColor;
+
         if (!isCorner) {
             if (dir === DIRS.LEFT || dir === DIRS.RIGHT) {
                 this.ctx.fillRect(px, py, ts, 4); 
@@ -213,7 +323,8 @@ const Graphics = {
             else if (inDir === DIRS.UP && dir === DIRS.LEFT) { this.ctx.rotate(-Math.PI/2); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.LEFT && dir === DIRS.DOWN) { this.ctx.rotate(Math.PI); this.ctx.scale(1, -1); }
             else if (inDir === DIRS.DOWN && dir === DIRS.RIGHT) { this.ctx.rotate(Math.PI/2); this.ctx.scale(1, -1); }
-            this.ctx.strokeStyle = isActive ? '#3a4452' : '#2a3442';
+            
+            this.ctx.strokeStyle = railColor;
             this.ctx.lineWidth = 4;
             this.ctx.beginPath();
             this.ctx.arc(-ts/2, ts/2, ts - 2, -Math.PI/2, 0);
@@ -1262,13 +1373,10 @@ const Graphics = {
         this.drawButton(x, y, isPressed, isToggle ? 'TOGGLE' : 'PRESSURE');
     },
 
-    drawQuantumFloor(x, y, isActive, frame, flashTimer = 0, intensity = 1.0, entrySide = null, whiteGlow = 0) {
+    drawQuantumFloor(x, y, isActive, frame, flashTimer = 0, intensity = 1.0, entrySide = null, whiteGlow = 0, overHole = false) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
-
-        // Base floor
-        this.drawFloor(x, y);
 
         this.ctx.save();
         if (isActive) {
@@ -1796,13 +1904,26 @@ const Graphics = {
         ctx.stroke();
     },
 
-    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL') {
-        const px = x * this.tileSize;
-        const py = y * this.tileSize;
+    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL', fallProgress = 0) {
         const ts = this.tileSize;
-        const cx = px + ts/2;
-        const cy = py + ts/2;
+        const cx = (x + 0.5) * ts;
+        const cy = (y + 0.5) * ts;
+        const px = -ts / 2;
+        const py = -ts / 2;
         
+        this.ctx.save();
+        this.ctx.translate(cx, cy);
+
+        // --- FALL ANIMATION (Procedural Spin & Scale) ---
+        if (fallProgress > 0) {
+            const scale = Math.max(0, 1.0 - fallProgress);
+            const rot = fallProgress * Math.PI * 6;
+            this.ctx.scale(scale, scale);
+            this.ctx.rotate(rot);
+            this.ctx.globalAlpha = Math.max(0, 1.0 - fallProgress);
+            this.ctx.filter = `brightness(${Math.max(0, 100 - fallProgress * 150)}%)`;
+        }
+
         if (type === 'PRISM' || type === 'prism') {
             // --- PRISMATIC INDUSTRIAL BLOCK ---
             let isHit = false;
@@ -1837,7 +1958,8 @@ const Graphics = {
 
             // 4. INTERNAL MIRROR CORE (The Deflector)
             this.ctx.save();
-            this.ctx.translate(cx, cy);
+            // Already translated to cx, cy at start of drawBlock
+            
             
             // Use visualAngle for smooth interpolated rotation of the mirror only
             const mirrorRotation = visualAngle !== undefined ? visualAngle : (logicalDir * (Math.PI / 2));
@@ -1896,6 +2018,7 @@ const Graphics = {
             this.ctx.fillRect(px + ts - 6, py + ts - 6, bs, bs);
 
             this.ctx.restore();
+            this.ctx.restore(); // Final restore for the global save
             return;
         }
 
@@ -1930,7 +2053,7 @@ const Graphics = {
 
         // 5. Directional Indicator (Large Triangle)
         this.ctx.save();
-        this.ctx.translate(cx, cy);
+        // Already translated to cx, cy at start of drawBlock
         this.ctx.rotate(visualAngle); // Use interpolated visual angle for the arrow
         
         const isPowered = powerData !== null && powerData.active;
@@ -1983,6 +2106,8 @@ const Graphics = {
                 this.drawLightning(cx, cy, nextX, nextY, color);
             }
         }
+        
+        this.ctx.restore(); // Main save from start of drawBlock
     },
 
     drawDebris(p) {
@@ -2063,6 +2188,27 @@ const Graphics = {
 
         this.ctx.save();
         this.ctx.translate(cx, cy);
+
+        // --- FALL ANIMATION (HOLE) ---
+        if (isDead && deathType === 'HOLE') {
+            const progress = Math.min(1.0, deathTimer / 20); // Faster fall
+            const scale = Math.max(0, 1.0 - progress);
+            const rot = progress * Math.PI * 6; // More spin
+            
+            this.ctx.scale(scale, scale);
+            this.ctx.rotate(rot);
+            
+            // Fade and Darken
+            this.ctx.globalAlpha = Math.max(0, 1.0 - progress);
+            this.ctx.filter = `brightness(${Math.max(0, 100 - progress * 150)}%)`;
+        } else if (isDead) {
+            // For crushing deaths, we still want a bit of movement/fade, 
+            // but for BATTERY death we stay solid.
+            if (deathType === 'CRUSHED') {
+                this.ctx.translate(deathDir.x * deathTimer * 0.5, deathDir.y * deathTimer * 0.5);
+                this.ctx.globalAlpha = Math.max(0, 1 - deathTimer / 30);
+            }
+        }
 
         // Failure variables
         const isCrushed = isDead && deathType === 'CRUSHED';
@@ -2175,7 +2321,7 @@ const Graphics = {
             this.ctx.translate(Math.sin(tRaw)*1.2, Math.cos(tRaw)*1.2);
             this.ctx.rotate(tr * 0.03);
         }
-        this.ctx.fillStyle = isDead ? '#2a2a2a' : '#dd6b20'; 
+        this.ctx.fillStyle = '#dd6b20'; 
         this.ctx.fillRect(-8, -8, 14, 16);
         
         // Status LEDs (Off if dead)
@@ -2208,7 +2354,7 @@ const Graphics = {
         this.ctx.rotate(dir * Math.PI / 2 + (isCrushed ? tr * 0.2 : 0)); 
 
         // Head
-        this.ctx.fillStyle = isDead ? '#2a2a2a' : '#ed8936'; 
+        this.ctx.fillStyle = '#ed8936'; 
         this.ctx.fillRect(-2, -6, 12, 12);
         
         // Antenna

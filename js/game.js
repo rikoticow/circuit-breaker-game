@@ -248,7 +248,7 @@ class GameState {
             let row = [];
             for (let x = 0; x < mapW; x++) {
                 let c = charMap[y][x];
-                row.push((c === '#' || c === 'W' || c === 'Q') ? c : ' ');
+                row.push((c === '#' || c === 'W' || c === 'Q' || c === '*') ? c : ' ');
 
                 if (c === '@') {
                     this.player.x = x;
@@ -539,22 +539,67 @@ class GameState {
             }
         }
 
+        // --- HOLE COLLISION (DEATH) ---
+        if (!this.player.isDead) {
+            const px = Math.round(this.player.visualX);
+            const py = Math.round(this.player.visualY);
+            if (this.map[py] && this.map[py][px] === '*') {
+                const qf = this.quantumFloors.find(q => q.x === px && q.y === py);
+                const bridged = (qf && qf.active) || this.conveyors.some(cv => cv.x === px && cv.y === py && !cv.disabled);
+                if (!bridged) {
+                    // Only trigger death when sufficiently centered in the hole
+                    const distToCenter = Math.abs(this.player.visualX - px) + Math.abs(this.player.visualY - py);
+                    if (distToCenter < 0.1) {
+                        this.handleDeath(true, 'HOLE');
+                    }
+                }
+            }
+        }
+
         // Smooth block interpolation (Spring physics)
         const springForce = 0.4; 
         const damping = 0.5; 
-        for (let b of this.blocks) {
+        for (let i = this.blocks.length - 1; i >= 0; i--) {
+            let b = this.blocks[i];
             if (b.visualX === undefined) { 
                 b.visualX = b.x; 
                 b.visualY = b.y; 
                 b.vx = 0; 
                 b.vy = 0; 
             }
-            let ax = (b.x - b.visualX) * springForce;
-            let ay = (b.y - b.visualY) * springForce;
-            b.vx = (b.vx + ax) * damping;
-            b.vy = (b.vy + ay) * damping;
-            b.visualX += b.vx;
-            b.visualY += b.vy;
+
+            if (b.isFalling) {
+                b.fallTimer = (b.fallTimer || 0) + 0.05;
+                if (b.fallTimer >= 1.0) {
+                    this.blocks.splice(i, 1);
+                    continue;
+                }
+            } else {
+                // Check for hole
+                const bx = Math.round(b.visualX);
+                const by = Math.round(b.visualY);
+                if (this.map[by] && this.map[by][bx] === '*') {
+                    const qf = this.quantumFloors.find(q => q.x === bx && q.y === by);
+                    const bridged = (qf && qf.active) || this.conveyors.some(cv => cv.x === bx && cv.y === by && !cv.disabled);
+                    if (!bridged) {
+                        const distToCenter = Math.abs(b.visualX - bx) + Math.abs(b.visualY - by);
+                        const distToTarget = Math.abs(b.visualX - b.x) + Math.abs(b.visualY - b.y);
+                        // INVINCIBILITY: Only fall if we have reached our logical target tile
+                        if (distToCenter < 0.1 && distToTarget < 0.2) {
+                            b.isFalling = true;
+                            b.fallTimer = 0;
+                            if (window.AudioSys) AudioSys.playFall();
+                        }
+                    }
+                }
+
+                let ax = (b.x - b.visualX) * springForce;
+                let ay = (b.y - b.visualY) * springForce;
+                b.vx = (b.vx + ax) * damping;
+                b.vy = (b.vy + ay) * damping;
+                b.visualX += b.vx;
+                b.visualY += b.vy;
+            }
 
             // Smooth rotation (visualAngle lerp)
             if (b.visualAngle === undefined) b.visualAngle = b.dir * (Math.PI / 2);
@@ -1110,18 +1155,15 @@ class GameState {
 
         if (blocksToPush.length > 0) {
             // Check if every block in the chain can move to its next tile (e.g. not into a Quantum Floor)
-            // We pass the whole chain as ignored objects so they don't block each other
             const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy));
             
-            if (this.isTilePassable(scanX, scanY, [this.player, ...blocksToPush], dx, dy) && allBlocksCanMove) {
-
-
-
+            if (allBlocksCanMove) {
                 this.saveUndo();
                 for (let i = blocksToPush.length - 1; i >= 0; i--) {
                     blocksToPush[i].x += dx;
                     blocksToPush[i].y += dy;
                 }
+
                 this.player.x = nx;
                 this.player.y = ny;
                 AudioSys.push();
@@ -1141,6 +1183,17 @@ class GameState {
             if (qf && window.AudioSys) {
                 // Coordinate-based variation for "each tile" signature tone
                 AudioSys.playQuantumHum(false, (this.player.x + this.player.y) % 4);
+            }
+        } else {
+            // Check if it's a hole to fall into
+            const isHole = this.map[ny] && this.map[ny][nx] === '*';
+            if (isHole) {
+                const qf = this.quantumFloors.find(q => q.x === nx && q.y === ny);
+                const isBridged = (qf && qf.active) || this.conveyors.some(cv => cv.x === nx && cv.y === ny && !cv.disabled);
+                if (!isBridged) {
+                    this.handleDeath(true, 'HOLE');
+                    return;
+                }
             }
         }
 
@@ -1300,18 +1353,26 @@ class GameState {
         // Check player (unless player is the one moving)
         if (this.player.x === x && this.player.y === y && !ignores.includes(this.player)) return false;
         
-        // Check Quantum Floor (only for blocks)
-        if (!ignores.includes(this.player)) {
-            const qf = this.quantumFloors.find(q => q.x === x && q.y === y);
-            if (qf && qf.active) {
-                if (window.AudioSys) AudioSys.playQuantumHum(true, (x + y) % 4); // Signature tone for this tile
-                qf.entrySide = { dx: -dx, dy: -dy }; // Store entry side
-                this.triggerQuantumPulse(x, y, 1.0, 0, 0, new Set(), dx, dy); // Pulse the whole connected floor
+        // Check Hole (*) and Quantum Bridge interaction
+        const isHole = this.map[y][x] === '*';
+        const qf = this.quantumFloors.find(q => q.x === x && q.y === y);
+        
+        if (isHole) {
+            // 1. There is a Quantum Floor on it and it's active (Bridge is ON)
+            // 2. There is a conveyor on it (acting as a bridge)
+            const hasBridge = qf && qf.active;
+            const hasConveyor = this.conveyors.some(cv => cv.x === x && cv.y === y && !cv.disabled);
+            // Holes are now physically passable so entities can move INTO them and fall
+            return true;
+        } else if (qf && qf.active) {
+            // Standard Quantum Floor behavior: blocks movement when active (Barrier is UP)
+            if (!ignores.includes(this.player)) {
+                if (window.AudioSys) AudioSys.playQuantumHum(true, (x + y) % 4); 
+                qf.entrySide = { dx: -dx, dy: -dy }; 
+                this.triggerQuantumPulse(x, y, 1.0, 0, 0, new Set(), dx, dy);
                 return false;
             }
         }
-
-
 
         return true;
     }
@@ -1442,6 +1503,11 @@ class GameState {
                 }
             }
             this.updateEnergy();
+        } else {
+            // Holes and other hazards are now handled by the main update loop's visual proximity check
+            // to allow for smooth falling animations.
+            obj.x = nx;
+            obj.y = ny;
         }
     }
 
@@ -1962,7 +2028,7 @@ class GameState {
         }
     }
 
-    handleDeath(isHazard = false) {
+    handleDeath(isHazard = false, type = null) {
         if (this.transitionState !== 'NONE' || this.state === 'REVERSING' || this.state === 'GAMEOVER' || this.state === 'RESULT') return;
         
         this.resultTimer = 0; // Reset for flashing red vignette
@@ -1970,7 +2036,10 @@ class GameState {
         // Subtract life for BOTH cases now
         this.lives = Math.max(0, this.lives - 1);
         
-        if (isHazard) {
+        if (type === 'HOLE') {
+            if (window.AudioSys) AudioSys.playFall();
+            if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalDeaths', 1);
+        } else if (isHazard) {
             AudioSys.explosion();
             if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalDeaths', 1);
             
@@ -1986,7 +2055,7 @@ class GameState {
         }
 
         this.player.isDead = true;
-        this.player.deathType = isHazard ? 'CRUSHED' : 'SHUTDOWN';
+        this.player.deathType = type || (isHazard ? 'CRUSHED' : 'SHUTDOWN');
         this.player.deathTimer = 0;
         
         // Find an open direction for pieces to fly into

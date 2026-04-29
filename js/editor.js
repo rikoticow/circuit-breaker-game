@@ -22,7 +22,7 @@ window.game = {
 let hoveredChannel = null;
 
 const PALETTE = [
-    { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
+    { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
     { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
     { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
@@ -100,9 +100,10 @@ function createTilePreview(char) {
     const oldCtx = Graphics.ctx;
     Graphics.ctx = tCtx;
     
-    Graphics.drawFloor(0, 0);
+    if (char !== '*') Graphics.drawFloor(0, 0);
     if (char === '#') Graphics.drawCeiling(0, 0);
     else if (char === 'W') Graphics.drawWallFace(0, 0);
+    else if (char === '*') Graphics.drawHole(0, 0, animFrame);
     else if (char === '@') Graphics.drawRobot(0, 0, 1, 0);
     else if (char === 'K') Graphics.drawChargingStation(0, 0, true, animFrame);
     else if (['B'].includes(char)) Graphics.drawCore(0, 0, 'B', true);
@@ -549,7 +550,7 @@ function rebuildMock() {
         let row = [];
         for (let x = 0; x < w; x++) {
             let c = currentMap[y][x];
-            row.push(c === '#' ? '#' : ' ');
+            row.push((c === '#' || c === '*') ? c : ' ');
             
             if (c === '@') {
                 mockGame.player.x = x;
@@ -873,6 +874,34 @@ function setupEvents() {
         saveHistory();
         rebuildMock();
     };
+    
+    document.getElementById('btn-clear-channel').onclick = () => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) return;
+        
+        for (const target of editTargets) {
+            clearLinksAt(target.x, target.y);
+        }
+        
+        saveHistory();
+        rebuildMock();
+        updateChannelGrid();
+        
+        // Update UI val
+        document.getElementById('prop-channel').value = 0;
+        document.getElementById('prop-channel-val').innerText = '0';
+    };
+
+    function clearLinksAt(x, y) {
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) return;
+        const key = `${x},${y}`;
+        delete lvl.links[key];
+        delete lvl.links[`${key}_behavior`];
+        delete lvl.links[`${key}_init`];
+        delete lvl.links[`${key}_dir`];
+    }
 
     function updateChannelGrid() {
         const grid = document.getElementById('channel-grid');
@@ -1239,6 +1268,10 @@ function setupEvents() {
         const char = isEraser ? ' ' : selectedTile;
         
         if (currentTool === 'brush' || isEraser) {
+            // Clear links if we are erasing OR drawing something new over an existing tile
+            const currentActive = (activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap))[p.y][p.x];
+            if (isEraser || char !== currentActive) clearLinksAt(p.x, p.y);
+            
             if (activeLayer === 'base') currentMap[p.y][p.x] = char;
             else if (activeLayer === 'overlays') currentOverlayMap[p.y][p.x] = char;
             else if (activeLayer === 'events') {
@@ -1280,6 +1313,10 @@ function setupEvents() {
         if (isDrawing && (currentTool === 'brush' || currentTool === 'eraser')) {
             const isEraser = (e.buttons & 2 || currentTool === 'eraser');
             const char = isEraser ? ' ' : selectedTile;
+            
+            const currentActive = (activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap))[p.y][p.x];
+            if (isEraser || char !== currentActive) clearLinksAt(p.x, p.y);
+
             if (activeLayer === 'base') currentMap[p.y][p.x] = char;
             else if (activeLayer === 'overlays') currentOverlayMap[p.y][p.x] = char;
             else currentBlocksMap[p.y][p.x] = char;
@@ -1358,6 +1395,14 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
             Graphics.drawWallFace(x, y);
             ctx.restore();
             return;
+        } else if (c === '*') {
+            let mask = 0;
+            const map = currentMap;
+            if (y > 0 && map[y-1][x] === '*') mask |= 1;
+            if (x < map[0].length - 1 && map[y][x+1] === '*') mask |= 2;
+            if (y < map.length - 1 && map[y+1][x] === '*') mask |= 4;
+            if (x > 0 && map[y][x-1] === '*') mask |= 8;
+            Graphics.drawHole(x, y, mask);
         } else {
             Graphics.drawFloor(x, y);
         }
@@ -1395,7 +1440,8 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         // Find conveyor in mockGame to get inDir, beltDist and beltLength
         const conv = (window.game && window.game.conveyors) ? window.game.conveyors.find(cv => cv.x === x && cv.y === y) : null;
         const isActive = (window.game && conv) ? window.game.isConveyorActive(conv) : true;
-        Graphics.drawConveyor(x, y, dir, animFrame, conv ? conv.inDir : null, conv ? conv.beltDist : 0, conv ? conv.beltLength : 10, isActive);
+        const overHole = (window.game && window.game.map[y] && window.game.map[y][x] === '*');
+        Graphics.drawConveyor(x, y, dir, animFrame, conv ? conv.inDir : null, conv ? conv.beltDist : 0, conv ? conv.beltLength : 10, isActive, overHole);
     } else if (c === 'D') {
         const door = mockGame.doors ? mockGame.doors.find(d => d.x === x && d.y === y) : null;
         if (door) Graphics.drawDoor(x, y, door.state, door.error, animFrame, door.orientation, door.pair ? door.pair.side : null);
@@ -1417,7 +1463,7 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     } else if (c === 'M') {
         const block = mockGame.blocks ? mockGame.blocks.find(b => b.x === x && b.y === y) : null;
         const dir = block ? block.dir : 0;
-        Graphics.drawBlock(x, y, dir * (Math.PI / 2), null, 0, dir, 'PRISM');
+        Graphics.drawBlock(x, y, dir * (Math.PI / 2), null, 0, dir, (c === 'M' ? 'PRISM' : 'NORMAL'), 0);
     } else if (c === '💬') {
         ctx.fillStyle = '#00ff9f';
         ctx.font = '20px VT323';
@@ -1686,7 +1732,15 @@ function testLoop(timestamp) {
     const w = testGame.map[0].length;
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-            if (testGame.map[y][x] !== '#' && testGame.map[y][x] !== 'W') Graphics.drawFloor(x, y);
+            const c = testGame.map[y][x];
+            if (c === '*') {
+                let mask = 0;
+                if (y > 0 && testGame.map[y-1][x] === '*') mask |= 1;
+                if (x < w - 1 && testGame.map[y][x+1] === '*') mask |= 2;
+                if (y < h - 1 && testGame.map[y+1][x] === '*') mask |= 4;
+                if (x > 0 && testGame.map[y][x-1] === '*') mask |= 8;
+                Graphics.drawHole(x, y, mask);
+            } else if (c !== '#' && c !== 'W') Graphics.drawFloor(x, y);
         }
     }
 
@@ -1706,7 +1760,8 @@ function testLoop(timestamp) {
     }
     for (const c of testGame.conveyors) {
         const isActive = testGame.isConveyorActive(c);
-        Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength, isActive);
+        const overHole = (testGame.map[c.y] && testGame.map[c.y][c.x] === '*');
+        Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength, isActive, overHole);
     }
 
     // Pass 1.8: Lasers (Above overlays, below walls)
@@ -1758,7 +1813,7 @@ function testLoop(timestamp) {
     for (const b of testGame.blocks) {
         const power = testGame.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type);
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type, b.fallTimer || 0);
     }
 
     if (testGame.state !== 'GAMEOVER') {

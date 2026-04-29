@@ -127,6 +127,12 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
         *   **Visual de Núcleo Ativo:** Apresenta um chassi metálico reforçado com um núcleo octogonal de cristal e bordas neon persistentes. Quando energizado pelo laser, o núcleo exibe um brilho ciano intenso com um **vórtice interno de energia**, bloom pulsante e emite partículas de faíscas quânticas.
         *   **Persistência de Mapa:** O caractere 'Q' é preservado na malha lógica do mapa para garantir que sistemas de detecção de proximidade e renderização identifiquem a estrutura mesmo em estados de transição.
     *   **Sincronização Editor/Jogo:** O editor preserva o tipo de bloco durante o modo de teste, garantindo que o Prisma mantenha suas propriedades físicas e visuais através do mapeamento de propriedades `links`.
+    *   **Buracos/Abismos (* - Pit):** Obstáculos ambientais que representam quedas fatais no cenário industrial.
+        *   **Área de Perigo Passável:** Diferente de paredes, buracos agora permitem a entrada física do robô e blocos. Atuam como uma zona de letalidade instantânea por queda.
+        *   **Animação de Queda Procedural:** Entidades que caem sofrem uma transformação de escala (até 0), rotação acelerada (spin) e escurecimento progressivo (fade to black) antes de serem removidas ou dispararem o Game Over. O efeito utiliza um sistema de coordenadas centralizadas (`pivot-center`) para garantir que o giro ocorra exatamente no centro do buraco.
+        *   **Estética de Profundidade Orgânica:** O abismo não é apenas um tile preto; ele utiliza um sistema de **bordas orgânicas multicamadas** com ruído senoidal de múltiplas oitavas. Isso cria um aspecto de "concreto quebrado" ou "solo industrial despedaçado", com contornos irregulares que evitam o aspecto de grid artificial.
+        *   **Transparência Física:** Buracos são "transparentes" para feixes de Laser e Propagação de Energia, permitindo circuitos complexos através de abismos.
+        *   **Integração com Chão Quântico e Esteiras:** Funcionam como pontes. Quando um Chão Quântico (ON) ou uma Esteira está sobre o buraco, a área torna-se segura para travessia. Se o suporte for desativado enquanto uma entidade está sobre ele, a queda é iniciada imediatamente.
 
 
 ## 6. Ferramentas de Desenvolvimento

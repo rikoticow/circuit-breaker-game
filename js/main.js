@@ -476,11 +476,18 @@ function gameLoop(timestamp) {
     const startY = Math.floor(game.camera.y / 32);
     const endY = Math.ceil((game.camera.y + 480) / 32);
 
-    // Pass 1: Draw Floors only
+    // Pass 1: Draw Floors and Holes
     for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
             const c = game.map[y][x];
-            if (c !== '#' && c !== 'W') {
+            if (c === '*') {
+                let mask = 0;
+                if (y > 0 && game.map[y-1][x] === '*') mask |= 1;
+                if (x < mapW - 1 && game.map[y][x+1] === '*') mask |= 2;
+                if (y < mapH - 1 && game.map[y+1][x] === '*') mask |= 4;
+                if (x > 0 && game.map[y][x-1] === '*') mask |= 8;
+                Graphics.drawHole(x, y, mask);
+            } else if (c !== '#' && c !== 'W') {
                 Graphics.drawFloor(x, y);
             }
         }
@@ -498,7 +505,8 @@ function gameLoop(timestamp) {
     // Pass 1.06: Draw Quantum Floors (Above trails)
     for (const qf of game.quantumFloors) {
         if (qf.x >= startX && qf.x <= endX && qf.y >= startY && qf.y <= endY) {
-            Graphics.drawQuantumFloor(qf.x, qf.y, qf.active, animFrame, qf.flashTimer, qf.pulseIntensity, qf.entrySide, qf.whiteGlow);
+            const overHole = game.grid[qf.y][qf.x] === 0;
+            Graphics.drawQuantumFloor(qf.x, qf.y, qf.active, animFrame, qf.flashTimer, qf.pulseIntensity, qf.entrySide, qf.whiteGlow, overHole);
         }
     }
 
@@ -517,7 +525,8 @@ function gameLoop(timestamp) {
     for (const c of game.conveyors) {
         if (c.x >= startX && c.x <= endX && c.y >= startY && c.y <= endY) {
             const isActive = game.isConveyorActive(c);
-            Graphics.drawConveyor(c.x, c.y, c.dir, animFrame, c.inDir, c.beltDist, c.beltLength, isActive);
+            const overHole = game.map[c.y][c.x] === '*';
+            Graphics.drawConveyor(c.x, c.y, c.dir, animFrame, c.inDir, c.beltDist, c.beltLength, isActive, overHole);
         }
     }
 
@@ -585,7 +594,7 @@ function gameLoop(timestamp) {
         const powerData = game.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
         // Pass both visualAngle (for the arrow) and logical b.dir (for the lightning)
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir, b.type);
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir, b.type, b.fallTimer || 0);
     }
 
 

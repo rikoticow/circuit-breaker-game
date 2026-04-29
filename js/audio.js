@@ -742,6 +742,39 @@ const AudioSys = window.AudioSys = {
         noise.start();
     },
 
+    playFall() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // Descending whistle/whir
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
+        
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.8);
+
+        // Impact thud at the end
+        setTimeout(() => {
+            const thud = audioCtx.createOscillator();
+            const tGain = audioCtx.createGain();
+            thud.type = 'sine';
+            thud.frequency.setValueAtTime(100, audioCtx.currentTime);
+            thud.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.2);
+            tGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            tGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+            thud.connect(tGain); tGain.connect(audioCtx.destination);
+            thud.start(); thud.stop(audioCtx.currentTime + 0.2);
+        }, 700);
+    },
+
     levelComplete() {
         this.playTone(440, 'square', 0.1, 0.1);
         setTimeout(() => this.playTone(554, 'square', 0.1, 0.1), 100);
