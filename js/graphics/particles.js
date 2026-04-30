@@ -2,12 +2,12 @@ Object.assign(Graphics, {
     spawnParticle(x, y, color, type = 'spark') {
         const p = {
             x: x, y: y,
-            vx: type === 'smoke' ? (Math.random() - 0.5) * 0.4 : (type === 'debris' ? (Math.random() - 0.5) * 8 : (Math.random() - 0.5) * 5),
-            vy: type === 'smoke' ? -0.2 - Math.random() * 0.3 : (type === 'debris' ? (Math.random() - 0.5) * 8 : (Math.random() - 0.5) * 5),
+            vx: type === 'smoke' ? (Math.random() - 0.5) * 0.4 : (type === 'micro-spark' ? (Math.random() - 0.5) * 6 : (type === 'debris' ? (Math.random() - 0.5) * 8 : (Math.random() - 0.5) * 5)),
+            vy: type === 'smoke' ? -0.2 - Math.random() * 0.3 : (type === 'micro-spark' ? (Math.random() - 0.5) * 6 : (type === 'debris' ? (Math.random() - 0.5) * 8 : (Math.random() - 0.5) * 5)),
             life: 1.0,
             color: color,
             type: type,
-            size: type === 'smoke' ? 2 + Math.random() * 3 : 4
+            size: type === 'micro-spark' ? 1 + Math.random() : (type === 'smoke' ? 2 + Math.random() * 3 : 4)
         };
         this.particles.push(p);
         return p;
@@ -44,7 +44,7 @@ Object.assign(Graphics, {
                 p.y = ny;
             }
 
-            p.life -= p.type === 'smoke' ? 0.01 : 0.05;
+            p.life -= p.type === 'micro-spark' ? 0.1 : (p.type === 'smoke' ? 0.01 : 0.05);
             
             if (p.life <= 0) {
                 this.particles.splice(i, 1);
@@ -62,12 +62,13 @@ Object.assign(Graphics, {
                 this.ctx.beginPath();
                 this.ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
                 this.ctx.fill();
-            } else if (p.type === 'spark') {
+            } else if (p.type === 'spark' || p.type === 'micro-spark') {
                 this.ctx.strokeStyle = p.color;
-                this.ctx.lineWidth = 2.5;
+                this.ctx.lineWidth = p.type === 'micro-spark' ? 1.2 : 2.5;
                 this.ctx.beginPath();
                 this.ctx.moveTo(p.x, p.y);
-                this.ctx.lineTo(p.x - p.vx * 1.5, p.y - p.vy * 1.5);
+                const length = p.type === 'micro-spark' ? 1.0 : 1.5;
+                this.ctx.lineTo(p.x - p.vx * length, p.y - p.vy * length);
                 this.ctx.stroke();
             } else {
                 this.ctx.fillRect(p.x, p.y, p.size, p.size);

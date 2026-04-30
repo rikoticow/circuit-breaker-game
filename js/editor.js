@@ -24,14 +24,14 @@ let hoveredChannel = null;
 const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: 'G', n: 'Vidro Blindado'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
     { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
-    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}] },
+    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}, {c: '!', n: 'Singularidade'}] },
     { title: "Gravidade", tiles: [{c: 'n', n: 'Gravidade N'}, {c: 's', n: 'Gravidade S'}, {c: 'e', n: 'Gravidade L'}, {c: 'w', n: 'Gravidade O'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
 
     { title: "Fios", tiles: [{c: 'H', n: 'Horiz'}, {c: 'V', n: 'Vert'}, {c: '+', n: 'Cruz'}] },
     { title: "Curvas", tiles: [{c: 'L', n: '└'}, {c: 'J', n: '┘'}, {c: 'C', n: '┐'}, {c: 'F', n: '┌'}] },
     { title: "Junções", tiles: [{c: 'u', n: '┻'}, {c: 'd', n: '┳'}, {c: 'l', n: '┫'}, {c: 'r', n: '┣'}] },
-    { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}, {c: 'M', n: 'Prisma'}] },
+    { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}, {c: 'M', n: 'Prisma'}, {c: 'y', n: 'Solar'}, {c: 'p', n: 'Lunar'}] },
     { title: "Esteiras", tiles: [{c: ')', n: 'Esteira Dir'}, {c: '(', n: 'Esteira Esq'}, {c: ']', n: 'Esteira Baixo'}, {c: '[', n: 'Esteira Cima'}] },
     { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] },
     { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}] }
@@ -113,9 +113,10 @@ function createTilePreview(char) {
     else if (char >= '1' && char <= '9') Graphics.drawCore(0, 0, char, false, parseInt(char), 0, false);
     else if (['H','V','+','L','J','C','F','u','d','l','r'].includes(char)) Graphics.drawWire(0, 0, char, null);
     else if (char === 'S') Graphics.drawScrap(0, 0, animFrame);
-    else if (['>','<','^','v'].includes(char)) {
+    else if (['>','<','^','v','y','p'].includes(char)) {
         let d = 0; if(char==='v') d=1; if(char==='<') d=2; if(char==='^') d=3;
-        Graphics.drawBlock(0, 0, d * Math.PI / 2, null);
+        let ph = (char === 'y') ? 'SOLAR' : (char === 'p' ? 'LUNAR' : null);
+        Graphics.drawBlock(0, 0, d * Math.PI / 2, null, 0, d, 'NORMAL', 0, ph, true);
     } else if (['(', ')', '[', ']'].includes(char)) {
         let d = 2; if(char===')') d=0; if(char==='[') d=3; if(char===']') d=1;
         Graphics.drawConveyor(0, 0, d, -1, null);
@@ -137,6 +138,8 @@ function createTilePreview(char) {
         Graphics.drawGlassWall(0, 0, animFrame, true);
     } else if (char === 'O') {
         Graphics.drawPortal(0, 0, 0, animFrame, undefined);
+    } else if (char === '!') {
+        Graphics.drawSingularitySwitcher(0, 0, true, animFrame);
     } else if (['n', 's', 'e', 'w'].includes(char)) {
         let d = DIRS.UP;
         if (char === 's') d = DIRS.DOWN;
@@ -553,6 +556,8 @@ function rebuildMock() {
     mockGame.catalysts = [];
     mockGame.portals = [];
     mockGame.glassWallsHit = new Set();
+    mockGame.singularitySwitchers = [];
+    mockGame.isSolarPhase = true;
 
 
     const h = currentMap.length;
@@ -623,6 +628,8 @@ function rebuildMock() {
                 if (c === 'e') gDir = DIRS.RIGHT;
                 if (c === 'w') gDir = DIRS.LEFT;
                 mockGame.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
+            } else if (c === '!') {
+                mockGame.singularitySwitchers.push({ x, y, wasSteppedOn: false, lightningTimer: 0, lightningSeed: 0 });
             }
 
 
@@ -650,6 +657,8 @@ function rebuildMock() {
                 const behavior = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
                 const initState = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === true;
                 mockGame.buttons.push({ x, y, isPressed: initState, channel: chan, behavior: behavior });
+            } else if (oc === '!') {
+                mockGame.singularitySwitchers.push({ x, y, wasSteppedOn: false, lightningTimer: 0, lightningSeed: 0 });
             } else if (oc === 'G') {
                 row[x] = 'G';
             } else if (oc === 'E' || oc === 'M') {
@@ -680,14 +689,17 @@ function rebuildMock() {
 
             // Also load from blocks map
             let bc = currentBlocksMap[y][x];
-            if (['>', '<', '^', 'v'].includes(bc)) {
+            if (['>', '<', '^', 'v', 'y', 'p'].includes(bc)) {
                 let dir = 0;
                 if (bc === '<') dir = 2;
                 if (bc === '^') dir = 3;
                 if (bc === 'v') dir = 1;
                 // Avoid duplicates
                 if (!mockGame.blocks.some(b => b.x === x && b.y === y)) {
-                    mockGame.blocks.push({ x, y, dir });
+                    let phase = null;
+                    if (bc === 'y') phase = 'SOLAR';
+                    if (bc === 'p') phase = 'LUNAR';
+                    mockGame.blocks.push({ x, y, dir, phase });
                 }
             } else if (bc === 'M') {
                 const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
@@ -1552,10 +1564,13 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         Graphics.drawWire(x, y, c, flow, animFrame);
     } else if (c === 'S') {
         Graphics.drawScrap(x, y, animFrame);
-    } else if (['>', '<', '^', 'v'].includes(c)) {
+    } else if (['>', '<', '^', 'v', 'y', 'p'].includes(c)) {
         const flow = mockGame.poweredBlocks.get(`${x},${y}`) || null;
         let dir = 0; if(c==='v') dir=1; if(c==='<') dir=2; if(c==='^') dir=3;
-        Graphics.drawBlock(x, y, dir * Math.PI / 2, flow);
+        let phase = null;
+        if (c === 'y') phase = 'SOLAR';
+        else if (c === 'p') phase = 'LUNAR';
+        Graphics.drawBlock(x, y, dir * Math.PI / 2, flow, 0, dir, 'NORMAL', 0, phase, mockGame.isSolarPhase);
     } else if (['(', ')', '[', ']'].includes(c)) {
         let dir = 2; if(c===')') dir=0; if(c==='[') dir=3; if(c===']') dir=1;
         // Find conveyor in mockGame to get inDir, beltDist and beltLength
@@ -1571,6 +1586,8 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const btn = mockGame.buttons ? mockGame.buttons.find(b => b.x === x && b.y === y) : null;
         if (btn) Graphics.drawButton(x, y, btn.isPressed, btn.behavior, btn.charge || 0);
         else Graphics.drawButton(x, y, false, (c === 'P' ? 'PRESSURE' : 'TIMER'), 0);
+    } else if (c === '!') {
+        Graphics.drawSingularitySwitcher(x, y, mockGame.isSolarPhase, animFrame, 0, mockGame.map, 0);
     } else if (c === 'E') {
         const emitter = mockGame.emitters ? mockGame.emitters.find(e => e.x === x && e.y === y) : null;
         const dir = emitter ? emitter.dir : 0;
@@ -1653,11 +1670,19 @@ function renderLoop() {
         }
     }
 
-    // PASS 4: Blocks
+    // PASS 4: In-Phase Blocks
+    const ghostBlocks = [];
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const bc = currentBlocksMap[y][x];
-            if (bc !== ' ') drawChar(x, y, bc, 1.0, true);
+            if (bc === ' ') continue;
+            
+            const isOutOfPhase = (bc === 'y' && !mockGame.isSolarPhase) || (bc === 'p' && mockGame.isSolarPhase);
+            if (isOutOfPhase) {
+                ghostBlocks.push({x, y, c: bc});
+                continue;
+            }
+            drawChar(x, y, bc, 1.0, true);
         }
     }
 
@@ -1685,6 +1710,11 @@ function renderLoop() {
                 ctx.restore();
             }
         }
+    }
+
+    // PASS 7: Ghost Blocks (Top Layer)
+    for (const gb of ghostBlocks) {
+        drawChar(gb.x, gb.y, gb.c, 1.0, true);
     }
 
     // 3. Draw Preview (Ghost Tile)
@@ -1901,6 +1931,7 @@ function testLoop(timestamp) {
     for (const btn of testGame.buttons) Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
     const isTestSliding = testGame && testGame.gravitySlidingDir !== null;
     for (const gb of testGame.gravityButtons) Graphics.drawGravityButton(gb.x, gb.y, gb.dir, testAnimFrame, gb.flashTimer, isTestSliding);
+    for (const sw of testGame.singularitySwitchers) Graphics.drawSingularitySwitcher(sw.x, sw.y, testGame.isSolarPhase, testAnimFrame, sw.lightningTimer, testGame.map, sw.lightningSeed);
 
     for (const s of testGame.chargingStations) {
         const powered = testGame.poweredStations.has(`${s.x},${s.y}`);
@@ -1967,7 +1998,8 @@ function testLoop(timestamp) {
     for (const b of testGame.blocks) {
         const power = testGame.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type, b.fallTimer || 0);
+        const ph = b.phase || null;
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type, b.fallTimer || 0, ph, testGame.isSolarPhase);
     }
 
     if (testGame.state !== 'GAMEOVER') {

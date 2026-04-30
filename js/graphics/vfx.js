@@ -136,5 +136,92 @@ Object.assign(Graphics, {
         g.addColorStop(0, 'rgba(0, 100, 255, 0.15)'); g.addColorStop(1, 'transparent');
         this.ctx.fillStyle = g; this.ctx.fillRect(0, 0, width, height);
         this.ctx.restore();
+    },
+
+    drawBouncingLightning(tx, ty, color, frame, seed, map, lightningTimer = 0, lightningSeed = 0) {
+        const ts = this.tileSize;
+        const ctx = this.ctx;
+        const cx = (tx + 0.5) * ts, cy = (ty + 0.5) * ts;
+        const progress = (30 - lightningTimer) / 30;
+        
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        const numRays = 8;
+        // Use the dynamic lightningSeed for the shuffle
+        const s = lightningSeed || seed;
+        const rayOrder = [0, 1, 2, 3, 4, 5, 6, 7].sort((a, b) => {
+            return Math.sin(s * (a + 1)) - Math.sin(s * (b + 1));
+        });
+
+        for (let i = 0; i < numRays; i++) {
+            const r = rayOrder[i];
+            const rayThreshold = i / numRays; // Orderly time, random direction
+            if (progress < rayThreshold) continue;
+
+            let curX = cx, curY = cy;
+            // More chaotic initial angle
+            let ang = (r / numRays) * Math.PI * 2 + (Math.sin(seed + r) * 0.5);
+            let dist = 160 + Math.random() * 120; 
+            
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.0 + Math.random() * 1.5;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            // Fast fade out
+            ctx.globalAlpha = Math.max(0, (1.0 - (progress - rayThreshold) * 3)) * (0.6 + Math.random() * 0.4);
+            
+            if (ctx.globalAlpha <= 0) continue;
+
+            ctx.moveTo(curX, curY);
+            
+            let lastX = curX, lastY = curY;
+            for (let b = 0; b < 6; b++) { // Up to 6 bounces
+                let step = 30 + Math.random() * 50;
+                if (step > dist) step = dist;
+                
+                let nx = curX + Math.cos(ang) * step;
+                let ny = curY + Math.sin(ang) * step;
+                
+                let ntx = Math.floor(nx / ts), nty = Math.floor(ny / ts);
+                let hit = false;
+                if (map && map[nty] && (map[nty][ntx] === '#' || map[nty][ntx] === 'W' || map[nty][ntx] === 'G')) hit = true;
+                if (ntx < 0 || ntx >= 40 || nty < 0 || nty >= 40) hit = true; 
+
+                if (hit) {
+                    for(let p=0; p<5; p++) this.spawnParticle(curX, curY, '#ffffff', 'micro-spark');
+                    
+                    for (let attempt = 0; attempt < 4; attempt++) {
+                        ang += Math.PI * 0.5 + Math.random() * Math.PI;
+                        let testX = curX + Math.cos(ang) * 10;
+                        let testY = curY + Math.sin(ang) * 10;
+                        let ttx = Math.floor(testX / ts), tty = Math.floor(testY / ts);
+                        if (!(map && map[tty] && (map[tty][ttx] === '#' || map[tty][ttx] === 'W' || map[tty][ttx] === 'G'))) break;
+                    }
+                    
+                    dist -= 20;
+                    curX += Math.cos(ang) * 4;
+                    curY += Math.sin(ang) * 4;
+                } else {
+                    const segs = 4;
+                    for (let s = 1; s <= segs; s++) {
+                        let p = s / segs;
+                        let jx = (Math.random() - 0.5) * 14;
+                        let jy = (Math.random() - 0.5) * 14;
+                        ctx.lineTo(curX + (nx - curX) * p + jx, curY + (ny - curY) * p + jy);
+                    }
+                    curX = nx; curY = ny; dist -= step;
+                    lastX = curX; lastY = curY;
+                }
+                if (dist <= 0) break;
+            }
+            ctx.stroke();
+            
+            for(let p=0; p<3; p++) this.spawnParticle(lastX, lastY, '#ffffff', 'micro-spark');
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.5; ctx.stroke();
+        }
+        ctx.restore();
     }
 });

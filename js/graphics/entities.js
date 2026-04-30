@@ -1,5 +1,5 @@
 Object.assign(Graphics, {
-    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL', fallProgress = 0) {
+    drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL', fallProgress = 0, phase = null, isSolarGlobal = true) {
         const ts = this.tileSize;
         const cx = (x + 0.5) * ts;
         const cy = (y + 0.5) * ts;
@@ -9,13 +9,102 @@ Object.assign(Graphics, {
         this.ctx.save();
         this.ctx.translate(cx, cy);
 
+        // --- PHASE STATE ---
+        const isOutOfPhase = phase && ((phase === 'SOLAR' && !isSolarGlobal) || (phase === 'LUNAR' && isSolarGlobal));
+        
+        let baseMetal = '#3a3a4a';
+        let accentColor = '#ff8800';
+        let innerMetal = '#888899';
+        
+        if (phase === 'SOLAR') {
+            baseMetal = '#4a3d05';
+            accentColor = '#ffcc00';
+            innerMetal = '#b8860b';
+        } else if (phase === 'LUNAR') {
+            baseMetal = '#1a052a';
+            accentColor = '#bf00ff';
+            innerMetal = '#4b0082';
+        }
+
+        if (isOutOfPhase) {
+            // White lines with Phase Glow
+            const t = (performance.now() * 0.001);
+            this.ctx.strokeStyle = '#fff'; // White lines
+            this.ctx.shadowColor = accentColor; // Phase glow color
+            this.ctx.shadowBlur = 10;
+            this.ctx.lineWidth = 1;
+            
+            const getJit = (f, a, s = 0) => Math.sin(t * (f * 0.5) + s) * a + Math.cos(t * (f * 0.8) + s) * (a * 0.5);
+            
+            const wRect = (rx, ry, rw, rh, seed) => {
+                const a = 1.0;
+                this.ctx.beginPath();
+                this.ctx.moveTo(rx + getJit(15, a, seed), ry + getJit(17, a, seed + 1));
+                this.ctx.lineTo(rx + rw + getJit(13, a, seed + 2), ry + getJit(19, a, seed + 3));
+                this.ctx.lineTo(rx + rw + getJit(14, a, seed + 4), ry + rh + getJit(16, a, seed + 5));
+                this.ctx.lineTo(rx + getJit(18, a, seed + 6), ry + rh + getJit(12, a, seed + 7));
+                this.ctx.closePath();
+                this.ctx.stroke();
+            };
+
+            this.ctx.setLineDash([12, 6]);
+            this.ctx.lineDashOffset = -t * 8;
+            wRect(px + 2, py + 2, ts - 4, ts - 4, 100);
+            
+            if (type === 'PRISM' || type === 'prism') {
+                const winMargin = 6;
+                this.ctx.setLineDash([8, 4]);
+                this.ctx.lineDashOffset = -t * 6;
+                wRect(px + winMargin, py + winMargin, ts - winMargin*2, ts - winMargin*2, 200);
+                
+                this.ctx.save();
+                const mirrorRotation = visualAngle !== undefined ? visualAngle : (logicalDir * (Math.PI / 2));
+                this.ctx.rotate(mirrorRotation);
+                this.ctx.beginPath();
+                this.ctx.moveTo(10 + getJit(20, 1.2, 50), -10 + getJit(22, 1.2, 51));
+                this.ctx.lineTo(-10 + getJit(24, 1.2, 52), 10 + getJit(18, 1.2, 53));
+                this.ctx.stroke();
+                this.ctx.restore();
+            } else {
+                this.ctx.setLineDash([4, 2]);
+                this.ctx.lineDashOffset = -t * 5;
+                const bcs = 8;
+                wRect(px + 2, py + 2, bcs, bcs, 300);
+                wRect(px + ts - bcs - 2, py + 2, bcs, bcs, 400);
+                wRect(px + 2, py + ts - bcs - 2, bcs, bcs, 500);
+                wRect(px + ts - bcs - 2, py + ts - bcs - 2, bcs, bcs, 600);
+                wRect(px + 6, py + 6, ts - 12, ts - 12, 700);
+                
+                this.ctx.save();
+                this.ctx.rotate(visualAngle);
+                this.ctx.beginPath();
+                const triSize = 8;
+                this.ctx.moveTo(-triSize + getJit(30, 1.0, 10), -triSize + getJit(31, 1.0, 11));
+                this.ctx.lineTo(triSize + getJit(32, 1.0, 12), 0 + getJit(33, 1.0, 13));
+                this.ctx.lineTo(-triSize + getJit(34, 1.0, 14), triSize + getJit(35, 1.0, 15));
+                this.ctx.closePath();
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+            
+            this.ctx.shadowBlur = 0; // Reset shadow for ghost base
+            this.ctx.globalAlpha = 0.1;
+            this.ctx.setLineDash([]);
+            wRect(px + 2, py + 2, ts - 4, ts - 4, 999);
+            this.ctx.globalAlpha = 1.0;
+
+            this.ctx.setLineDash([]); 
+            this.ctx.restore();
+            return;
+        }
+
         // --- FALL ANIMATION (Procedural Spin & Scale) ---
         if (fallProgress > 0) {
             const scale = Math.max(0, 1.0 - fallProgress);
             const rot = fallProgress * Math.PI * 6;
             this.ctx.scale(scale, scale);
             this.ctx.rotate(rot);
-            this.ctx.globalAlpha = Math.max(0, 1.0 - fallProgress);
+            this.ctx.globalAlpha *= Math.max(0, 1.0 - fallProgress);
             this.ctx.filter = `brightness(${Math.max(0, 100 - fallProgress * 150)}%)`;
         }
 
@@ -54,29 +143,28 @@ Object.assign(Graphics, {
             return;
         }
 
-        // --- STANDARD METAL BLOCK ---
-        this.ctx.fillStyle = '#3a3a4a'; this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
-        this.ctx.fillStyle = '#ff8800'; const bcs = 8;
+        this.ctx.fillStyle = baseMetal; this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+        this.ctx.fillStyle = accentColor; const bcs = 8;
         this.ctx.fillRect(px + 2, py + 2, bcs, bcs); this.ctx.fillRect(px + ts - bcs - 2, py + 2, bcs, bcs); this.ctx.fillRect(px + 2, py + ts - bcs - 2, bcs, bcs); this.ctx.fillRect(px + ts - bcs - 2, py + ts - bcs - 2, bcs, bcs);
-        this.ctx.fillStyle = '#888899'; this.ctx.fillRect(px + 6, py + 6, ts - 12, ts - 12);
+        this.ctx.fillStyle = innerMetal; this.ctx.fillRect(px + 6, py + 6, ts - 12, ts - 12);
         this.ctx.fillStyle = '#aaaaBB'; this.ctx.fillRect(px + 6, py + 6, ts - 12, 2); this.ctx.fillRect(px + 6, py + 6, 2, ts - 12);
         this.ctx.fillStyle = '#555566'; this.ctx.fillRect(px + 6, py + ts - 8, ts - 12, 2); this.ctx.fillRect(px + ts - 8, py + 6, 2, ts - 12);
 
         this.ctx.save();
         this.ctx.rotate(visualAngle);
-        let color = '#fff';
+        let arrowColor = '#fff';
         if (powerData) {
-            if (powerData.invalid) color = '#ffcc00';
-            else if (powerData.active) color = powerData.isOcean ? '#00f0ff' : (powerData.color === 'RED' ? '#ff003c' : '#0077ff');
-            if (powerData.active || powerData.invalid) { this.ctx.shadowColor = color; this.ctx.shadowBlur = 10; }
+            if (powerData.invalid) arrowColor = '#ffcc00';
+            else if (powerData.active) arrowColor = powerData.isOcean ? '#00f0ff' : (powerData.color === 'RED' ? '#ff003c' : '#0077ff');
+            if (!isOutOfPhase && (powerData.active || powerData.invalid)) { this.ctx.shadowColor = arrowColor; this.ctx.shadowBlur = 10; }
         }
-        this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); const triSize = 8; this.ctx.moveTo(-triSize, -triSize); this.ctx.lineTo(triSize, 0); this.ctx.lineTo(-triSize, triSize); this.ctx.closePath(); this.ctx.fill();
+        this.ctx.fillStyle = arrowColor; this.ctx.beginPath(); const triSize = 8; this.ctx.moveTo(-triSize, -triSize); this.ctx.lineTo(triSize, 0); this.ctx.lineTo(-triSize, triSize); this.ctx.closePath(); this.ctx.fill();
         this.ctx.restore();
 
-        if (powerData && powerData.active && distToTarget < 0.1) {
+        if (powerData && powerData.active && distToTarget < 0.1 && !isOutOfPhase) {
             let relNextX = 0, relNextY = 0; const dist = 32;
             if (logicalDir === DIRS.UP) relNextY = -dist; else if (logicalDir === DIRS.DOWN) relNextY = dist; else if (logicalDir === DIRS.LEFT) relNextX = -dist; else if (logicalDir === DIRS.RIGHT) relNextX = dist;
-            for(let i=0; i<2; i++) this.drawLightning(0, 0, relNextX, relNextY, color);
+            for(let i=0; i<2; i++) this.drawLightning(0, 0, relNextX, relNextY, arrowColor);
         }
         this.ctx.restore();
     },

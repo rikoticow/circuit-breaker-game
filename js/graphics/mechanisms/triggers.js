@@ -128,6 +128,56 @@ Object.assign(Graphics, {
     drawPurpleButton(x, y, isPressed, isToggle = false) {
         this.drawButton(x, y, isPressed, isToggle ? 'TOGGLE' : 'PRESSURE');
     },
+    
+    drawSingularitySwitcher(x, y, isSolarGlobal, frame, lightningTimer = 0, map = null, lightningSeed = 0) {
+        const px = x * this.tileSize, py = y * this.tileSize, ts = this.tileSize;
+        const cx = px + ts/2, cy = py + ts/2;
+        
+        // Color of the NEXT dimension
+        const nextColor = isSolarGlobal ? '#bf00ff' : '#ffcc00';
+        const glowAlpha = 0.5 + Math.sin(frame * 0.1) * 0.3;
+        
+        this.ctx.save();
+        // Base plate
+        this.ctx.fillStyle = '#1a1a2a';
+        this.ctx.fillRect(px + 1, py + 1, ts - 2, ts - 2);
+        this.ctx.strokeStyle = '#3a3a4a';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(px + 4, py + 4, ts - 8, ts - 8);
+        
+        // Pulsing core
+        this.ctx.shadowColor = nextColor;
+        this.ctx.shadowBlur = 15 * glowAlpha;
+        this.ctx.fillStyle = nextColor;
+        this.ctx.globalAlpha = glowAlpha;
+        
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Dimensional ring
+        this.ctx.globalAlpha = 1.0;
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 10 + Math.sin(frame * 0.05) * 2, 0, Math.PI * 2);
+        this.ctx.stroke();
+        
+        // Scanlines/Interference on the button
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        this.ctx.beginPath();
+        for (let i = -8; i < 8; i += 4) {
+            this.ctx.moveTo(cx - 8, cy + i);
+            this.ctx.lineTo(cx + 8, cy + i);
+        }
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+
+        if (lightningTimer > 0) {
+            this.drawBouncingLightning(x, y, nextColor, frame, x + y, map, lightningTimer, lightningSeed);
+        }
+    },
 
     drawQuantumFloor(x, y, isActive, frame, flashTimer = 0, intensity = 1.0, entrySide = null, whiteGlow = 0, overHole = false) {
         const px = x * this.tileSize, py = y * this.tileSize, ts = this.tileSize;

@@ -525,6 +525,11 @@ function gameLoop(timestamp) {
     for (const btn of game.buttons) {
         Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
     }
+
+    // Pass 1.075: Draw Singularity Switchers
+    for (const sw of game.singularitySwitchers) {
+        Graphics.drawSingularitySwitcher(sw.x, sw.y, game.isSolarPhase, animFrame, sw.lightningTimer, game.map, sw.lightningSeed);
+    }
     
     // Pass 1.08: Draw Gravity Buttons
     for (const gb of game.gravityButtons) {
@@ -611,12 +616,17 @@ function gameLoop(timestamp) {
         Graphics.drawBrokenCore(bc.x, bc.y, animFrame);
     }
 
-        // Draw Blocks (Spring Physics)
+    // Draw Solid Blocks
+    const outOfPhaseBlocks = [];
     for (const b of game.blocks) {
+        const isOutOfPhase = b.phase && ((b.phase === 'SOLAR' && !game.isSolarPhase) || (b.phase === 'LUNAR' && game.isSolarPhase));
+        if (isOutOfPhase) {
+            outOfPhaseBlocks.push(b);
+            continue;
+        }
         const powerData = game.poweredBlocks.get(`${b.x},${b.y}`) || null;
         const dist = Math.sqrt((b.x - b.visualX) ** 2 + (b.y - b.visualY) ** 2);
-        // Pass both visualAngle (for the arrow) and logical b.dir (for the lightning)
-        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir, b.type, b.fallTimer || 0);
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, powerData, dist, b.dir, b.type, b.fallTimer || 0, b.phase, game.isSolarPhase);
     }
 
 
@@ -641,7 +651,11 @@ function gameLoop(timestamp) {
         Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
     }
 
-    // FINAL PASS: Core Requirements (Always on top of robot/smoke)
+    // FINAL PASS: Out-of-phase holographic blocks (Above EVERYTHING)
+    for (const b of outOfPhaseBlocks) {
+        Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, null, 0, b.dir, b.type, 0, b.phase, game.isSolarPhase);
+    }
+
     for (const t of game.targets) {
         const key = `${t.x},${t.y}`;
         const data = game.poweredTargets.get(key) || { charge: 0, contaminated: false };

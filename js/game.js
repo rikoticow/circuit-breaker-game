@@ -21,6 +21,8 @@ class GameState {
         this.debris = [];
         this.brokenCores = [];
         this.glassWallsHit = new Set();
+        this.isSolarPhase = true;
+        this.singularitySwitchers = [];
         this.screenShakeTimer = 0;
         this.gravitySlidingDir = null;
         this.lastGravityDir = 0;
@@ -118,7 +120,8 @@ class GameState {
             doors: this.doors.map(d => ({ ...d })),
             emitters: this.emitters.map(e => ({ ...e })),
             catalysts: this.catalysts.map(c => ({ ...c })),
-            gravityButtons: this.gravityButtons.map(g => ({ ...g }))
+            gravityButtons: this.gravityButtons.map(g => ({ ...g })),
+            isSolarPhase: this.isSolarPhase
         };
     }
 
@@ -200,6 +203,7 @@ class GameState {
         if (state.gravityButtons) {
             this.gravityButtons = state.gravityButtons.map(g => ({ ...g }));
         }
+        this.isSolarPhase = state.isSolarPhase !== undefined ? state.isSolarPhase : true;
         
         this.updateEnergy();
     }
@@ -250,6 +254,7 @@ class GameState {
         this.gravityButtons = [];
         this.glassWallsHit = new Set();
         this.poweredDoors = new Set();
+        this.singularitySwitchers = [];
 
         this.scrapPositions.clear();
         this.triggeredDialogues.clear();
@@ -399,6 +404,10 @@ class GameState {
                             this.scrapPositions.add(`${x},${y}`);
                             this.totalScrap++;
                         }
+                    } else if (bc === 'y') {
+                        this.blocks.push({ x, y, dir: DIRS.RIGHT, origX: x, origY: y, phase: 'SOLAR' });
+                    } else if (bc === 'p') {
+                        this.blocks.push({ x, y, dir: DIRS.RIGHT, origX: x, origY: y, phase: 'LUNAR' });
                     }
                 }
 
@@ -489,6 +498,10 @@ class GameState {
                         }
                     } else if (oc === 'G') {
                         row[x] = 'G';
+                    } else if (oc === '!') {
+                        if (!this.singularitySwitchers.some(s => s.x === x && s.y === y)) {
+                            this.singularitySwitchers.push({ x, y, wasSteppedOn: false, lightningTimer: 0 });
+                        }
                     }
                 }
             }
@@ -999,7 +1012,7 @@ class GameState {
                 const conveyorsWithButtons = this.conveyors.filter(c => this.isConveyorActive(c));
                 
                 const playerOnConveyor = conveyorsWithButtons.some(c => c.x === this.player.x && c.y === this.player.y);
-                const blockOnConveyor = this.blocks.some(b => conveyorsWithButtons.some(c => c.x === b.x && c.y === b.y));
+                const blockOnConveyor = this.blocks.some(b => (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)) && conveyorsWithButtons.some(c => c.x === b.x && c.y === b.y));
                 const conveyorActive = playerOnConveyor || blockOnConveyor;
 
                 // 1. Shepard Tone (Continuous Illusion)
@@ -1166,7 +1179,7 @@ class GameState {
         // Update Button States
         for (let btn of this.buttons) {
             const isPlayerOn = this.player.x === btn.x && this.player.y === btn.y;
-            const isBlockOn = this.blocks.some(b => b.x === btn.x && b.y === btn.y);
+            const isBlockOn = this.blocks.some(b => b.x === btn.x && b.y === btn.y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
             const isSteppedOn = isPlayerOn || isBlockOn;
             
             const wasPressed = btn.isPressed;
@@ -1242,7 +1255,7 @@ class GameState {
                 if (newState === true) {
                     const floorsOnChannel = this.quantumFloors.filter(f => f.channel === qf.channel);
                     for (let f of floorsOnChannel) {
-                        const block = this.blocks.find(b => b.x === f.x && b.y === f.y);
+                        const block = this.blocks.find(b => b.x === f.x && b.y === f.y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
                         if (block) {
                             if (window.AudioSys) AudioSys.playCubeCrush();
                             this.spawnDebris(block.x * 32 + 16, block.y * 32 + 16, 15, '#ed8936');
@@ -1301,7 +1314,7 @@ class GameState {
                     } else {
                         // Attempt to close
                         const isPlayerIn = this.player.x === door.x && this.player.y === door.y;
-                        const blockIndex = this.blocks.findIndex(b => b.x === door.x && b.y === door.y);
+                        const blockIndex = this.blocks.findIndex(b => b.x === door.x && b.y === door.y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
                         
                         if (isPlayerIn) {
                             door.state = 'CLOSED';
@@ -1353,6 +1366,53 @@ class GameState {
         // Update Gravity Buttons
         for (let gb of this.gravityButtons) {
             if (gb.flashTimer > 0) gb.flashTimer--;
+        }
+
+        // Update Singularity Switchers
+        for (let sw of this.singularitySwitchers) {
+            if (sw.lightningTimer > 0) sw.lightningTimer--;
+            const isPlayerOn = this.player.x === sw.x && this.player.y === sw.y;
+            const isBlockOn = this.blocks.some(b => b.x === sw.x && b.y === sw.y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
+            const isSteppedOn = isPlayerOn || isBlockOn;
+
+            if (isSteppedOn && !sw.wasSteppedOn) {
+                // Check for telefrag prevention
+                const blocksThatWillMaterialize = this.blocks.filter(b => 
+                    (this.isSolarPhase ? b.phase === 'LUNAR' : b.phase === 'SOLAR')
+                );
+                
+                // If the player is on a tile that will materialize a block, try to push player or block away
+                const telefragBlock = blocksThatWillMaterialize.find(b => b.x === this.player.x && b.y === this.player.y);
+                
+                if (telefragBlock) {
+                    // Try to push player to nearest free tile
+                    const dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+                    let foundSafe = false;
+                    for (const d of dirs) {
+                        if (this.isTilePassable(this.player.x + d.x, this.player.y + d.y)) {
+                            this.player.x += d.x;
+                            this.player.y += d.y;
+                            foundSafe = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundSafe) {
+                        // Switcher is locked
+                        if (window.AudioSys) AudioSys.buttonClick(); // Play a generic click for failure
+                        sw.wasSteppedOn = isSteppedOn;
+                        continue;
+                    }
+                }
+
+                this.isSolarPhase = !this.isSolarPhase;
+                sw.lightningTimer = 30;
+                sw.lightningSeed = Math.random() * 1000;
+                if (window.AudioSys) AudioSys.playDimensionInversion();
+                this.screenShakeTimer = 20;
+                this.updateEnergy();
+            }
+            sw.wasSteppedOn = isSteppedOn;
         }
     }
 
@@ -1435,7 +1495,7 @@ class GameState {
                 scanY = portal.targetY + dy;
             }
 
-            const b = this.blocks.find(block => block.x === scanX && block.y === scanY);
+            const b = this.blocks.find(block => block.x === scanX && block.y === scanY && (!block.phase || (block.phase === 'SOLAR' && this.isSolarPhase) || (block.phase === 'LUNAR' && !this.isSolarPhase)));
             if (b) {
                 if (blocksToPush.includes(b)) break; // Safety against infinite portal loops
                 blocksToPush.push(b);
@@ -1613,7 +1673,7 @@ class GameState {
             }
         }
 
-        const b = this.blocks.find(b => b.x === tx && b.y === ty);
+        const b = this.blocks.find(b => b.x === tx && b.y === ty && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
         if (b && !actionTaken) {
             this.saveUndo();
             b.dir = (b.dir + 1) % 4;
@@ -1713,7 +1773,7 @@ class GameState {
         if (door && door.state === 'CLOSED') return false;
         
         // Check blocks (excluding the ones moving if applicable)
-        if (this.blocks.some(b => b.x === x && b.y === y && !ignores.includes(b))) return false;
+        if (this.blocks.some(b => b.x === x && b.y === y && !ignores.includes(b) && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)))) return false;
         
         // Check entities
         if (this.sources.some(s => s.x === x && s.y === y)) return false;
@@ -1889,7 +1949,7 @@ class GameState {
         let blocksToPush = [];
         let scanX = nx, scanY = ny;
         while (true) {
-            const b = this.blocks.find(block => block.x === scanX && block.y === scanY);
+            const b = this.blocks.find(block => block.x === scanX && block.y === scanY && (!block.phase || (block.phase === 'SOLAR' && this.isSolarPhase) || (block.phase === 'LUNAR' && !this.isSolarPhase)));
             if (b && b !== obj) {
                 blocksToPush.push(b);
                 scanX += dx; scanY += dy;
@@ -1942,7 +2002,7 @@ class GameState {
                     let blocksToPushLaunch = [];
                     let sx = lx, sy = ly;
                     while (true) {
-                        const b = this.blocks.find(block => block.x === sx && block.y === sy);
+                        const b = this.blocks.find(block => block.x === sx && block.y === sy && (!block.phase || (block.phase === 'SOLAR' && this.isSolarPhase) || (block.phase === 'LUNAR' && !this.isSolarPhase)));
                         if (b && b !== obj) {
                             blocksToPushLaunch.push(b);
                             sx += dx; sy += dy;
@@ -2087,7 +2147,7 @@ class GameState {
                 }
 
                 // Block collision
-                const blockIndex = this.blocks.findIndex(b => b.x === cx && b.y === cy);
+                const blockIndex = this.blocks.findIndex(b => b.x === cx && b.y === cy && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
                 if (blockIndex !== -1) {
                     const block = this.blocks[blockIndex];
                     if (block.type === 'PRISM') {
@@ -2226,7 +2286,7 @@ class GameState {
             if (ny < 0 || ny >= this.map.length || nx < 0 || nx >= this.map[0].length) return false;
             return (
                 this.wires.some(w => w.x === nx && w.y === ny) ||
-                this.blocks.some(b => b.x === nx && b.y === ny) ||
+                this.blocks.some(b => b.x === nx && b.y === ny && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase))) ||
                 this.targets.some(t => t.x === nx && t.y === ny) ||
                 this.sources.some(s => s.x === nx && s.y === ny) ||
                 this.redSources.some(s => s.x === nx && s.y === ny) ||
@@ -2252,7 +2312,7 @@ class GameState {
             let reachedValidTarget = false;
 
             // 1. Check block
-            const block = this.blocks.find(b => b.x === x && b.y === y);
+            const block = this.blocks.find(b => b.x === x && b.y === y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
             let blockBlocking = false;
             let blockActive = false;
 

@@ -5,7 +5,25 @@ Este documento detalha a estrutura técnica, os sistemas core e o fluxo de dados
 ## 1. Visão Geral do Sistema
 O jogo é construído em Vanilla JavaScript utilizando a API de Canvas 2D para renderização. A arquitetura segue um modelo de Estado Centralizado (`GameState`) com um renderizador desacoplado (`Graphics`).
 
-## 2. Componentes da Engine
+## 2. Sincronização de Mecânicas e Loops (Arquitetura Crítica)
+> [!IMPORTANT]
+> O projeto Circuit Breaker utiliza uma arquitetura de tripla execução que exige sincronização manual rigorosa ao implementar novos recursos visuais. A falha em sincronizar resultará em recursos que "funcionam mas não aparecem" ou "aparecem no jogo mas sumiram no editor".
+
+### A. Os Três Contextos Independentes
+Existem três loops de renderização e instâncias de estado que operam de forma isolada:
+1.  **Motor Principal (`main.js`):** Executa o `gameLoop` oficial. Utiliza a instância global `game`.
+2.  **Editor - Modo de Edição (`editor.js` -> `renderLoop`):** Utiliza uma instância simplificada chamada `mockGame`. Este loop é responsável por desenhar o grid estático enquanto o usuário constrói a fase.
+3.  **Editor - Modo de Teste (`editor.js` -> `testLoop`):** Utiliza uma instância isolada chamada `testGame`. É um motor completo que roda dentro de um overlay para validar a jogabilidade sem sair do editor.
+
+### B. Checklist de Implementação de Novos Recursos
+Para que uma nova entidade funcione e seja visível em todo o ecossistema, os seguintes passos são obrigatórios:
+
+1.  **Lógica Central (`js/game.js`):** Adicionar propriedades ao `constructor`, lógica de carregamento em `loadLevel` e comportamento em `update()`.
+2.  **Visual e Renderização (`js/graphics/`):** Criar a função de desenho modular e garantir que a assinatura receba todos os dados de estado necessários.
+3.  **Sincronização de Loops (Desenho):** Adicionar a chamada de desenho tanto no `main.js` quanto no `testLoop` do `editor.js`.
+4.  **Integração com Ferramentas do Editor (`editor.js`):** Atualizar `PALETTE`, `createTilePreview`, `drawChar` e `rebuildMock`.
+
+## 3. Componentes da Engine
 
 ### A. GameState (js/game.js)
 O "Cérebro" do jogo. Gerencia:
@@ -100,7 +118,7 @@ Orquestra o tempo e a interface:
 *   **Zero-Cost Interaction:** A tentativa de ativação de um núcleo (interact) não consome energia, permitindo que o jogador teste circuitos sem penalidade.
 *   **Reversão Quântica (R):** A tecla 'R' permite o reinício total do nível em caso de erro estratégico irrecuperável. Diferente de perigos físicos, o reinício manual é **gratuito** (não consome Vidas/Unidades), funcionando como uma ferramenta de aprendizado tático.
 
-## 3. Fluxo de Dados de Energia
+## 4. Fluxo de Dados de Energia
 O sistema de energia é o coração do projeto e segue este fluxo:
 1.  `updateEnergy()` limpa todos os estados de energia anteriores.
 2.  Inicia um rastreio (`trace`) a partir das fontes primárias (B e X), que são omnidirecionais e emitem energia para todos os 4 lados adjacentes.
@@ -111,14 +129,14 @@ O sistema de energia é o coração do projeto e segue este fluxo:
 5.  O loop repete, iniciando o `trace` a partir dos novos núcleos-fonte.
 6.  Ao final, o sistema verifica se houve um caminho completo de uma fonte até um alvo final, marcando esses caminhos retroativamente como `OCEAN` (Azul Oceano/Ciano).
 
-## 4. Estrutura de UI (Mega Man Style)
+## 5. Estrutura de UI (Mega Man Style)
 A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
 *   **LIVES:** Barra fixa de 3 a 5 blocos grandes.
 *   **POWER:** Barra elástica de 250px que se adapta ao limite de movimentos da fase, acompanhada por um contador numérico em tempo real que exibe as unidades exatas restantes.
 *   **AMPS:** Barra dinâmica que mostra o progresso de carga total necessária no nível.
 *   **Estética 3D:** Segmentos do HUD utilizam sombras internas (`inset box-shadow`) e bordas estáveis para simular volume físico e profundidade sem distorção geométrica.
 
-## 5. Regras Globais de Design
+## 6. Regras Globais de Design
 *   **Contramão:** Alimentar um bloco pela frente gera um erro visual amarelo.
 *   **Contaminação:** Energia vermelha sobrepõe a azul e invalida núcleos.
 *   **Limites:** O jogador perde por falta de movimentos (Power) ou falta de tempo (60s timer).
@@ -159,7 +177,7 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
         *   **Feedback de Interação:** Apresenta um chassi metálico reforçado com rebites industriais. Quando um feixe de laser atravessa o vidro, as bordas internas do chassi emitem um **brilho ciano pulsante** e faíscas ocasionais, indicando a passagem de alta energia luminosa.
 
 
-## 6. Ferramentas de Desenvolvimento
+## 7. Ferramentas de Desenvolvimento
 ### Level Editor (editor.html)
 Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação intuitiva de níveis.
 *   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
@@ -176,7 +194,7 @@ Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação in
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.
 *   **Integração Nativa:** Salva diretamente no arquivo `js/levels.js` através de requisições POST para o servidor local.
 
-## 7. Level Selector (js/levelSelector.js)
+## 8. Level Selector (js/levelSelector.js)
 O Level Selector é uma tela de seleção de níveis no estilo retro CRT industrial, acessível durante o jogo via tecla `Escape`.
 *   **Estado Global:** Mantém progresso por nível (estrelas, desbloqueado, completado) no objeto `LevelSelector.progress[]`.
 *   **Acesso:** Abre via `Escape` durante gameplay (pause menu). O fluxo normal dos níveis é linear (1→2→3→etc) sem retornar ao seletor automaticamente.
@@ -198,7 +216,7 @@ O Level Selector é uma tela de seleção de níveis no estilo retro CRT industr
     *   `Escape`: Fecha o seletor.
 *   **Integração:** O game loop principal (`main.js`) desvia completamente para o renderizador do Level Selector quando `LevelSelector.active === true`.
 
-## 8. Result Screen (js/resultScreen.js)
+## 9. Result Screen (js/resultScreen.js)
 A Result Screen é uma tela de sumário exibida ao final de cada nível, renderizada diretamente no Canvas principal.
 *   **Estado `RESULT`:** Quando o jogador completa um nível (todos os núcleos satisfeitos), o `GameState` entra no estado `RESULT` em vez de transicionar automaticamente para o próximo nível.
 *   **Dados Capturados:** A tela exibe: Tempo restante, Pontuação base, Vidas restantes, Bônus (Integridade Total se 3 vidas, Velocidade Máxima se >45s restantes, Eficiência se 3 estrelas), e Pontuação Total.
@@ -241,3 +259,5 @@ Sistema de comunicação narrativa utilizando a estética de HUD Industrial:
 *   **Voz Procedimental (Animal Crossing Style):** Cada caractere gera um "blip" sonoro via Web Audio API com pitch aleatório. O sistema diferencia vozes de IA (onda quadrada, tom metálico) e Humanas (onda triangular, tom mais suave).
 *   **Gatilhos de Mapa:** Diálogos podem ser disparados ao iniciar o nível (`trigger: start`) ou ao pisar em tiles específicos (`trigger: walk`).
 *   **Integração no Editor:** Camada dedicada ("FALAS") que permite posicionar eventos de diálogo visualmente e editar textos e ícones via painel de propriedades.
+
+

@@ -215,5 +215,42 @@ Object.assign(window.AudioSys, {
             clang.start();
             clang.stop(audioCtx.currentTime + 0.3);
         }, 150);
+    },
+
+    playDimensionInversion() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        // 1. REVERSE SWOOSH (Synthetic)
+        const swoosh = audioCtx.createOscillator();
+        const swooshGain = audioCtx.createGain();
+        swoosh.type = 'sawtooth';
+        swoosh.frequency.setValueAtTime(100, now);
+        swoosh.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+        
+        swooshGain.gain.setValueAtTime(0, now);
+        swooshGain.gain.linearRampToValueAtTime(0.1, now + 0.25);
+        swooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        
+        swoosh.connect(swooshGain);
+        swooshGain.connect(audioCtx.destination);
+        swoosh.start(now);
+        swoosh.stop(now + 0.35);
+
+        // 2. DEEP BASS IMPACT (Deep Grave)
+        const bass = audioCtx.createOscillator();
+        const bassGain = audioCtx.createGain();
+        bass.type = 'sine';
+        bass.frequency.setValueAtTime(60, now + 0.3);
+        bass.frequency.exponentialRampToValueAtTime(20, now + 1.0);
+        
+        bassGain.gain.setValueAtTime(0, now + 0.3);
+        bassGain.gain.linearRampToValueAtTime(0.25, now + 0.35);
+        bassGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+        
+        bass.connect(bassGain);
+        bassGain.connect(audioCtx.destination);
+        bass.start(now + 0.3);
+        bass.stop(now + 1.0);
     }
 });
