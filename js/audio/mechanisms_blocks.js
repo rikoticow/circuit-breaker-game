@@ -156,5 +156,64 @@ Object.assign(window.AudioSys, {
         osc.connect(g); g.connect(audioCtx.destination);
         osc.start(now); osc.stop(now + 0.1);
         this.playTone(1800, 'sine', 0.05, 0.03);
+    },
+
+    playGravityShift() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // 1. DEEP SUB HUM (The Blade Runner Feel)
+        const sub = audioCtx.createOscillator();
+        const subGain = audioCtx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(40, now);
+        sub.frequency.exponentialRampToValueAtTime(30, now + 0.8);
+        
+        subGain.gain.setValueAtTime(0, now);
+        subGain.gain.linearRampToValueAtTime(0.2, now + 0.1);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        
+        sub.connect(subGain);
+        subGain.connect(audioCtx.destination);
+        sub.start(now);
+        sub.stop(now + 0.8);
+
+        // 2. MECHANICAL RUMBLE (Distorted Sawtooth)
+        const rumble = audioCtx.createOscillator();
+        const rumbleGain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        
+        rumble.type = 'sawtooth';
+        rumble.frequency.setValueAtTime(60, now);
+        rumble.frequency.linearRampToValueAtTime(45, now + 0.6);
+        
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(200, now);
+        filter.Q.value = 15;
+        
+        rumbleGain.gain.setValueAtTime(0, now);
+        rumbleGain.gain.linearRampToValueAtTime(0.08, now + 0.05);
+        rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        
+        rumble.connect(filter);
+        filter.connect(rumbleGain);
+        rumbleGain.connect(audioCtx.destination);
+        rumble.start(now);
+        rumble.stop(now + 0.6);
+
+        // 3. METALLIC IMPACT (Clang at the end)
+        setTimeout(() => {
+            const clang = audioCtx.createOscillator();
+            const clangGain = audioCtx.createGain();
+            clang.type = 'triangle';
+            clang.frequency.setValueAtTime(120, audioCtx.currentTime);
+            clang.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.3);
+            clangGain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            clangGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            clang.connect(clangGain);
+            clangGain.connect(audioCtx.destination);
+            clang.start();
+            clang.stop(audioCtx.currentTime + 0.3);
+        }, 150);
     }
 });

@@ -1426,6 +1426,137 @@ const Graphics = {
         this.ctx.arc(cx - 2, cy - 2, 2, 0, Math.PI * 2);
         this.ctx.fill();
     },
+    
+    drawGravityButton(x, y, direction, frame, flashTimer, isAnySliding) {
+        const px = x * this.tileSize;
+        const py = y * this.tileSize;
+        const ts = this.tileSize;
+        const cx = px + ts/2;
+        const cy = py + ts/2;
+
+        const isThisActive = flashTimer > 0;
+        const isOn = !isAnySliding || isThisActive;
+        const sinkOffset = isThisActive ? 2 : 0; 
+
+        // 1. HEAVY STEEL BASE
+        this.ctx.save();
+        
+        // Outer Frame
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+
+        // Main Plate
+        this.ctx.translate(0, sinkOffset);
+        this.ctx.fillStyle = isThisActive ? '#3a3a3a' : '#222';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        const chamfer = 6;
+        this.ctx.moveTo(px + chamfer, py + 2);
+        this.ctx.lineTo(px + ts - chamfer, py + 2);
+        this.ctx.lineTo(px + ts - 2, py + chamfer);
+        this.ctx.lineTo(px + ts - 2, py + ts - chamfer);
+        this.ctx.lineTo(px + ts - chamfer, py + ts - 2);
+        this.ctx.lineTo(px + chamfer, py + ts - 2);
+        this.ctx.lineTo(px + 2, py + ts - chamfer);
+        this.ctx.lineTo(px + 2, py + chamfer);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        // 2. HAZARD STRIPES
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(px + 4, py + 4, 6, ts - 8);
+        this.ctx.rect(px + ts - 10, py + 4, 6, ts - 8);
+        this.ctx.clip();
+        
+        this.ctx.fillStyle = isThisActive ? '#ffcc00' : '#886600'; 
+        this.ctx.fillRect(px, py, ts, ts);
+        
+        this.ctx.fillStyle = '#000';
+        for (let i = -ts; i < ts * 2; i += 8) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(px, py + i);
+            this.ctx.lineTo(px + ts, py + i + ts);
+            this.ctx.lineTo(px + ts, py + i + ts + 4);
+            this.ctx.lineTo(px, py + i + 4);
+            this.ctx.fill();
+        }
+        this.ctx.restore();
+
+        // 3. INDICATOR (On when peaceful or active)
+        this.ctx.save();
+        this.ctx.translate(cx, cy);
+        this.ctx.rotate(direction * Math.PI / 2);
+
+        if (isOn) {
+            const pulse = 0.7 + Math.sin(frame * 0.1) * 0.3;
+            
+            // Intermittent Failure logic (Seed with X,Y to de-sync)
+            const seed = (x * 7.7 + y * 13.3);
+            let flicker = 1.0;
+            const failureZone = Math.sin(frame * 0.04 + seed); // Cycle unique to this tile
+            
+            if (failureZone > 0.7) {
+                // Violent blinking burst
+                flicker = Math.random() > 0.5 ? 1.0 : (Math.random() > 0.7 ? 0.3 : 0.0);
+            } else if (Math.random() > 0.99) {
+                // Rare random cutout
+                flicker = 0;
+            }
+            
+            if (flicker <= 0) {
+                // DRAW OFF STATE (Groove)
+                this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                this.ctx.beginPath();
+                this.ctx.moveTo(7, 0); this.ctx.lineTo(-3, -6); this.ctx.lineTo(-3, 6);
+                this.ctx.closePath();
+                this.ctx.fill();
+            } else {
+                const arrowColor = '#fff'; 
+                
+                // INTENSE DOUBLE-PASS NEON BLUE GLOW
+                const blur = (isThisActive ? 22 : (10 + pulse * 4)) * flicker;
+                this.ctx.shadowColor = '#00aaff';
+                this.ctx.shadowBlur = blur;
+                
+                this.ctx.globalAlpha = flicker;
+                this.ctx.fillStyle = arrowColor;
+                this.ctx.beginPath();
+                this.ctx.moveTo(7, 0); this.ctx.lineTo(-3, -6); this.ctx.lineTo(-3, 6);
+                this.ctx.closePath();
+                
+                // Pass 1: Core glow
+                this.ctx.fill();
+                
+                // Pass 2: Over-glow for that "ultra-neon" look
+                this.ctx.shadowBlur = blur * 1.5;
+                this.ctx.fill();
+                
+                this.ctx.globalAlpha = 1.0;
+            }
+        } else {
+            // "OFF" State (Just a dark groove)
+            this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            this.ctx.beginPath();
+            this.ctx.moveTo(7, 0);
+            this.ctx.lineTo(-3, -6);
+            this.ctx.lineTo(-3, 6);
+            this.ctx.closePath();
+            this.ctx.fill();
+        }
+        this.ctx.restore();
+
+        // 4. MECHANICAL BOLTS
+        this.ctx.fillStyle = '#111';
+        this.ctx.beginPath(); this.ctx.arc(cx - 10, py + 8, 2, 0, Math.PI * 2); this.ctx.fill();
+        this.ctx.beginPath(); this.ctx.arc(cx + 10, py + 8, 2, 0, Math.PI * 2); this.ctx.fill();
+        this.ctx.beginPath(); this.ctx.arc(cx - 10, py + ts - 8, 2, 0, Math.PI * 2); this.ctx.fill();
+        this.ctx.beginPath(); this.ctx.arc(cx + 10, py + ts - 8, 2, 0, Math.PI * 2); this.ctx.fill();
+
+        this.ctx.restore();
+    },
 
     drawPurpleButton(x, y, isPressed, isToggle = false) {
         // Compatibility wrapper for the new unified drawButton
@@ -2630,11 +2761,37 @@ const Graphics = {
         return p;
     },
 
-    drawParticles() {
+    drawParticles(game = null) {
+        if (!game) return;
+        const gravityDir = game.gravitySlidingDir;
+        const map = game.map;
+
         for (let i = this.particles.length - 1; i >= 0; i--) {
             let p = this.particles[i];
-            p.x += p.vx;
-            p.y += p.vy;
+            
+            // Apply Subtle Gravity Influence
+            if (gravityDir !== null) {
+                const strength = 0.15; // Reduced strength
+                if (gravityDir === DIRS.UP) p.vy -= strength;
+                if (gravityDir === DIRS.DOWN) p.vy += strength;
+                if (gravityDir === DIRS.LEFT) p.vx -= strength;
+                if (gravityDir === DIRS.RIGHT) p.vx += strength;
+            }
+
+            const nx = p.x + p.vx;
+            const ny = p.y + p.vy;
+            
+            // Wall/Ceiling Collision (Bounce)
+            const tx = Math.floor(nx / 32);
+            const ty = Math.floor(ny / 32);
+            if (map[ty] && (map[ty][tx] === '#' || map[ty][tx] === 'W')) {
+                p.vx *= -0.4; // Bounce back
+                p.vy *= -0.4;
+            } else {
+                p.x = nx;
+                p.y = ny;
+            }
+
             p.life -= p.type === 'smoke' ? 0.01 : 0.05;
             
             if (p.life <= 0) {
@@ -2646,20 +2803,18 @@ const Graphics = {
             this.ctx.globalAlpha = p.life;
 
             if (p.type === 'smoke') {
-                const progress = 1 - p.life; // 0 to 1
-                const scale = Math.sin(progress * Math.PI); // 0 -> 1 -> 0
+                const progress = 1 - p.life; 
+                const scale = Math.sin(progress * Math.PI);
                 const currentSize = Math.abs(p.size * scale);
                 
                 this.ctx.beginPath();
                 this.ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
                 this.ctx.fill();
             } else if (p.type === 'spark') {
-                // Realistic line sparks (streaks) - Thicker and more opaque
                 this.ctx.strokeStyle = p.color;
                 this.ctx.lineWidth = 2.5;
                 this.ctx.beginPath();
                 this.ctx.moveTo(p.x, p.y);
-                // Tail length based on velocity
                 this.ctx.lineTo(p.x - p.vx * 1.5, p.y - p.vy * 1.5);
                 this.ctx.stroke();
             } else {
@@ -2706,6 +2861,39 @@ const Graphics = {
             baseAlpha: 0.2 + Math.random() * 0.5,
             life: 1.0 
         });
+    },
+
+    drawAmbientParticles(particles) {
+        if (!particles) return;
+        this.ctx.save();
+        for (const p of particles) {
+            this.ctx.fillStyle = p.color;
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            this.ctx.rotate(p.rot || 0);
+            
+            const s = p.size;
+            if (p.shape === 'circle') {
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, s/2, 0, Math.PI * 2);
+                this.ctx.fill();
+            } else if (p.shape === 'triangle') {
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -s/2);
+                this.ctx.lineTo(s/2, s/2);
+                this.ctx.lineTo(-s/2, s/2);
+                this.ctx.closePath();
+                this.ctx.fill();
+            } else if (p.shape === 'cross') {
+                this.ctx.fillRect(-s/2, -1, s, 2);
+                this.ctx.fillRect(-1, -s/2, 2, s);
+            } else { // rect
+                this.ctx.fillRect(-s/2, -s/2, s, s);
+            }
+            
+            this.ctx.restore();
+        }
+        this.ctx.restore();
     },
 
     drawTrails() {
@@ -2821,5 +3009,77 @@ const Graphics = {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.fillRect(gx, gy, 1, 1);
         }
+    },
+    
+    drawGravityOverlay(direction, frame, globalAlpha) {
+        this.ctx.save();
+        
+        const ts = 64; // Grid size for overlay
+        const width = this.ctx.canvas.width;
+        const height = this.ctx.canvas.height;
+        
+        // Directional vectors matching DIRS (RIGHT:0, DOWN:1, LEFT:2, UP:3)
+        let dx = 0, dy = 0;
+        let rot = 0;
+        if (direction === 0) { dx = 1; rot = 0; }             // RIGHT
+        if (direction === 1) { dy = 1; rot = Math.PI/2; }     // DOWN
+        if (direction === 2) { dx = -1; rot = Math.PI; }      // LEFT
+        if (direction === 3) { dy = -1; rot = -Math.PI/2; }   // UP
+
+        const scrollSpeed = 4;
+        const scrollOffset = (frame * scrollSpeed) % ts;
+        
+        this.ctx.lineWidth = 1.5;
+        
+        for (let gy = -ts * 2; gy < height + ts * 2; gy += ts * 0.8) {
+            const isStaggered = Math.floor(gy / (ts * 0.8)) % 2 === 0;
+            const rowOffset = isStaggered ? ts / 2 : 0;
+            
+            for (let gx = -ts * 2; gx < width + ts * 2; gx += ts) {
+                // Stochastic Disappearance: Use a seed to decide IF this arrow is drawn
+                const seed = (Math.abs(Math.sin(gx * 1.5 + gy * 2.7))); 
+                if (seed > globalAlpha) continue; // One by one appearance/disappearance
+                
+                const px = gx + rowOffset + (dx * scrollOffset);
+                const py = gy + (dy * scrollOffset);
+                
+                // Deterministic opacity (less transparent as requested)
+                const opacity = 0.2 + (seed * 0.3);
+                this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity * globalAlpha})`;
+                
+                this.ctx.save();
+                this.ctx.translate(px, py);
+                this.ctx.rotate(rot);
+                
+                // Draw a straight technical arrow
+                this.ctx.beginPath();
+                this.ctx.moveTo(-12, 0);
+                this.ctx.lineTo(12, 0);
+                this.ctx.lineTo(6, -4);
+                this.ctx.moveTo(12, 0);
+                this.ctx.lineTo(6, 4);
+                this.ctx.stroke();
+                
+                this.ctx.restore();
+            }
+        }
+        
+        // Subdued flash at screen edges
+        this.ctx.globalAlpha = globalAlpha;
+        if (dx !== 0) {
+            const g = this.ctx.createLinearGradient(dx > 0 ? 0 : width, 0, dx > 0 ? width : 0, 0);
+            g.addColorStop(0, 'rgba(0, 100, 255, 0.15)');
+            g.addColorStop(1, 'transparent');
+            this.ctx.fillStyle = g;
+            this.ctx.fillRect(0, 0, width, height);
+        } else {
+            const g = this.ctx.createLinearGradient(0, dy > 0 ? 0 : height, 0, dy > 0 ? height : 0);
+            g.addColorStop(0, 'rgba(0, 100, 255, 0.15)');
+            g.addColorStop(1, 'transparent');
+            this.ctx.fillStyle = g;
+            this.ctx.fillRect(0, 0, width, height);
+        }
+
+        this.ctx.restore();
     }
 };

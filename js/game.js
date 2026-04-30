@@ -17,9 +17,17 @@ class GameState {
         this.emitters = [];
         this.catalysts = [];
         this.portals = [];
+        this.gravityButtons = [];
         this.debris = [];
         this.brokenCores = [];
         this.glassWallsHit = new Set();
+        this.screenShakeTimer = 0;
+        this.gravitySlidingDir = null;
+        this.lastGravityDir = 0;
+        this.gravityAcceleration = 0;
+        this.gravityStepTimer = 0;
+        this.gravityOverlayAlpha = 0;
+        this.ambientParticles = [];
 
 
         this.score = 0;
@@ -109,7 +117,8 @@ class GameState {
             quantumFloors: this.quantumFloors.map(q => ({ ...q })),
             doors: this.doors.map(d => ({ ...d })),
             emitters: this.emitters.map(e => ({ ...e })),
-            catalysts: this.catalysts.map(c => ({ ...c }))
+            catalysts: this.catalysts.map(c => ({ ...c })),
+            gravityButtons: this.gravityButtons.map(g => ({ ...g }))
         };
     }
 
@@ -188,6 +197,9 @@ class GameState {
         if (state.catalysts) {
             this.catalysts = state.catalysts.map(c => ({ ...c }));
         }
+        if (state.gravityButtons) {
+            this.gravityButtons = state.gravityButtons.map(g => ({ ...g }));
+        }
         
         this.updateEnergy();
     }
@@ -235,6 +247,7 @@ class GameState {
         this.emitters = [];
         this.catalysts = [];
         this.portals = [];
+        this.gravityButtons = [];
         this.glassWallsHit = new Set();
         this.poweredDoors = new Set();
 
@@ -345,6 +358,12 @@ class GameState {
                         color: pCol,
                         visualRotation: 0
                     });
+                } else if (['n', 's', 'e', 'w'].includes(c)) {
+                    let gDir = DIRS.UP;
+                    if (c === 's') gDir = DIRS.DOWN;
+                    if (c === 'e') gDir = DIRS.RIGHT;
+                    if (c === 'w') gDir = DIRS.LEFT;
+                    this.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
                 }
 
 
@@ -460,6 +479,14 @@ class GameState {
                                 visualRotation: 0
                             });
                         }
+                    } else if (['n', 's', 'e', 'w'].includes(oc)) {
+                        let gDir = DIRS.UP;
+                        if (oc === 's') gDir = DIRS.DOWN;
+                        if (oc === 'e') gDir = DIRS.RIGHT;
+                        if (oc === 'w') gDir = DIRS.LEFT;
+                        if (!this.gravityButtons.some(g => g.x === x && g.y === y)) {
+                            this.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
+                        }
                     } else if (oc === 'G') {
                         row[x] = 'G';
                     }
@@ -526,6 +553,39 @@ class GameState {
         }
 
         // Trigger start dialogues (Handled in main.js when transition finishes)
+        
+        // Initialize Ambient Floor Particles (Dust/Metal bits)
+        this.ambientParticles = [];
+        for (let y = 0; y < this.map.length; y++) {
+            for (let x = 0; x < this.map[0].length; x++) {
+                // If it's a floor tile (empty space in map)
+                if (this.map[y][x] === ' ') {
+                    const count = 1 + Math.floor(Math.random() * 2);
+                    for (let i = 0; i < count; i++) {
+                        // Random size (20% larger than before)
+                        const baseSize = 1.2 + Math.random() * 2.2;
+                        
+                        // More random colors (Industrial palette: Grays, dark blues, rust)
+                        const colors = ['#555566', '#333344', '#222233', '#4a3d35', '#3c3c3c'];
+                        const col = colors[Math.floor(Math.random() * colors.length)];
+                        
+                        // Random shapes: rect, circle, triangle, cross
+                        const shapes = ['rect', 'circle', 'triangle', 'cross'];
+                        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+
+                        this.ambientParticles.push({
+                            x: x * 32 + Math.random() * 32,
+                            y: y * 32 + Math.random() * 32,
+                            vx: 0, vy: 0,
+                            size: baseSize,
+                            color: col,
+                            shape: shape,
+                            rot: Math.random() * Math.PI * 2
+                        });
+                    }
+                }
+            }
+        }
     }
 
     isConveyorActive(c) {
@@ -553,6 +613,14 @@ class GameState {
 
     update() {
         if (this.player.isDead) this.player.deathTimer++;
+
+        // Update Gravity Overlay Alpha
+        if (this.gravitySlidingDir !== null) {
+            this.gravityOverlayAlpha = Math.min(1, this.gravityOverlayAlpha + 0.1);
+        } else {
+            this.gravityOverlayAlpha = Math.max(0, this.gravityOverlayAlpha - 0.05);
+        }
+
         // Smooth player interpolation (Juicy movement)
         if (this.player.visualX === undefined) { 
             this.player.visualX = this.player.x; 
@@ -653,16 +721,46 @@ class GameState {
             }
         }
 
-        // Smooth block interpolation (Spring physics)
-        const springForce = 0.4; 
-        const damping = 0.5; 
+        // Smooth block interpolation
         for (let i = this.blocks.length - 1; i >= 0; i--) {
             let b = this.blocks[i];
-            if (b.visualX === undefined) { 
-                b.visualX = b.x; 
-                b.visualY = b.y; 
-                b.vx = 0; 
-                b.vy = 0; 
+            
+            if (this.gravitySlidingDir) {
+                // LINEAR SLIDE for gravity (Perfectly smooth, no jitter)
+                const baseSpeed = 0.2;
+                const accelSpeed = this.gravityAcceleration * 0.08;
+                const totalSpeed = baseSpeed + accelSpeed;
+                
+                const dx = b.x - b.visualX;
+                const dy = b.y - b.visualY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > 0.01) {
+                    b.visualX += (dx/dist) * Math.min(totalSpeed, dist);
+                    b.visualY += (dy/dist) * Math.min(totalSpeed, dist);
+                    b.vx = 0; b.vy = 0; // Clear velocity for when gravity ends
+                } else {
+                    b.visualX = b.x;
+                    b.visualY = b.y;
+                }
+            } else {
+                // SPRING PHYSICS for normal pushes
+                const springForce = 0.4; 
+                const damping = 0.5; 
+                
+                if (b.visualX === undefined) { 
+                    b.visualX = b.x; 
+                    b.visualY = b.y; 
+                    b.vx = 0; 
+                    b.vy = 0; 
+                }
+                
+                let ax = (b.x - b.visualX) * springForce;
+                let ay = (b.y - b.visualY) * springForce;
+                b.vx = (b.vx + ax) * damping;
+                b.vy = (b.vy + ay) * damping;
+                b.visualX += b.vx;
+                b.visualY += b.vy;
             }
 
             if (b.isFalling) {
@@ -717,13 +815,6 @@ class GameState {
                         this.updateEnergy();
                     }
                 }
-
-                let ax = (b.x - b.visualX) * springForce;
-                let ay = (b.y - b.visualY) * springForce;
-                b.vx = (b.vx + ax) * damping;
-                b.vy = (b.vy + ay) * damping;
-                b.visualX += b.vx;
-                b.visualY += b.vy;
             }
 
             // Smooth rotation (visualAngle lerp)
@@ -778,10 +869,66 @@ class GameState {
         const maxDebris = 150;
         if (this.debris.length > maxDebris) this.debris.splice(0, this.debris.length - maxDebris);
         
-        const px = this.player.visualX * 32 + 16;
-        const py = this.player.visualY * 32 + 16;
+        // Update Ambient Particles (Dust)
+        const prx = this.player.visualX * 32 + 16;
+        const pry = this.player.visualY * 32 + 16;
+        
+        for (let i = this.ambientParticles.length - 1; i >= 0; i--) {
+            const p = this.ambientParticles[i];
+            // 1. Gravity influence
+            if (this.gravitySlidingDir !== null) {
+                const strength = 0.1;
+                if (this.gravitySlidingDir === DIRS.UP) p.vy -= strength;
+                if (this.gravitySlidingDir === DIRS.DOWN) p.vy += strength;
+                if (this.gravitySlidingDir === DIRS.LEFT) p.vx -= strength;
+                if (this.gravitySlidingDir === DIRS.RIGHT) p.vx += strength;
+            }
 
-        for (const p of this.debris) {
+            // 2. Player displacement (Robot kick)
+            const dx = p.x - prx;
+            const dy = p.y - pry;
+            const distSq = dx*dx + dy*dy;
+            if (distSq < 1600) { // 40px radius
+                const dist = Math.sqrt(distSq);
+                const force = (40 - dist) * 0.02;
+                p.vx += (dx / dist) * force;
+                p.vy += (dy / dist) * force;
+            }
+
+            // 3. Movement and Friction
+            p.vx *= 0.85;
+            p.vy *= 0.85;
+            
+            const nx = p.x + p.vx;
+            const ny = p.y + p.vy;
+            const tx = Math.floor(nx / 32);
+            const ty = Math.floor(ny / 32);
+            
+            // Wall/Hole Collision
+            if (this.map[ty] && this.map[ty][tx] === '*') {
+                // Fall into hole (Delete)
+                this.ambientParticles.splice(i, 1);
+                continue;
+            } else if (this.map[ty] && (this.map[ty][tx] === '#' || this.map[ty][tx] === 'W')) {
+                p.vx *= -0.5;
+                p.vy *= -0.5;
+            } else {
+                p.x = nx;
+                p.y = ny;
+            }
+        }
+
+        for (let i = this.debris.length - 1; i >= 0; i--) {
+            const p = this.debris[i];
+            // Apply Gravity influence to debris
+            if (this.gravitySlidingDir !== null) {
+                const strength = 0.5;
+                if (this.gravitySlidingDir === DIRS.UP) p.vy -= strength;
+                if (this.gravitySlidingDir === DIRS.DOWN) p.vy += strength;
+                if (this.gravitySlidingDir === DIRS.LEFT) p.vx -= strength;
+                if (this.gravitySlidingDir === DIRS.RIGHT) p.vx += strength;
+            }
+
             // Friction and movement
             p.vx *= 0.92;
             p.vy *= 0.92;
@@ -794,7 +941,11 @@ class GameState {
             const tx = Math.floor(nx / 32);
             const ty = Math.floor(ny / 32);
             if (tx >= 0 && tx < this.map[0].length && ty >= 0 && ty < this.map.length) {
-                if (this.map[ty][tx] === '#' || this.map[ty][tx] === 'W') {
+                if (this.map[ty][tx] === '*') {
+                    // Fall into hole
+                    this.debris.splice(i, 1);
+                    continue;
+                } else if (this.map[ty][tx] === '#' || this.map[ty][tx] === 'W') {
                     p.vx *= -0.5; p.vy *= -0.5; // Bounce
                 } else {
                     p.x = nx;
@@ -806,8 +957,8 @@ class GameState {
             p.rot += p.rv;
 
             // Pushing by player
-            const dx = p.x - px;
-            const dy = p.y - py;
+            const dx = p.x - prx;
+            const dy = p.y - pry;
             const d2 = dx*dx + dy*dy;
             if (d2 < 576) { // 24px radius
                 const d = Math.sqrt(d2) || 1;
@@ -1193,8 +1344,16 @@ class GameState {
             }
         }
 
+        // Update screen shake
+        if (this.screenShakeTimer > 0) this.screenShakeTimer--;
+
         // Emitter states are now managed exclusively by updateEmitters()
         // which is called every frame to support inverted logic and path calculation.
+        
+        // Update Gravity Buttons
+        for (let gb of this.gravityButtons) {
+            if (gb.flashTimer > 0) gb.flashTimer--;
+        }
     }
 
     triggerQuantumPulse(x, y, power = 1.0, delay = 0, distance = 0, visited = new Set(), dx = 0, dy = 0) {
@@ -1236,7 +1395,7 @@ class GameState {
 
 
     movePlayer(dx, dy) {
-        if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead) return;
+        if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead || this.gravitySlidingDir !== null) return;
 
         // Prevent movement if already in motion (manual or sliding)
         const pDist = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
@@ -1372,6 +1531,17 @@ class GameState {
         this.moves--;
         this.moveCount++;
         if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('robotMoves', 1);
+
+        // Check Gravity Buttons
+        if (this.gravitySlidingDir === null) {
+            const gb = this.gravityButtons.find(g => g.x === nx && g.y === ny);
+            if (gb) {
+                gb.flashTimer = 30; // Intense flash
+                this.triggerGravity(gb.dir);
+                if (window.AudioSys) AudioSys.buttonClick();
+            }
+        }
+
         // Collect scrap
         const posKey = `${nx},${ny}`;
         if (this.scrapPositions.has(posKey)) {
@@ -1584,10 +1754,106 @@ class GameState {
         return true;
     }
 
+    triggerGravity(direction) {
+        if (this.state !== 'PLAYING') return;
+        this.gravitySlidingDir = direction;
+        this.lastGravityDir = direction;
+        this.gravityAcceleration = 0;
+        if (window.AudioSys) AudioSys.playGravityShift();
+        this.screenShakeTimer = 15;
+    }
+
+    updateGravitySliding() {
+        if (this.gravitySlidingDir === null) return;
+
+        // Ensure blocks are mostly settled before next logical step
+        const anyMoving = this.blocks.some(b => {
+            const dist = Math.abs(b.x - b.visualX) + Math.abs(b.y - b.visualY);
+            return dist > 0.05; // Tight threshold for linear move
+        });
+        if (anyMoving) return;
+
+        // Accelerate: decrease delay between steps
+        this.gravityAcceleration += 0.3;
+
+        // 1. ORDER BLOCKS
+        let sortedBlocks = [...this.blocks];
+        const dir = this.gravitySlidingDir;
+        if (dir === DIRS.RIGHT) sortedBlocks.sort((a, b) => b.x - a.x);
+        else if (dir === DIRS.LEFT) sortedBlocks.sort((a, b) => a.x - b.x);
+        else if (dir === DIRS.DOWN) sortedBlocks.sort((a, b) => b.y - a.y);
+        else if (dir === DIRS.UP) sortedBlocks.sort((a, b) => a.y - b.y);
+
+        let dx = 0, dy = 0;
+        if (dir === DIRS.RIGHT) dx = 1;
+        if (dir === DIRS.LEFT) dx = -1;
+        if (dir === DIRS.DOWN) dy = 1;
+        if (dir === DIRS.UP) dy = -1;
+
+        let anyMovedThisStep = false;
+
+        // 2. MOVE EACH BLOCK BY ONE TILE
+        for (let b of sortedBlocks) {
+            // Ignore blocks on conveyors
+            if (this.conveyors.some(c => c.x === b.x && c.y === b.y)) continue;
+
+            let nx = b.x + dx;
+            let ny = b.y + dy;
+
+            if (this.isTilePassable(nx, ny, b, dx, dy)) {
+                const portal = this.portals.find(p => p.x === nx && p.y === ny);
+                if (portal) {
+                    const oldX = b.x;
+                    const oldY = b.y;
+                    
+                    // Instant snap logical and visual positions
+                    b.x = portal.targetX + dx;
+                    b.y = portal.targetY + dy;
+                    b.visualX = b.x;
+                    b.visualY = b.y;
+                    
+                    if (window.AudioSys) AudioSys.playPortalWarp();
+                    
+                    // Immediate teleport particles at both ends
+                    for (let i = 0; i < 20; i++) {
+                        const pCol = Math.random() > 0.5 ? '#ffd700' : '#ffaa00';
+                        Graphics.spawnParticle(oldX * 32 + 16, oldY * 32 + 16, pCol, 'spark');
+                        Graphics.spawnParticle(b.x * 32 + 16, b.y * 32 + 16, pCol, 'spark');
+                    }
+                    
+                    anyMovedThisStep = true;
+                } else {
+                    b.x = nx;
+                    b.y = ny;
+                    anyMovedThisStep = true;
+                }
+            }
+        }
+
+        if (!anyMovedThisStep) {
+            this.gravitySlidingDir = null;
+            this.gravityAcceleration = 0;
+            this.gravityStepTimer = 0;
+            this.updateEnergy();
+        } else {
+            // Keep the triggering button active while sliding
+            const activeGB = this.gravityButtons.find(g => g.x === this.player.x && g.y === this.player.y);
+            if (activeGB) activeGB.flashTimer = 10;
+
+            if (this.screenShakeTimer < 3) this.screenShakeTimer = 3;
+            if (window.AudioSys && AudioSys.doorGrind) {
+                AudioSys.doorGrind();
+            }
+        }
+    }
+
 
     updateSliding() {
         if (this.state !== 'PLAYING') return;
         
+        // Handle Gravity Sliding
+        this.updateGravitySliding();
+
         // Player slide (Original slow speed - Heavy Robot)
         const pDist = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
         if (pDist < 0.05) {

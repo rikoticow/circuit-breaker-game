@@ -468,7 +468,15 @@ function gameLoop(timestamp) {
 
     const ctx = Graphics.ctx;
     ctx.save();
-    ctx.translate(-Math.floor(game.camera.x), -Math.floor(game.camera.y));
+    
+    // Screen Shake
+    let sx = 0, sy = 0;
+    if (game.screenShakeTimer > 0) {
+        const intensity = game.screenShakeTimer * 0.5;
+        sx = (Math.random() - 0.5) * intensity;
+        sy = (Math.random() - 0.5) * intensity;
+    }
+    ctx.translate(-Math.floor(game.camera.x) + sx, -Math.floor(game.camera.y) + sy);
 
     // Visible tile bounds (Culling)
     const startX = Math.floor(game.camera.x / 32);
@@ -501,6 +509,9 @@ function gameLoop(timestamp) {
 
     // Pass 1.05: Draw Tread Trails (Directly on floor, below EVERYTHING else)
     Graphics.drawTrails();
+    
+    // Pass 1.055: Draw Ambient Particles (Dust/Scrap on floor)
+    Graphics.drawAmbientParticles(game.ambientParticles);
 
     // Pass 1.06: Draw Quantum Floors (Above trails)
     for (const qf of game.quantumFloors) {
@@ -513,6 +524,12 @@ function gameLoop(timestamp) {
     // Pass 1.07: Draw Buttons (On floor/quantum fields)
     for (const btn of game.buttons) {
         Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
+    }
+    
+    // Pass 1.08: Draw Gravity Buttons
+    for (const gb of game.gravityButtons) {
+        const isSliding = game.gravitySlidingDir !== null;
+        Graphics.drawGravityButton(gb.x, gb.y, gb.dir, animFrame, gb.flashTimer, isSliding);
     }
 
     // Pass 1.1: Draw Charging Stations (Spawn + Extras)
@@ -617,8 +634,8 @@ function gameLoop(timestamp) {
         Graphics.drawDebris(p);
     }
 
-    // Pass 2.08: Draw Particles (Now behind doors)
-    Graphics.drawParticles();
+    // Pass 2.08: Draw Particles (Influenced by gravity and collide with walls)
+    Graphics.drawParticles(game);
     // Pass 3.0: Solar Portals (Top Layer)
     for (const p of game.portals) {
         Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
@@ -632,6 +649,11 @@ function gameLoop(timestamp) {
     }
 
     ctx.restore();
+    
+    // Draw Gravity Overlay (Force field visual)
+    if (game.gravityOverlayAlpha > 0) {
+        Graphics.drawGravityOverlay(game.lastGravityDir, animFrame, game.gravityOverlayAlpha);
+    }
 
     // Draw Transition Door
     if (game.transitionState !== 'NONE') {

@@ -25,6 +25,7 @@ const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: 'G', n: 'Vidro Blindado'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
     { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
     { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}] },
+    { title: "Gravidade", tiles: [{c: 'n', n: 'Gravidade N'}, {c: 's', n: 'Gravidade S'}, {c: 'e', n: 'Gravidade L'}, {c: 'w', n: 'Gravidade O'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
 
     { title: "Fios", tiles: [{c: 'H', n: 'Horiz'}, {c: 'V', n: 'Vert'}, {c: '+', n: 'Cruz'}] },
@@ -135,7 +136,13 @@ function createTilePreview(char) {
     } else if (char === 'G') {
         Graphics.drawGlassWall(0, 0, animFrame, true);
     } else if (char === 'O') {
-        Graphics.drawPortal(0, 0, 0, animFrame, false);
+        Graphics.drawPortal(0, 0, 0, animFrame, undefined);
+    } else if (['n', 's', 'e', 'w'].includes(char)) {
+        let d = DIRS.UP;
+        if (char === 's') d = DIRS.DOWN;
+        if (char === 'e') d = DIRS.RIGHT;
+        if (char === 'w') d = DIRS.LEFT;
+        Graphics.drawGravityButton(0, 0, d, animFrame, 0, false);
     } else if (char === '💬') {
         tCtx.fillStyle = '#00ff9f';
         tCtx.font = '20px VT323';
@@ -159,11 +166,12 @@ function buildPalette() {
         const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
         const isBlockGroup = group.title === "Amplificadores";
         const isEventGroup = group.title === "Eventos";
+        const isGravityGroup = group.title === "Gravidade";
         
-        if (activeLayer === 'overlays' && !isOverlayGroup) return;
+        if (activeLayer === 'overlays' && !isOverlayGroup && !isGravityGroup) return;
         if (activeLayer === 'blocks' && !isBlockGroup) return;
         if (activeLayer === 'events' && !isEventGroup) return;
-        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup || isEventGroup)) return;
+        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup || isEventGroup || isGravityGroup)) return;
 
         const gDiv = document.createElement('div');
         gDiv.className = 'palette-group';
@@ -212,11 +220,12 @@ function getAvailableTiles() {
         const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
         const isBlockGroup = group.title === "Amplificadores";
         const isEventGroup = group.title === "Eventos";
+        const isGravityGroup = group.title === "Gravidade";
         
-        if (activeLayer === 'overlays' && isOverlayGroup) tiles.push(...group.tiles.map(t => t.c));
+        if (activeLayer === 'overlays' && (isOverlayGroup || isGravityGroup)) tiles.push(...group.tiles.map(t => t.c));
         else if (activeLayer === 'blocks' && isBlockGroup) tiles.push(...group.tiles.map(t => t.c));
         else if (activeLayer === 'events' && isEventGroup) tiles.push(...group.tiles.map(t => t.c));
-        else if (activeLayer === 'base' && !isOverlayGroup && !isBlockGroup && !isEventGroup) tiles.push(...group.tiles.map(t => t.c));
+        else if (activeLayer === 'base' && !isOverlayGroup && !isBlockGroup && !isEventGroup && !isGravityGroup) tiles.push(...group.tiles.map(t => t.c));
     });
     return tiles;
 }
@@ -608,6 +617,12 @@ function rebuildMock() {
                 const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
                 const pColor = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_color`]) || '#ffd700';
                 mockGame.portals.push({ x, y, channel: chan, slot: { content: null }, color: pColor });
+            } else if (['n', 's', 'e', 'w'].includes(c)) {
+                let gDir = DIRS.UP;
+                if (c === 's') gDir = DIRS.DOWN;
+                if (c === 'e') gDir = DIRS.RIGHT;
+                if (c === 'w') gDir = DIRS.LEFT;
+                mockGame.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
             }
 
 
@@ -652,6 +667,14 @@ function rebuildMock() {
                 const pColor = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_color`]) || '#ffd700';
                 if (!mockGame.portals.some(p => p.x === x && p.y === y)) {
                     mockGame.portals.push({ x, y, channel: chan, slot: { content: null }, color: pColor });
+                }
+            } else if (['n', 's', 'e', 'w'].includes(oc)) {
+                let gDir = DIRS.UP;
+                if (oc === 's') gDir = DIRS.DOWN;
+                if (oc === 'e') gDir = DIRS.RIGHT;
+                if (oc === 'w') gDir = DIRS.LEFT;
+                if (!mockGame.gravityButtons.some(g => g.x === x && g.y === y)) {
+                    mockGame.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
                 }
             }
 
@@ -803,6 +826,11 @@ function getNextRotation(c) {
     if (c === ']') return '(';
     if (c === 'E') return 'E';
     if (c === 'M') return 'M';
+    // Gravity
+    if (c === 'n') return 'e';
+    if (c === 'e') return 's';
+    if (c === 's') return 'w';
+    if (c === 'w') return 'n';
     return c;
 }
 
@@ -1569,6 +1597,12 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         if (hasBlock) {
             Graphics.drawLimboHologram(x, y, portal.slot.content, animFrame);
         }
+    } else if (['n', 's', 'e', 'w'].includes(c)) {
+        let d = DIRS.UP;
+        if (c === 's') d = DIRS.DOWN;
+        if (c === 'e') d = DIRS.RIGHT;
+        if (c === 'w') d = DIRS.LEFT;
+        Graphics.drawGravityButton(x, y, d, animFrame, 0, false);
     } else if (c === '💬') {
         ctx.fillStyle = '#00ff9f';
         ctx.font = '20px VT323';
@@ -1865,6 +1899,8 @@ function testLoop(timestamp) {
     Graphics.drawTrails();
     for (const qf of testGame.quantumFloors) Graphics.drawQuantumFloor(qf.x, qf.y, qf.active, testAnimFrame, qf.flashTimer, qf.pulseIntensity, qf.entrySide, qf.whiteGlow);
     for (const btn of testGame.buttons) Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
+    const isTestSliding = testGame && testGame.gravitySlidingDir !== null;
+    for (const gb of testGame.gravityButtons) Graphics.drawGravityButton(gb.x, gb.y, gb.dir, testAnimFrame, gb.flashTimer, isTestSliding);
 
     for (const s of testGame.chargingStations) {
         const powered = testGame.poweredStations.has(`${s.x},${s.y}`);
