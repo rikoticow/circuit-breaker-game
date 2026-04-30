@@ -1663,12 +1663,7 @@ function renderLoop() {
         }
     }
 
-    // PASS 3: Lasers (Above overlays, below walls)
-    if (mockGame.emitters) {
-        for (const e of mockGame.emitters) {
-            Graphics.drawLaser(e, animFrame);
-        }
-    }
+
 
     // PASS 4: In-Phase Blocks
     const ghostBlocks = [];
@@ -1686,12 +1681,28 @@ function renderLoop() {
         }
     }
 
-    // PASS 5: Structural Walls/Ceiling
+    // PASS 3: Lasers (Above blocks)
+    if (mockGame.emitters) {
+        for (const e of mockGame.emitters) {
+            Graphics.drawLaser(e, animFrame);
+        }
+    }
+
+    // PASS 5: Structural Walls/Ceiling (Opaque)
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const baseC = currentMap[y][x];
-            if (baseC === '#' || baseC === 'W' || baseC === 'G') {
+            if (baseC === '#' || baseC === 'W') {
                 drawChar(x, y, baseC);
+            }
+        }
+    }
+
+    // PASS 5.5: Glass Walls (Above Lasers)
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (currentMap[y][x] === 'G') {
+                drawChar(x, y, 'G', 1.0, true);
             }
         }
     }
@@ -1865,6 +1876,7 @@ function handleTestInput(e) {
         else if (e.key === 'ArrowLeft' || e.key === 'a') testGame.movePlayer(-1, 0);
         else if (e.key === 'ArrowRight' || e.key === 'd') testGame.movePlayer(1, 0);
         else if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'e' || e.key === 'E') testGame.interact();
+        else if (e.key === 'Shift') testGame.toggleGrab();
         else if (e.key === 'z' || e.key === 'Z') testGame.doUndo();
         else if (e.key === 'r' || e.key === 'R') {
             if (rebootConfirmTimer) {
@@ -1943,10 +1955,7 @@ function testLoop(timestamp) {
         Graphics.drawConveyor(c.x, c.y, c.dir, testAnimFrame, c.inDir, c.beltDist, c.beltLength, isActive, overHole);
     }
 
-    // Pass 1.8: Lasers (Above overlays, below walls)
-    for (const e of testGame.emitters) {
-        Graphics.drawLaser(e, testAnimFrame);
-    }
+
 
     // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
     for (const d of testGame.doors) {
@@ -1959,8 +1968,7 @@ function testLoop(timestamp) {
             if (c === '#') Graphics.drawCeiling(x, y);
             else if (c === 'W') Graphics.drawWallFace(x, y);
             else if (c === 'G') {
-                const isHit = testGame.glassWallsHit.has(`${x},${y}`);
-                Graphics.drawGlassWall(x, y, testAnimFrame, isHit);
+                // Skip for now, draw after lasers
             }
             if (testGame.scrapPositions.has(`${x},${y}`)) Graphics.drawScrap(x, y, testAnimFrame);
         }
@@ -2002,10 +2010,25 @@ function testLoop(timestamp) {
         Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type, b.fallTimer || 0, ph, testGame.isSolarPhase);
     }
 
+    // Pass 2.06: Draw Lasers (Above blocks)
+    for (const e of testGame.emitters) {
+        Graphics.drawLaser(e, testAnimFrame);
+    }
+
+    // Pass 2.07: Draw Glass Walls (Above Lasers)
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (testGame.map[y][x] === 'G') {
+                const isHit = testGame.glassWallsHit.has(`${x},${y}`);
+                Graphics.drawGlassWall(x, y, testAnimFrame, isHit);
+            }
+        }
+    }
+
     if (testGame.state !== 'GAMEOVER') {
         const vx = testGame.player.x - testGame.player.visualX;
         const vy = testGame.player.y - testGame.player.visualY;
-        Graphics.drawRobot(testGame.player.visualX, testGame.player.visualY, testGame.player.dir, testAnimFrame, null, vx, vy, testGame.player.isDead, testGame.player.deathType, testGame.player.deathTimer, testGame.player.deathDir);
+        Graphics.drawRobot(testGame.player.visualX, testGame.player.visualY, testGame.player.dir, testAnimFrame, null, vx, vy, testGame.player.isDead, testGame.player.deathType, testGame.player.deathTimer, testGame.player.deathDir, testGame.player.isGrabbing);
     }
 
     for (const p of testGame.debris) Graphics.drawDebris(p);

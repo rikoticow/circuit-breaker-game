@@ -29,7 +29,7 @@ Object.assign(Graphics, {
         }
         this.ctx.save();
         const flicker = (Math.random() - 0.5) * 10, beamIntensity = 0.4 + Math.random() * 0.4, targetNode = e.laserPath[e.laserPath.length - 1];
-        this.ctx.shadowBlur = 15 + Math.random() * 10; this.ctx.shadowColor = '#bf00ff'; this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.1 * beamIntensity})`; this.ctx.lineWidth = 35 + flicker; this.ctx.lineCap = 'round'; this.ctx.lineJoin = 'round';
+        this.ctx.shadowBlur = 15 + Math.random() * 10; this.ctx.shadowColor = '#bf00ff'; this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.1 * beamIntensity})`; this.ctx.lineWidth = 24 + flicker; this.ctx.lineCap = 'round'; this.ctx.lineJoin = 'round';
         this.ctx.beginPath(); this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y); for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y); this.ctx.stroke();
         this.ctx.strokeStyle = `rgba(230, 180, 255, ${0.8 * beamIntensity})`; this.ctx.lineWidth = 2; this.ctx.shadowBlur = 0;
         this.ctx.beginPath(); this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
@@ -39,7 +39,7 @@ Object.assign(Graphics, {
             this.ctx.lineTo(end.x, end.y);
         }
         this.ctx.stroke();
-        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.6 * beamIntensity})`; this.ctx.lineWidth = 14 + (Math.random() - 0.5) * 6;
+        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.6 * beamIntensity})`; this.ctx.lineWidth = 8 + (Math.random() - 0.5) * 4;
         this.ctx.beginPath(); this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y); for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y); this.ctx.stroke();
         this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 4 + (Math.random() - 0.5) * 2;
         this.ctx.beginPath(); this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y); for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y); this.ctx.stroke();

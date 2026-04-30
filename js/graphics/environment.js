@@ -286,52 +286,58 @@ Object.assign(Graphics, {
 
         this.ctx.save();
 
-        // 1. Reinforced Metal Frame (Dark industrial look)
-        this.ctx.fillStyle = '#4a5568';
-        this.ctx.fillRect(px, py, ts, ts);
-        
-        // Glass inner area (Cutout)
-        this.ctx.fillStyle = 'rgba(20, 30, 40, 0.8)';
-        this.ctx.fillRect(px + 4, py + 4, ts - 8, ts - 8);
-        
-        // Glass Surface (Translucent with light blue tint)
-        this.ctx.fillStyle = 'rgba(0, 240, 255, 0.1)';
-        this.ctx.fillRect(px + 4, py + 4, ts - 8, ts - 8);
-
-        // 2. Industrial Rivets in corners
-        this.ctx.fillStyle = '#1a1a1a';
-        const rs = 2;
-        this.ctx.fillRect(px + 1, py + 1, rs, rs);
-        this.ctx.fillRect(px + ts - 3, py + 1, rs, rs);
-        this.ctx.fillRect(px + 1, py + ts - 3, rs, rs);
-        this.ctx.fillRect(px + ts - 3, py + ts - 3, rs, rs);
-
-        // 3. Diagonal Reflections (Glass shine)
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        // 0. Micro Dark Outline (To define tile boundary)
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
         this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        // Main reflections
-        this.ctx.moveTo(px + 6, py + ts - 6);
-        this.ctx.lineTo(px + ts - 6, py + 6);
-        this.ctx.moveTo(px + 12, py + ts - 6);
-        this.ctx.lineTo(px + ts - 6, py + 12);
-        this.ctx.stroke();
+        this.ctx.strokeRect(px + 0.5, py + 0.5, ts - 1, ts - 1);
 
-        // 4. Optic Permeability Feedback (Cyan glow on edges when laser passes)
+        // 1. Glass Base (Bluish tint, 10% opacity)
+        this.ctx.fillStyle = 'rgba(0, 150, 255, 0.1)';
+        this.ctx.fillRect(px, py, ts, ts);
+
+        // 2. Simple Diagonal Reflection Lines (Animated Sweep)
+        const cycle = ts * 4;
+        const progress = (frame * 0.5) % cycle;
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
+        
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(px, py, ts, ts);
+        this.ctx.clip();
+        
+        for (let i = 0; i < 2; i++) {
+            const offset = progress - i * 16; 
+            
+            if (offset > 0 && offset < ts * 2) {
+                this.ctx.beginPath();
+                this.ctx.lineWidth = i === 0 ? 6 : 2; // Much thicker
+                this.ctx.shadowBlur = 10;
+                this.ctx.shadowColor = '#ffffff';
+                
+                const x1 = Math.max(0, offset - ts);
+                const y1 = Math.min(ts, offset);
+                const x2 = Math.min(ts, offset);
+                const y2 = Math.max(0, offset - ts);
+                
+                if (Math.abs(x1 - x2) > 1) {
+                    this.ctx.moveTo(px + x1, py + y1);
+                    this.ctx.lineTo(px + x2, py + y2);
+                }
+                this.ctx.stroke();
+                this.ctx.shadowBlur = 0;
+            }
+        }
+        this.ctx.restore();
+
+        // 4. Optic Permeability Feedback (Cyan glow only when laser passes)
         if (isLaserPassing) {
             this.ctx.save();
-            const glowAlpha = 0.3 + Math.sin(frame * 0.2) * 0.2;
+            const glowAlpha = 0.2 + Math.sin(frame * 0.2) * 0.1;
             this.ctx.strokeStyle = `rgba(0, 240, 255, ${glowAlpha})`;
-            this.ctx.lineWidth = 2;
-            this.ctx.shadowBlur = 10;
+            this.ctx.lineWidth = 1;
+            this.ctx.shadowBlur = 5;
             this.ctx.shadowColor = '#00f0ff';
-            // Draw inner glowing rectangle
-            this.ctx.strokeRect(px + 5, py + 5, ts - 10, ts - 10);
-            
-            // Random sparks on the glass surface
-            if (Math.random() > 0.9) {
-                this.spawnParticle(px + 16, py + 16, '#00f0ff', 'spark');
-            }
+            this.ctx.strokeRect(px + 1, py + 1, ts - 2, ts - 2);
             this.ctx.restore();
         }
 

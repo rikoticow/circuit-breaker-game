@@ -150,6 +150,7 @@ function init() {
             else if (e.key === 'ArrowLeft' || e.key === 'a') game.movePlayer(-1, 0);
             else if (e.key === 'ArrowRight' || e.key === 'd') game.movePlayer(1, 0);
             else if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'e' || e.key === 'E') game.interact();
+            else if (e.key === 'Shift') game.toggleGrab();
             else if (e.key === 'z' || e.key === 'Z') game.doUndo();
             else if (e.key === 'r' || e.key === 'R') {
                 if (rebootConfirmTimer) {
@@ -557,11 +558,6 @@ function gameLoop(timestamp) {
         Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
     }
 
-    // Pass 1.85: Draw Lasers (Above doors/conveyors, below walls)
-    for (const e of game.emitters) {
-        Graphics.drawLaser(e, animFrame);
-    }
-
     // Pass 2: Draw Objects, Walls, and Ceiling
     for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
@@ -570,9 +566,6 @@ function gameLoop(timestamp) {
                 Graphics.drawCeiling(x, y);
             } else if (c === 'W') {
                 Graphics.drawWallFace(x, y);
-            } else if (c === 'G') {
-                const isHit = game.glassWallsHit.has(`${x},${y}`);
-                Graphics.drawGlassWall(x, y, animFrame, isHit);
             } else {
                 // Draw scrap if present
                 if (game.scrapPositions.has(`${x},${y}`)) {
@@ -636,12 +629,27 @@ function gameLoop(timestamp) {
         // Calculate velocity for squash and stretch
         const vx = game.player.x - game.player.visualX;
         const vy = game.player.y - game.player.visualY;
-        Graphics.drawRobot(game.player.visualX, game.player.visualY, game.player.dir, animFrame, visorColor, vx, vy, game.player.isDead, game.player.deathType, game.player.deathTimer, game.player.deathDir);
+        Graphics.drawRobot(game.player.visualX, game.player.visualY, game.player.dir, animFrame, visorColor, vx, vy, game.player.isDead, game.player.deathType, game.player.deathTimer, game.player.deathDir, game.player.isGrabbing);
     }
     
     // Pass 2.05: Draw Persistent Debris (Irregular pieces on floor)
     for (const p of game.debris) {
         Graphics.drawDebris(p);
+    }
+
+    // Pass 2.06: Draw Lasers (Above blocks and debris, below particles)
+    for (const e of game.emitters) {
+        Graphics.drawLaser(e, animFrame);
+    }
+
+    // Pass 2.07: Draw Glass Walls (Drawn AFTER lasers to look translucent on top)
+    for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
+        for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
+            if (game.map[y][x] === 'G') {
+                const isHit = game.glassWallsHit.has(`${x},${y}`);
+                Graphics.drawGlassWall(x, y, animFrame, isHit);
+            }
+        }
     }
 
     // Pass 2.08: Draw Particles (Influenced by gravity and collide with walls)

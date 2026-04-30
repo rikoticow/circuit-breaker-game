@@ -169,7 +169,7 @@ Object.assign(Graphics, {
         this.ctx.restore();
     },
 
-    drawRobot(x, y, dir, frame, colorOverride = null, vx = 0, vy = 0, isDead = false, deathType = null, deathTimer = 0, deathDir = {x:0, y:0}) {
+    drawRobot(x, y, dir, frame, colorOverride = null, vx = 0, vy = 0, isDead = false, deathType = null, deathTimer = 0, deathDir = {x:0, y:0}, isGrabbing = false) {
         const ts = this.tileSize, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
         this.ctx.save(); this.ctx.translate(cx, cy);
         if (isDead && deathType === 'HOLE') {
@@ -188,8 +188,33 @@ Object.assign(Graphics, {
         this.ctx.save(); this.ctx.translate(0, treadSpread); this.ctx.rotate(treadRot); this.ctx.fillStyle = '#4a5568'; this.ctx.fillRect(-12, 7, 24, 7); this.ctx.fillStyle = '#1a202c'; [-8, 0, 8].forEach(x => this.ctx.fillRect(x, 8, 4, 5)); this.ctx.restore();
         this.ctx.save(); this.ctx.translate(0, -treadSpread); this.ctx.rotate(-treadRot * 1.1); this.ctx.fillStyle = '#4a5568'; this.ctx.fillRect(-12, -14, 24, 7); this.ctx.fillStyle = '#1a202c'; [-8, 0, 8].forEach(x => this.ctx.fillRect(x, -13, 4, 5)); this.ctx.restore();
         const asX = isCrushed ? t * 0.6 : 0, asY = isCrushed ? t * 0.3 : 0;
-        this.ctx.save(); this.ctx.translate(asX, asY); this.ctx.rotate(isCrushed ? tr * 0.1 : 0); this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-2, 7, 6, 4); this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, 7, 8, 3); this.ctx.restore();
-        this.ctx.save(); this.ctx.translate(asX, -asY); this.ctx.rotate(isCrushed ? -tr * 0.1 : 0); this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-2, -11, 6, 4); this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, -10, 8, 3); this.ctx.restore();
+        // Right Arm/Claw
+        this.ctx.save(); 
+        this.ctx.translate(asX + (isGrabbing ? 4 : 0), asY); 
+        this.ctx.rotate(isCrushed ? tr * 0.1 : 0); 
+        this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-2, 7, 6, 4); 
+        this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, 7, 8, 3); 
+        if (isGrabbing) {
+            this.ctx.fillStyle = '#00f0ff'; // Magnetic Blue
+            this.ctx.shadowBlur = 5; this.ctx.shadowColor = '#00f0ff';
+            this.ctx.fillRect(12, 7, 4, 3);
+            this.ctx.shadowBlur = 0;
+        }
+        this.ctx.restore();
+        
+        // Left Arm/Claw
+        this.ctx.save(); 
+        this.ctx.translate(asX + (isGrabbing ? 4 : 0), -asY); 
+        this.ctx.rotate(isCrushed ? -tr * 0.1 : 0); 
+        this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-2, -11, 6, 4); 
+        this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, -10, 8, 3); 
+        if (isGrabbing) {
+            this.ctx.fillStyle = '#00f0ff';
+            this.ctx.shadowBlur = 5; this.ctx.shadowColor = '#00f0ff';
+            this.ctx.fillRect(12, -10, 4, 3);
+            this.ctx.shadowBlur = 0;
+        }
+        this.ctx.restore();
         this.ctx.save(); this.ctx.translate(isCrushed ? -t * 0.5 : 0, 0); this.ctx.rotate(isCrushed ? -tr * 0.08 : 0); this.ctx.fillStyle = '#3182ce'; this.ctx.fillRect(-14, -8, 6, 16); this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-14, -8, 2, 16); this.ctx.restore();
         this.ctx.save(); if (isCrushed) { this.ctx.translate(Math.sin(deathTimer)*1.2, Math.cos(deathTimer)*1.2); this.ctx.rotate(tr * 0.03); } this.ctx.fillStyle = '#dd6b20'; this.ctx.fillRect(-8, -8, 14, 16);
         if (!isDead) { [{x:-12, y:-4, i:10}, {x:-12, y:2, i:11}, {x:-4, y:-6, i:12}].forEach(l => { if (Math.sin(frame * 0.08 + l.i * 2.1) + Math.sin(frame * 0.12 + l.i * 1.2) > 1.3) { this.ctx.fillStyle = '#ffcc00'; this.ctx.shadowColor = '#ffcc00'; this.ctx.shadowBlur = 4; this.ctx.fillRect(l.x, l.y, 2, 2); } }); }

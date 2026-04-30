@@ -3,7 +3,7 @@ class GameState {
         this.isEditor = isEditor;
         this.levelIndex = 0;
         this.map = [];
-        this.player = { x: 0, y: 0, visualX: 0, visualY: 0, dir: DIRS.DOWN, visorTimer: 0, visorColor: '#00ff41' };
+        this.player = { x: 0, y: 0, visualX: 0, visualY: 0, dir: DIRS.DOWN, visorTimer: 0, visorColor: '#00ff41', grabbedBlock: null, isGrabbing: false };
         this.blocks = [];
         this.targets = [];
         this.forbiddens = [];
@@ -107,7 +107,7 @@ class GameState {
 
     cloneState() {
         return {
-            player: { ...this.player },
+            player: { ...this.player, grabbedBlock: this.player.grabbedBlock ? this.blocks.indexOf(this.player.grabbedBlock) : null },
             blocks: this.blocks.map(b => ({ ...b })),
             moves: this.moves,
             time: this.time,
@@ -142,6 +142,11 @@ class GameState {
     applyState(state, snapVisuals = false) {
         if (snapVisuals) {
             this.player = { ...state.player };
+            if (state.player.grabbedBlock !== null && state.player.grabbedBlock !== undefined) {
+                this.player.grabbedBlock = this.blocks[state.player.grabbedBlock];
+            } else {
+                this.player.grabbedBlock = null;
+            }
             this.player.visualX = state.player.x;
             this.player.visualY = state.player.y;
             this.player.visualAngle = state.player.dir * (Math.PI / 2);
@@ -156,6 +161,11 @@ class GameState {
             const vx = this.player.visualX !== undefined ? this.player.visualX : state.player.x;
             const vy = this.player.visualY !== undefined ? this.player.visualY : state.player.y;
             this.player = { ...state.player };
+            if (state.player.grabbedBlock !== null && state.player.grabbedBlock !== undefined) {
+                this.player.grabbedBlock = this.blocks[state.player.grabbedBlock];
+            } else {
+                this.player.grabbedBlock = null;
+            }
             this.player.visualX = vx;
             this.player.visualY = vy;
             
@@ -703,7 +713,7 @@ class GameState {
             for (let i = 0; i < numSegments; i++) {
                 this.player.lastTX += (dx / distMoved) * step;
                 this.player.lastTY += (dy / distMoved) * step;
-                if (!onConveyor) {
+                if (!onConveyor && !this.player.isTeleporting) {
                     Graphics.spawnTrailSegment(this.player.lastTX, this.player.lastTY, this.player.visualAngle);
                 }
             }
@@ -1457,19 +1467,16 @@ class GameState {
     movePlayer(dx, dy) {
         if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead || this.gravitySlidingDir !== null) return;
 
-        // Prevent movement if already in motion (manual or sliding)
         const pDist = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
-        if (pDist > 0.6) return; // Increased from 0.1 for faster repeat moves
+        if (pDist > 0.6) return; 
 
         const nx = this.player.x + dx;
         const ny = this.player.y + dy;
 
-        // LOCK CONTROLS IF ON ACTIVE CONVEYOR: The player must follow the belt
         const conveyor = this.conveyors.find(c => c.x === this.player.x && c.y === this.player.y);
         if (conveyor && this.isConveyorActive(conveyor)) return;
 
-        if (this.map[ny][nx] === '#' || this.map[ny][nx] === 'W') return;
-
+        if (this.map[ny] === undefined || this.map[ny][nx] === undefined || this.map[ny][nx] === '#' || this.map[ny][nx] === 'W') return;
 
         const ox = this.player.x;
         const oy = this.player.y;
@@ -1479,16 +1486,61 @@ class GameState {
         if (dx < 0) targetDir = DIRS.LEFT;
         if (dy < 0) targetDir = DIRS.UP;
 
-        this.player.dir = targetDir;
+        // GRAB LOGIC: If grabbing, we move as a unit.
+        if (this.player.grabbedBlock) {
+            const b = this.player.grabbedBlock;
+            const bnx = b.x + dx;
+            const bny = b.y + dy;
+            
+            const playerCanMove = this.isTilePassable(nx, ny, [b], dx, dy, true);
+            const blockCanMove = this.isTilePassable(bnx, bny, [this.player], dx, dy, false);
 
+            if (playerCanMove && blockCanMove) {
+                this.saveUndo();
+                
+                // Move block
+                const bPortal = this.portals.find(p => p.x === bnx && p.y === bny);
+                if (bPortal) {
+                    b.x = bPortal.targetX + dx;
+                    b.y = bPortal.targetY + dy;
+                    b.visualX = b.x; b.visualY = b.y;
+                } else {
+                    b.x = bnx;
+                    b.y = bny;
+                }
+
+                // Move player
+                const pPortal = this.portals.find(p => p.x === nx && p.y === ny);
+                if (pPortal) {
+                    this.player.x = pPortal.targetX + dx;
+                    this.player.y = pPortal.targetY + dy;
+                    this.player.visualX = this.player.x;
+                    this.player.visualY = this.player.y;
+                } else {
+                    this.player.x = nx;
+                    this.player.y = ny;
+                }
+
+                // Update orientation ONLY if moving forward (don't flip while reversing/strafing)
+                if (targetDir === this.player.dir) {
+                    this.player.dir = targetDir;
+                }
+
+                AudioSys.push(); 
+                this.updateEnergy();
+                this.finishMove(ox, oy);
+                return;
+            } else {
+                return; 
+            }
+        }
+
+        this.player.dir = targetDir;
         let moveSuccessful = false;
 
-        // Check block push (support multiple blocks in a row)
-        // 1. SCAN FOR BLOCKS (Following Portals)
         let blocksToPush = [];
         let scanX = nx, scanY = ny;
         while (true) {
-            // If the scanning pointer hits a portal, teleport the pointer to the exit
             const portal = this.portals.find(p => p.x === scanX && p.y === scanY);
             if (portal) {
                 scanX = portal.targetX + dx;
@@ -1497,28 +1549,24 @@ class GameState {
 
             const b = this.blocks.find(block => block.x === scanX && block.y === scanY && (!block.phase || (block.phase === 'SOLAR' && this.isSolarPhase) || (block.phase === 'LUNAR' && !this.isSolarPhase)));
             if (b) {
-                if (blocksToPush.includes(b)) break; // Safety against infinite portal loops
+                if (blocksToPush.includes(b)) break; 
                 blocksToPush.push(b);
                 scanX += dx; scanY += dy;
             } else { break; }
         }
 
         if (blocksToPush.length > 0) {
-            // Check if every block in the chain can move to its next tile (recursively through portals)
-            const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy));
+            const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy, false));
             
             if (allBlocksCanMove) {
                 this.saveUndo();
-                // Move blocks from front to back of the chain to prevent collisions
                 for (let i = blocksToPush.length - 1; i >= 0; i--) {
                     const b = blocksToPush[i];
                     let targetX = b.x + dx;
                     let targetY = b.y + dy;
 
-                    // EXIT EJECTION: If moving into a portal, teleport the block to the TILE AFTER the exit portal
                     const portal = this.portals.find(p => p.x === targetX && p.y === targetY);
                     if (portal) {
-                        // Mark for visual teleportation
                         b.x = targetX;
                         b.y = targetY;
                         b.isTeleporting = true;
@@ -1529,11 +1577,13 @@ class GameState {
                     }
                 }
 
-                // Player Ejection
                 const pPortal = this.portals.find(p => p.x === nx && p.y === ny);
                 if (pPortal) {
                     this.player.x = pPortal.targetX + dx;
                     this.player.y = pPortal.targetY + dy;
+                    this.player.visualX = this.player.x;
+                    this.player.visualY = this.player.y;
+                    if (window.AudioSys) AudioSys.playPortalWarp();
                 } else {
                     this.player.x = nx;
                     this.player.y = ny;
@@ -1542,7 +1592,7 @@ class GameState {
                 this.updateEnergy();
                 moveSuccessful = true;
             }
-        } else if (this.isTilePassable(nx, ny, this.player, dx, dy)) {
+        } else if (this.isTilePassable(nx, ny, this.player, dx, dy, true)) {
             this.saveUndo();
             this.player.x = nx;
             this.player.y = ny;
@@ -1550,21 +1600,17 @@ class GameState {
             this.updateEnergy();
             moveSuccessful = true;
             
-            // Trigger Quantum Hum if stepping on a quantum floor
             const qf = this.quantumFloors.find(q => q.x === this.player.x && q.y === this.player.y);
             if (qf && window.AudioSys) {
-                // Coordinate-based variation for "each tile" signature tone
                 AudioSys.playQuantumHum(false, (this.player.x + this.player.y) % 4);
             }
 
-            // Portal Detection (Handled in update() for visual continuity)
             const portal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
             if (portal) {
                 this.player.isTeleporting = true;
                 this.player.teleportDir = { dx, dy };
             }
         } else {
-            // Check if it's a hole to fall into
             const isHole = this.map[ny] && this.map[ny][nx] === '*';
             if (isHole) {
                 const qf = this.quantumFloors.find(q => q.x === nx && q.y === ny);
@@ -1576,50 +1622,93 @@ class GameState {
             }
         }
 
-        if (!moveSuccessful) return;
+        if (moveSuccessful) {
+            this.finishMove(ox, oy);
+        }
+    }
 
-        // (Trails are now handled continuously in update())
-
-        // Smoke puffs left behind at OLD position
+    finishMove(ox, oy) {
         for (let i = 0; i < 5; i++) {
             const offsetX = (Math.random() - 0.5) * 16;
             const offsetY = (Math.random() - 0.5) * 8;
             Graphics.spawnParticle(ox * 32 + 16 + offsetX, oy * 32 + 24 + offsetY, 'rgba(240, 240, 240, 0.6)', 'smoke');
         }
-
-        // Energy penalty for movement
-        this.moves--;
-        this.moveCount++;
-        if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('robotMoves', 1);
+        
+        // Force release block if on conveyor (Robot or Block)
+        const robotOnConv = this.conveyors.some(c => c.x === this.player.x && c.y === this.player.y);
+        const blockOnConv = this.player.grabbedBlock && this.conveyors.some(c => c.x === this.player.grabbedBlock.x && c.y === this.player.grabbedBlock.y);
+        
+        if ((robotOnConv || blockOnConv) && this.player.isGrabbing) {
+            this.player.grabbedBlock = null;
+            this.player.isGrabbing = false;
+            this.player.visorTimer = 10;
+            this.player.visorColor = '#ffcc00'; 
+            if (window.AudioSys) AudioSys.playPortalClick();
+        }
 
         // Check Gravity Buttons
         if (this.gravitySlidingDir === null) {
-            const gb = this.gravityButtons.find(g => g.x === nx && g.y === ny);
+            const gb = this.gravityButtons.find(g => g.x === this.player.x && g.y === this.player.y);
             if (gb) {
-                gb.flashTimer = 30; // Intense flash
+                gb.flashTimer = 30; 
                 this.triggerGravity(gb.dir);
                 if (window.AudioSys) AudioSys.buttonClick();
             }
         }
 
         // Collect scrap
-        const posKey = `${nx},${ny}`;
+        const posKey = `${this.player.x},${this.player.y}`;
         if (this.scrapPositions.has(posKey)) {
             this.scrapPositions.delete(posKey);
             this.scrapCollected++;
             if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalScrap', 1);
             if (window.AudioSys) AudioSys.playScrapCollect();
             for (let i = 0; i < 6; i++) {
-                Graphics.spawnParticle(nx * 32 + 16, ny * 32 + 16, '#ffcc00', 'spark');
+                Graphics.spawnParticle(this.player.x * 32 + 16, this.player.y * 32 + 16, '#ffcc00', 'spark');
             }
         }
 
+        this.moves--;
+        this.moveCount++;
+        if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('robotMoves', 1);
+        
         if (this.moves <= 0) {
             this.handleDeath(false);
         }
 
-        // Trigger dialogues on walking
         this.checkDialogues('walk');
+    }
+
+    toggleGrab() {
+        if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead) return;
+
+        if (this.player.grabbedBlock) {
+            this.player.grabbedBlock = null;
+            this.player.isGrabbing = false;
+            this.player.visorTimer = 10;
+            this.player.visorColor = '#ffcc00'; 
+            if (window.AudioSys) AudioSys.playPortalClick(); 
+            return;
+        }
+
+        let tx = this.player.x, ty = this.player.y;
+        if (this.player.dir === DIRS.UP) ty--;
+        else if (this.player.dir === DIRS.DOWN) ty++;
+        else if (this.player.dir === DIRS.LEFT) tx--;
+        else if (this.player.dir === DIRS.RIGHT) tx++;
+
+        const b = this.blocks.find(block => block.x === tx && block.y === ty && (!block.phase || (block.phase === 'SOLAR' && this.isSolarPhase) || (block.phase === 'LUNAR' && !this.isSolarPhase)));
+        
+        if (b) {
+            this.player.grabbedBlock = b;
+            this.player.isGrabbing = true;
+            this.player.visorTimer = 15;
+            this.player.visorColor = '#00f0ff'; 
+            if (window.AudioSys) AudioSys.playPortalClick();
+        } else {
+            this.player.visorTimer = 10;
+            this.player.visorColor = '#ff003c'; 
+        }
     }
 
     interact() {
@@ -1648,7 +1737,7 @@ class GameState {
                 const outX = tx + (this.player.dir === DIRS.RIGHT ? 1 : (this.player.dir === DIRS.LEFT ? -1 : 0));
                 const outY = ty + (this.player.dir === DIRS.DOWN ? 1 : (this.player.dir === DIRS.UP ? -1 : 0));
                 
-                if (this.isTilePassable(outX, outY)) {
+                if (this.isTilePassable(outX, outY, null, 0, 0, false)) {
                     this.saveUndo();
                     const b = portal.slot.content;
                     b.x = outX;
@@ -1750,7 +1839,7 @@ class GameState {
         }
     }
 
-    isTilePassable(x, y, ignoreObj = null, dx = 0, dy = 0) {
+    isTilePassable(x, y, ignoreObj = null, dx = 0, dy = 0, isRobot = false) {
         if (y < 0 || y >= this.map.length || x < 0 || x >= this.map[0].length) return false;
         
         // Portal Pass-through recursion
@@ -1758,7 +1847,7 @@ class GameState {
             const portal = this.portals.find(p => p.x === x && p.y === y);
             if (portal) {
                 // If entering a portal, check the exit tile of its pair
-                return this.isTilePassable(portal.targetX + dx, portal.targetY + dy, ignoreObj, dx, dy);
+                return this.isTilePassable(portal.targetX + dx, portal.targetY + dy, ignoreObj, dx, dy, isRobot);
             }
         }
 
@@ -1791,20 +1880,20 @@ class GameState {
         const qf = this.quantumFloors.find(q => q.x === x && q.y === y);
         
         if (isHole) {
-            // 1. There is a Quantum Floor on it and it's active (Bridge is ON)
-            // 2. There is a conveyor on it (acting as a bridge)
-            const hasBridge = qf && qf.active;
-            const hasConveyor = this.conveyors.some(cv => cv.x === x && cv.y === y && !cv.disabled);
             // Holes are now physically passable so entities can move INTO them and fall
             return true;
         } else if (qf && qf.active) {
-            // Standard Quantum Floor behavior: blocks movement when active (Barrier is UP)
-            if (!ignores.includes(this.player)) {
-                if (window.AudioSys) AudioSys.playQuantumHum(true, (x + y) % 4); 
+            // Quantum Barrier: Robot can pass, blocks are blocked
+            if (isRobot) return true;
+            
+            if (window.AudioSys && !ignores.includes(this.player)) {
+                AudioSys.playQuantumHum(true, (x + y) % 4); 
+            }
+            if (qf.flashTimer <= 0) {
                 qf.entrySide = { dx: -dx, dy: -dy }; 
                 this.triggerQuantumPulse(x, y, 1.0, 0, 0, new Set(), dx, dy);
-                return false;
             }
+            return false;
         }
         
         // Check Portals
@@ -1854,13 +1943,14 @@ class GameState {
 
         // 2. MOVE EACH BLOCK BY ONE TILE
         for (let b of sortedBlocks) {
-            // Ignore blocks on conveyors
-            if (this.conveyors.some(c => c.x === b.x && c.y === b.y)) continue;
+            // Ignore blocks on ACTIVE conveyors (Active conveyors override gravity)
+            const conv = this.conveyors.find(c => c.x === b.x && c.y === b.y);
+            if (conv && this.isConveyorActive(conv)) continue;
 
             let nx = b.x + dx;
             let ny = b.y + dy;
 
-            if (this.isTilePassable(nx, ny, b, dx, dy)) {
+            if (this.isTilePassable(nx, ny, b, dx, dy, false)) {
                 const portal = this.portals.find(p => p.x === nx && p.y === ny);
                 if (portal) {
                     const oldX = b.x;
@@ -1957,8 +2047,8 @@ class GameState {
         }
 
         if (blocksToPush.length > 0) {
-            const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy));
-            if (this.isTilePassable(scanX, scanY, [obj, ...blocksToPush], dx, dy) && allBlocksCanMove) {
+            const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy, false));
+            if (this.isTilePassable(scanX, scanY, [obj, ...blocksToPush], dx, dy, isPlayer) && allBlocksCanMove) {
 
 
 
@@ -1974,7 +2064,7 @@ class GameState {
             return;
         }
 
-        if (this.isTilePassable(nx, ny, obj)) {
+        if (this.isTilePassable(nx, ny, obj, dx, dy, isPlayer)) {
             // PORTAL SWALLOW (Conveyor)
             const portal = this.portals.find(p => p.x === nx && p.y === ny);
             if (portal && portal.slot && !portal.slot.content && !isPlayer) {
@@ -1987,7 +2077,17 @@ class GameState {
 
             obj.x = nx;
             obj.y = ny;
-            if (isPlayer && window.AudioSys) AudioSys.conveyorSlide();
+            if (isPlayer && window.AudioSys) {
+                AudioSys.conveyorSlide();
+                // Force release block if being moved by conveyor
+                if (obj.isGrabbing) {
+                    obj.grabbedBlock = null;
+                    obj.isGrabbing = false;
+                    obj.visorTimer = 10;
+                    obj.visorColor = '#ffcc00'; 
+                    if (window.AudioSys) AudioSys.playPortalClick();
+                }
+            }
             
             const nextIsConveyor = this.conveyors.some(c => c.x === nx && c.y === ny);
             
@@ -2009,10 +2109,10 @@ class GameState {
                         } else { break; }
                     }
 
-                    const allBlocksCanMoveLaunch = blocksToPushLaunch.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPushLaunch, dx, dy));
-                    const selfCanMove = this.isTilePassable(obj.x + dx, obj.y + dy, obj, dx, dy);
+                    const allBlocksCanMoveLaunch = blocksToPushLaunch.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPushLaunch, dx, dy, false));
+                    const selfCanMove = this.isTilePassable(obj.x + dx, obj.y + dy, obj, dx, dy, false);
 
-                    if (this.isTilePassable(sx, sy, [obj, ...blocksToPushLaunch], dx, dy) && allBlocksCanMoveLaunch && selfCanMove) {
+                    if (this.isTilePassable(sx, sy, [obj, ...blocksToPushLaunch], dx, dy, false) && allBlocksCanMoveLaunch && selfCanMove) {
 
 
 
