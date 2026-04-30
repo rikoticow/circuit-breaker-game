@@ -28,14 +28,30 @@ O "Cérebro" do jogo. Gerencia:
     *   **Símbolos:** `(` (Esq), `)` (Dir), `[` (Cima), `]` (Baixo).
     *   **Sistema de Canais:** Suporta até 30 canais independentes (0-29). Se uma esteira tiver canal e não houver botões vinculados, ela permanece ON. Se houver botões, ela segue o estado lógico (`anyPressed`).
 
-### B. Graphics (js/graphics.js)
-Responsável por toda a parte visual:
+### B. Modular Graphics Engine (js/graphics/)
+O sistema visual foi refatorado de um arquivo monolítico para uma arquitetura modular, facilitando a manutenção e expansão. O objeto global `Graphics` é inicializado no núcleo e estendido por módulos especializados:
+
+*   **Core (js/graphics.js):** Ponto de entrada que define o objeto `Graphics`, constantes globais (`COLORS`, `DIRS`), o estado fundamental (contexto, partículas, trails) e o sistema de HUD/Vignettes de resultado.
+*   **Environment (js/graphics/environment.js):** Gerencia a renderização de elementos de cenário estáticos e estruturais, incluindo Chão, Tetos (`#`), Faces de Parede (`W`) com sistema de variações procedurais, e Vidro Blindado (`G`).
+*   **Mechanisms (js/graphics/mechanisms/):** Sub-módulo dividido para gerenciar a complexa lógica de maquinário:
+    *   `conveyors.js`: Esteiras magnéticas com animação de fluxo e quinas curvas.
+    *   `power.js`: Fios, Cores de energia (Cores), Charging Stations e Catalisadores Quânticos.
+    *   `triggers.js`: Todos os tipos de Botões (Timer, Toggle, Permanent, Pressure), Portais, Limbo Holograms e Chão Quântico.
+    *   `lasers.js`: Emissores fixos e o sistema de trajetória dinâmica de feixes de laser.
+    *   `doors.js`: Portas industriais com animação de deslizamento e estados de falha.
+*   **Entities (js/graphics/entities.js):** Renderiza objetos dinâmicos e interativos como o Robô jogador, Blocos Amplificadores, Prismas, Sucatas (Scrap) e destroços de Debris.
+*   **Effects & Particles (js/graphics/particles.js & trails.js):**
+    *   Sistema de partículas (faíscas, fumaça, poeira ambiente).
+    *   Sistema de rastros (Hybrid Trail System) com baking em buffer offscreen para performance.
+*   **VFX (js/graphics/vfx.js):** Efeitos de pós-processamento e transições, incluindo Raios (Lightning), filtros de VHS/Rewind, transição de portas de elevador e o overlay de vetores de gravidade.
+
+**Regras e Lógicas Visuais Preservadas:**
 *   **Renderização em Camadas:** Fios e blocos são desenhados com múltiplas camadas (borda, corpo, núcleo de energia e brilho/glow).
 *   **Estética de Blocos:** Cubos metálicos com uma **seta branca fixa** independente do estado de energia. O estado de ativação é comunicado exclusivamente através do brilho neon na base e arcos elétricos externos (lightning), mantendo a seta sempre visível e neutra.
 *   **Z-Index e Profundidade:** A ordem de desenho é rigorosa para garantir fidelidade visual:
     *   **Fundo:** Chão, esteiras e fios.
     *   **Entidades:** Blocos, Cores e o Robô Jogador.
-    *   **Estruturas Dinâmicas (Portas):** Desenhadas APÓS o jogador. Isso garante que, em situações de esmagamento (Crunch), as peças destruídas do robô fiquem visualmente ocultas sob o anteparo de metal da porta.
+    *   **Estruturas Dinâmicas (Portas):** Desenhadas APÓS o jogador para ocultar destroços em caso de esmagamento.
     *   **Top Layer:** Partículas, efeitos de luz e Requisitos de Energia (contadores numéricos flutuantes).
 *   **Sistema de Cores Dinâmico:**
     *   `#fff` (Branco): Inativo.
