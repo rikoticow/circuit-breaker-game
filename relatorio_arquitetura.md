@@ -115,6 +115,9 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
     *   **Letalidade Crítica:** O feixe de laser é instantaneamente fatal para o Robô e destrói permanentemente Blocos Amplificadores que cruzarem seu caminho.
     *   **Regras de Obstrução:** Paredes, Portas Fechadas e outros Emissores bloqueiam o feixe, projetando zonas de segurança (sombra) atrás do obstáculo.
     *   **Visual Industrial:** O canhão possui um design de barril metálico com anéis de reforço e um núcleo de energia pulsante. O laser é um feixe grosso e brilhante (Ciano) que preenche quase um tile inteiro, gerando faíscas elétricas constantes no ponto de impacto. O sistema de áudio detecta colisões via propriedade `laserTarget` no emissor para disparar o efeito sonoro de vaporização.
+    *   **Configuração de Estado Inicial:** Suporta a propriedade `inverted` (configurável no editor como "Inicial On"). 
+        *   **Standard (Inicial On: true):** O emissor inicia ATIVO se não houver botões no canal, ou segue fielmente o estado dos botões.
+        *   **Invertido (Inicial On: false):** O emissor inicia INATIVO se não houver botões, ou inverte o estado lógico dos botões conectados (ON vira OFF e vice-versa).
     *   **Sistema de Trajetória (LaserPath):** O laser não é mais uma linha única; ele agora utiliza um sistema de segmentos (`laserPath`) que permite desvios angulares ao interagir com prismas, calculando colisões em cada novo segmento.
     *   **Bloco Prismático (M - Prism):** Cubo de material refratário que redireciona o laser.
         *   **Imunidade Térmica:** Único objeto móvel que não é destruído pelo laser.
@@ -133,6 +136,11 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
         *   **Estética de Profundidade Orgânica:** O abismo não é apenas um tile preto; ele utiliza um sistema de **bordas orgânicas multicamadas** com ruído senoidal de múltiplas oitavas. Isso cria um aspecto de "concreto quebrado" ou "solo industrial despedaçado", com contornos irregulares que evitam o aspecto de grid artificial.
         *   **Transparência Física:** Buracos são "transparentes" para feixes de Laser e Propagação de Energia, permitindo circuitos complexos através de abismos.
         *   **Integração com Chão Quântico e Esteiras:** Funcionam como pontes. Quando um Chão Quântico (ON) ou uma Esteira está sobre o buraco, a área torna-se segura para travessia. Se o suporte for desativado enquanto uma entidade está sobre ele, a queda é iniciada imediatamente.
+    *   **Vidro Blindado (G - Armored Glass):** Barreira física de alta resistência com propriedades de permeabilidade ótica.
+        *   **Solidez Física:** Atua como uma parede sólida para o Robô e Blocos Amplificadores. Ocupa espaço e impede qualquer movimentação através dele.
+        *   **Permeabilidade Ótica:** Diferente de paredes comuns, o Vidro Blindado é totalmente transparente para feixes de Laser. O laser atravessa a estrutura sem sofrer desvios ou perda de intensidade.
+        *   **Bloqueio Elétrico:** Como uma estrutura isolante, impede a propagação de energia elétrica (fios e fluxos de blocos).
+        *   **Feedback de Interação:** Apresenta um chassi metálico reforçado com rebites industriais. Quando um feixe de laser atravessa o vidro, as bordas internas do chassi emitem um **brilho ciano pulsante** e faíscas ocasionais, indicando a passagem de alta energia luminosa.
 
 
 ## 6. Ferramentas de Desenvolvimento
@@ -202,8 +210,9 @@ O sistema de áudio é baseado puramente na Web Audio API, gerando sons de forma
     *   **Quantum Hum:** Zumbido elétrico que diferencia interações. Emite um tom leve e agudo (800Hz) ao caminhar sobre o chão quântico, e um tom **grave e denso (400Hz)** ao tentar empurrar blocos contra a barreira ativa, reforçando a percepção de massa e resistência.
     *   **Toggle Rise/Fall:** Efeitos de "rise up" (ascendente) ao ativar a barreira e "descend" (queda de frequência) ao desativá-la, simulando o carregamento e desligamento de grandes bobinas de indução industrial.
 *   **Laser Audio Dinâmico:**
-    *   **Laser Hum ("Woooowm"):** Um som imponente gerado por osciladores sawtooth e square (55Hz/110Hz). Utiliza um filtro passa-baixas altamente ressonante (Q=12) com varredura (sweep) lenta para criar o efeito "wooooow" e micro-modulação de pitch (LFO 40Hz) para a vibração "wmmm".
+    *   **Laser Hum ("Woooowm"):** Um som imponente gerado por osciladores sawtooth e square (55Hz/110Hz). Utiliza um filtro passa-baixas altamente ressonante (Q=12) com varredura (sweep) lenta para criar o efeito "wooooow" e micro-modulação de pitch (LFO 40Hz) para a vibração "wmmm". O sistema utiliza uma lógica de muting agressiva com rampas exponenciais e corte forçado a zero para garantir silêncio absoluto quando inativo.
     *   **Impacto Sizzle ("Tssss"):** Quando o laser atinge uma superfície sólida, um loop de ruído branco com filtro passa-altas (6500Hz) é ativado, simulando o metal sendo vaporizado. Possui variações sutis de frequência para evitar repetição mecânica.
+    *   **Sincronização de Estado:** O processamento de áudio do laser é executado obrigatoriamente APÓS a atualização física dos emissores (`updateEmitters`) no loop principal, garantindo que o estado de ativação (`isActive`) e os alvos de impacto (`laserTarget`) estejam sincronizados, eliminando "fantasmas" sonoros de lasers recém-desligados.
 *   **Ilusão de Aceleração (Escala de Shepard):** As esteiras utilizam um sistema de Escala de Shepard (`updateConveyorShepard`), que cria uma ilusão auditiva de tom ascendente infinito enquanto o robô ou blocos estão em movimento. Isso intensifica a sensação de velocidade e perigo industrial contínuo, gerado procedimentalmente via Web Audio API.
 
 ### E. Sistema de Diálogo (js/dialogue.js)

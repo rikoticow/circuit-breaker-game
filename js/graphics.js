@@ -394,6 +394,65 @@ const Graphics = {
         this.ctx.restore();
     },
 
+    drawGlassWall(x, y, frame, isLaserPassing) {
+        const px = x * this.tileSize;
+        const py = y * this.tileSize;
+        const ts = this.tileSize;
+
+        this.ctx.save();
+
+        // 1. Reinforced Metal Frame (Dark industrial look)
+        this.ctx.fillStyle = '#4a5568';
+        this.ctx.fillRect(px, py, ts, ts);
+        
+        // Glass inner area (Cutout)
+        this.ctx.fillStyle = 'rgba(20, 30, 40, 0.8)';
+        this.ctx.fillRect(px + 4, py + 4, ts - 8, ts - 8);
+        
+        // Glass Surface (Translucent with light blue tint)
+        this.ctx.fillStyle = 'rgba(0, 240, 255, 0.1)';
+        this.ctx.fillRect(px + 4, py + 4, ts - 8, ts - 8);
+
+        // 2. Industrial Rivets in corners
+        this.ctx.fillStyle = '#1a1a1a';
+        const rs = 2;
+        this.ctx.fillRect(px + 1, py + 1, rs, rs);
+        this.ctx.fillRect(px + ts - 3, py + 1, rs, rs);
+        this.ctx.fillRect(px + 1, py + ts - 3, rs, rs);
+        this.ctx.fillRect(px + ts - 3, py + ts - 3, rs, rs);
+
+        // 3. Diagonal Reflections (Glass shine)
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        // Main reflections
+        this.ctx.moveTo(px + 6, py + ts - 6);
+        this.ctx.lineTo(px + ts - 6, py + 6);
+        this.ctx.moveTo(px + 12, py + ts - 6);
+        this.ctx.lineTo(px + ts - 6, py + 12);
+        this.ctx.stroke();
+
+        // 4. Optic Permeability Feedback (Cyan glow on edges when laser passes)
+        if (isLaserPassing) {
+            this.ctx.save();
+            const glowAlpha = 0.3 + Math.sin(frame * 0.2) * 0.2;
+            this.ctx.strokeStyle = `rgba(0, 240, 255, ${glowAlpha})`;
+            this.ctx.lineWidth = 2;
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = '#00f0ff';
+            // Draw inner glowing rectangle
+            this.ctx.strokeRect(px + 5, py + 5, ts - 10, ts - 10);
+            
+            // Random sparks on the glass surface
+            if (Math.random() > 0.9) {
+                this.spawnParticle(px + 16, py + 16, '#00f0ff', 'spark');
+            }
+            this.ctx.restore();
+        }
+
+        this.ctx.restore();
+    },
+
     drawWallFace(x, y) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
@@ -2094,16 +2153,17 @@ const Graphics = {
         // 6. Energy Injection Lightning Effect (Only if settled)
         // Use logicalDir to determine bolt orientation, keeping it grid-aligned
         if (isPowered && distToTarget < 0.1) {
-            let nextX = cx, nextY = cy;
+            let relNextX = 0, relNextY = 0;
             const dist = 32; // To next tile
-            if (logicalDir === DIRS.UP) nextY -= dist;
-            else if (logicalDir === DIRS.DOWN) nextY += dist;
-            else if (logicalDir === DIRS.LEFT) nextX -= dist;
-            else if (logicalDir === DIRS.RIGHT) nextX += dist;
+            if (logicalDir === DIRS.UP) relNextY = -dist;
+            else if (logicalDir === DIRS.DOWN) relNextY = dist;
+            else if (logicalDir === DIRS.LEFT) relNextX = -dist;
+            else if (logicalDir === DIRS.RIGHT) relNextX = dist;
 
             // Draw multiple arcs for thickness
             for(let i=0; i<2; i++) {
-                this.drawLightning(cx, cy, nextX, nextY, color);
+                // Since we are already translated to (cx, cy), start from (0,0)
+                this.drawLightning(0, 0, relNextX, relNextY, color);
             }
         }
         

@@ -548,6 +548,9 @@ function gameLoop(timestamp) {
                 Graphics.drawCeiling(x, y);
             } else if (c === 'W') {
                 Graphics.drawWallFace(x, y);
+            } else if (c === 'G') {
+                const isHit = game.glassWallsHit.has(`${x},${y}`);
+                Graphics.drawGlassWall(x, y, animFrame, isHit);
             } else {
                 // Draw scrap if present
                 if (game.scrapPositions.has(`${x},${y}`)) {

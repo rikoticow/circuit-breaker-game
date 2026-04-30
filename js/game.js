@@ -16,6 +16,7 @@ class GameState {
         this.emitters = [];
         this.catalysts = [];
         this.debris = [];
+        this.glassWallsHit = new Set();
 
 
         this.score = 0;
@@ -209,6 +210,7 @@ class GameState {
         if (!keepLives) this.lives = 3; // Restore lives only if not a respawn
         this.state = 'PLAYING';
         this.undoStack = [];
+        this.glassWallsHit = new Set();
         if (window.Graphics) {
             Graphics.clearParticles();
             Graphics.clearTrails();
@@ -248,7 +250,7 @@ class GameState {
             let row = [];
             for (let x = 0; x < mapW; x++) {
                 let c = charMap[y][x];
-                row.push((c === '#' || c === 'W' || c === 'Q' || c === '*') ? c : ' ');
+                row.push((c === '#' || c === 'W' || c === 'Q' || c === '*' || c === 'G') ? c : ' ');
 
                 if (c === '@') {
                     this.player.x = x;
@@ -325,7 +327,8 @@ class GameState {
                 } else if (c === 'E') {
                     const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || DIRS.RIGHT;
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                    this.emitters.push({ x, y, dir, laserTarget: null, channel: chan });
+                    const inverted = (levelData.links && levelData.links[`${x},${y}_init`]) === false;
+                    this.emitters.push({ x, y, dir, laserTarget: null, channel: chan, inverted });
                 } else if (c === 'Q') {
                     this.catalysts.push({ x, y, active: false });
                 }
@@ -419,8 +422,9 @@ class GameState {
                     } else if (oc === 'E') {
                         const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || DIRS.RIGHT;
                         const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                        const inverted = (levelData.links && levelData.links[`${x},${y}_init`]) === false;
                         if (!this.emitters.some(e => e.x === x && e.y === y)) {
-                            this.emitters.push({ x, y, dir, channel: chan, laserTarget: null, isActive: true });
+                            this.emitters.push({ x, y, dir, channel: chan, laserTarget: null, isActive: true, inverted });
                         }
                     } else if (oc === 'M') {
                         const dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || 0;
@@ -431,6 +435,8 @@ class GameState {
                         if (!this.catalysts.some(c => c.x === x && c.y === y)) {
                             this.catalysts.push({ x, y, active: false });
                         }
+                    } else if (oc === 'G') {
+                        row[x] = 'G';
                     }
                 }
             }
@@ -493,7 +499,14 @@ class GameState {
         if (!e) return false;
         const chan = Number(e.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
-        return chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
+        
+        // Default behavior: No buttons = ON, With buttons = OFF until pressed.
+        let active = chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
+        
+        // If inverted, flip the logic.
+        if (e.inverted) active = !active;
+        
+        return active;
     }
 
     update() {
@@ -713,10 +726,8 @@ class GameState {
         if (window.AudioSys) {
             AudioSys.updateHum(this.audioState.anyActive, this.audioState.progress, this.audioState.contaminated);
 
-            // --- Laser Audio ---
-            if (this.state === 'PLAYING') {
-                AudioSys.updateLaserAudio(this.emitters.filter(e => e.isActive));
-            } else {
+            // --- Laser Audio moved after updateEmitters ---
+            if (this.state !== 'PLAYING') {
                 AudioSys.updateLaserAudio([]);
             }
 
@@ -747,6 +758,12 @@ class GameState {
         }
         
         this.updateEmitters();
+        
+        // --- Laser Audio (After state update) ---
+        if (window.AudioSys && this.state === 'PLAYING') {
+            AudioSys.updateLaserAudio(this.emitters.filter(e => e.isActive));
+        }
+        
         this.updateSliding();
         if (this.state === 'PLAYING') {
             this.checkDialogues('walk');
@@ -1064,15 +1081,8 @@ class GameState {
             }
         }
 
-        // Update Emitter States (ON/OFF via Channel)
-        for (let e of this.emitters) {
-            if (e.channel === 0) {
-                e.isActive = true;
-            } else {
-                const chanButtons = this.buttons.filter(b => b.channel === e.channel);
-                e.isActive = chanButtons.some(b => b.isPressed);
-            }
-        }
+        // Emitter states are now managed exclusively by updateEmitters()
+        // which is called every frame to support inverted logic and path calculation.
     }
 
     triggerQuantumPulse(x, y, power = 1.0, delay = 0, distance = 0, visited = new Set(), dx = 0, dy = 0) {
@@ -1330,7 +1340,7 @@ class GameState {
 
     isTilePassable(x, y, ignoreObj = null, dx = 0, dy = 0) {
         if (y < 0 || y >= this.map.length || x < 0 || x >= this.map[0].length) return false;
-        if (this.map[y][x] === '#' || this.map[y][x] === 'W') return false;
+        if (this.map[y][x] === '#' || this.map[y][x] === 'W' || this.map[y][x] === 'G') return false;
         
         // Convert ignoreObj to array if it's not already
         const ignores = Array.isArray(ignoreObj) ? ignoreObj : (ignoreObj ? [ignoreObj] : []);
@@ -1517,11 +1527,13 @@ class GameState {
         
         // Reset catalysts before tracing
         this.catalysts.forEach(c => c.active = false);
+        this.glassWallsHit.clear();
 
         for (const e of this.emitters) {
             if (!this.isEmitterActive(e)) {
                 e.isActive = false;
                 e.laserPath = [];
+                e.laserTarget = null;
                 continue;
             }
             e.isActive = true;
@@ -1553,6 +1565,10 @@ class GameState {
                 if (char === '#' || char === 'W') {
                     e.laserPath.push({ x: cx, y: cy, type: 'WALL' });
                     break;
+                }
+                if (char === 'G') {
+                    this.glassWallsHit.add(`${cx},${cy}`);
+                    // Continue laser path through glass
                 }
                 const catalyst = this.catalysts.find(c => c.x === cx && c.y === cy);
                 if (catalyst) {
@@ -1725,7 +1741,7 @@ class GameState {
 
         const trace = (x, y, dir, color, charge, path = [], forceOcean = false, isInjection = false) => {
             if (y < 0 || y >= this.map.length || x < 0 || x >= this.map[0].length) return false;
-            if (this.map[y][x] === '#' || this.map[y][x] === 'W') return false; 
+            if (this.map[y][x] === '#' || this.map[y][x] === 'W' || this.map[y][x] === 'G') return false; 
 
             // Prevent self-intersection
             if (path.some(p => p.x === x && p.y === y)) return false;

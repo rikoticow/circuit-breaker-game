@@ -1141,8 +1141,14 @@ const AudioSys = window.AudioSys = {
         }
 
         if (this.laserGain) {
-            const targetVol = isLaserActive ? 0.06 : 0; // Reduced from 0.12
-            this.laserGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+            const targetVol = isLaserActive ? 0.03 : 0;
+            if (targetVol === 0) {
+                // Hard cut to absolute zero after a quick ramp to avoid residual hum
+                this.laserGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+                if (this.laserGain.gain.value < 0.001) this.laserGain.gain.value = 0;
+            } else {
+                this.laserGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.05);
+            }
             
             if (isLaserActive) {
                 // "Wooooow" sweep - slow resonant filter oscillation
@@ -1190,8 +1196,13 @@ const AudioSys = window.AudioSys = {
         }
  
         if (this.laserHitGain) {
-            const targetHitVol = isHitting ? 0.03 : 0; // Reduced from 0.06
-            this.laserHitGain.gain.setTargetAtTime(targetHitVol, audioCtx.currentTime, 0.1);
+            const targetHitVol = isHitting ? 0.015 : 0;
+            if (targetHitVol === 0) {
+                this.laserHitGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+                if (this.laserHitGain.gain.value < 0.001) this.laserHitGain.gain.value = 0;
+            } else {
+                this.laserHitGain.gain.setTargetAtTime(targetHitVol, audioCtx.currentTime, 0.05);
+            }
             
             if (isHitting) {
                 // Subtle sizzle variation

@@ -22,7 +22,7 @@ window.game = {
 let hoveredChannel = null;
 
 const PALETTE = [
-    { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
+    { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: 'G', n: 'Vidro Blindado'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
     { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
     { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
@@ -133,6 +133,8 @@ function createTilePreview(char) {
         Graphics.drawBlock(0, 0, 0, null, 0, 0, 'PRISM');
     } else if (char === 'Q') {
         Graphics.drawCatalyst(0, 0, true, animFrame);
+    } else if (char === 'G') {
+        Graphics.drawGlassWall(0, 0, animFrame, true);
     } else if (char === '💬') {
         tCtx.fillStyle = '#00ff9f';
         tCtx.font = '20px VT323';
@@ -539,6 +541,7 @@ function rebuildMock() {
     mockGame.quantumFloors = [];
     mockGame.emitters = [];
     mockGame.catalysts = [];
+    mockGame.glassWallsHit = new Set();
 
 
     const h = currentMap.length;
@@ -550,7 +553,7 @@ function rebuildMock() {
         let row = [];
         for (let x = 0; x < w; x++) {
             let c = currentMap[y][x];
-            row.push((c === '#' || c === '*') ? c : ' ');
+            row.push((c === '#' || c === '*' || c === 'W' || c === 'G') ? c : ' ');
             
             if (c === '@') {
                 mockGame.player.x = x;
@@ -566,6 +569,8 @@ function rebuildMock() {
                 mockGame.wires.push({ x, y, type: c });
             } else if (c === 'Z') {
                 mockGame.brokenCores.push({ x, y });
+            } else if (c === 'G') {
+                // Glass in base map
             } else if (c === 'T' || (c >= '1' && c <= '9')) {
                 const req = c === 'T' ? 1 : parseInt(c);
                 mockGame.targets.push({ x, y, required: req });
@@ -590,7 +595,10 @@ function rebuildMock() {
             } else if (c === 'E' || c === 'M') {
                 const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
                 const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
-                if (c === 'E') mockGame.emitters.push({ x, y, dir, channel: chan });
+                if (c === 'E') {
+                    const inverted = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === false;
+                    mockGame.emitters.push({ x, y, dir, channel: chan, inverted });
+                }
                 else mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
             } else if (c === 'Q') {
                 mockGame.catalysts.push({ x, y, active: false });
@@ -621,10 +629,15 @@ function rebuildMock() {
                 const behavior = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
                 const initState = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === true;
                 mockGame.buttons.push({ x, y, isPressed: initState, channel: chan, behavior: behavior });
+            } else if (oc === 'G') {
+                row[x] = 'G';
             } else if (oc === 'E' || oc === 'M') {
                 const dir = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_dir`]) || 0;
                 if (oc === 'E') {
-                    if (!mockGame.emitters.some(e => e.x === x && e.y === y)) mockGame.emitters.push({ x, y, dir });
+                    if (!mockGame.emitters.some(e => e.x === x && e.y === y)) {
+                        const inverted = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_init`]) === false;
+                        mockGame.emitters.push({ x, y, dir, inverted });
+                    }
                 } else {
                     if (!mockGame.blocks.some(b => b.x === x && b.y === y)) mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
                 }
@@ -1203,7 +1216,14 @@ function setupEvents() {
                             `;
                             const dir = (lvl.links && lvl.links[`${primary.x},${primary.y}_dir`]) || 0;
                             behaviorSelect.value = dir;
-                            document.getElementById('prop-toggle-container').style.display = 'none';
+                            
+                            // SHOW INITIAL STATE TOGGLE FOR EMITTERS
+                            if (primary.char === 'E') {
+                                document.getElementById('prop-toggle-container').style.display = 'flex';
+                                document.getElementById('prop-toggle').checked = (lvl.links && lvl.links[`${primary.x},${primary.y}_init`]) !== false;
+                            } else {
+                                document.getElementById('prop-toggle-container').style.display = 'none';
+                            }
                         } else {
                             behaviorSelect.innerHTML = `
                                 <option value="TIMER">🟡 TIMER (AMARELO)</option>
@@ -1464,6 +1484,9 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const block = mockGame.blocks ? mockGame.blocks.find(b => b.x === x && b.y === y) : null;
         const dir = block ? block.dir : 0;
         Graphics.drawBlock(x, y, dir * (Math.PI / 2), null, 0, dir, (c === 'M' ? 'PRISM' : 'NORMAL'), 0);
+    } else if (c === 'G') {
+        const isHit = (mockGame.glassWallsHit && mockGame.glassWallsHit.has(`${x},${y}`)) || true; // Always on in editor for effect
+        Graphics.drawGlassWall(x, y, animFrame, isHit);
     } else if (c === '💬') {
         ctx.fillStyle = '#00ff9f';
         ctx.font = '20px VT323';
@@ -1526,7 +1549,7 @@ function renderLoop() {
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const baseC = currentMap[y][x];
-            if (baseC === '#' || baseC === 'W') {
+            if (baseC === '#' || baseC === 'W' || baseC === 'G') {
                 drawChar(x, y, baseC);
             }
         }
@@ -1779,6 +1802,10 @@ function testLoop(timestamp) {
             const c = testGame.map[y][x];
             if (c === '#') Graphics.drawCeiling(x, y);
             else if (c === 'W') Graphics.drawWallFace(x, y);
+            else if (c === 'G') {
+                const isHit = testGame.glassWallsHit.has(`${x},${y}`);
+                Graphics.drawGlassWall(x, y, testAnimFrame, isHit);
+            }
             if (testGame.scrapPositions.has(`${x},${y}`)) Graphics.drawScrap(x, y, testAnimFrame);
         }
     }
