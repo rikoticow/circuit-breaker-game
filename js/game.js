@@ -1,5 +1,6 @@
 class GameState {
-    constructor(levelData = null) {
+    constructor(levelData = null, isEditor = false) {
+        this.isEditor = isEditor;
         this.levelIndex = 0;
         this.map = [];
         this.player = { x: 0, y: 0, visualX: 0, visualY: 0, dir: DIRS.DOWN, visorTimer: 0, visorColor: '#00ff41' };
@@ -519,7 +520,7 @@ class GameState {
         this.updateEnergy();
         this.saveUndo(); 
 
-        if (window.AudioSys) {
+        if (window.AudioSys && !this.isEditor) {
             AudioSys.setMusicIntensity(2); // Levels always play the full "Action" version
             AudioSys.playGameMusic();
         }

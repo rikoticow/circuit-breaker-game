@@ -80,8 +80,7 @@ window.onload = () => {
     Graphics.init(canvas);
     
     // Initial mock
-    mockGame = new GameState();
-    mockGame.isEditor = true;
+    mockGame = new GameState(null, true);
     window.game = mockGame;
     
     buildPalette();
@@ -811,6 +810,13 @@ function setupEvents() {
     // TEST BUTTON - HIGHEST PRIORITY
     const btnTest = document.getElementById('btn-test');
     if (btnTest) btnTest.onclick = startTest;
+
+    document.getElementById('check-editor-music').onchange = (e) => {
+        if (isTestMode) {
+            if (e.target.checked) AudioSys.playGameMusic();
+            else AudioSys.stopGameMusic();
+        }
+    };
 
     document.getElementById('lvl-name').oninput = () => {
         levelsData[currentLevelIdx].name = document.getElementById('lvl-name').value;
@@ -1716,6 +1722,12 @@ function startTest() {
         audioCtx.resume();
     }
 
+    if (document.getElementById('check-editor-music').checked) {
+        AudioSys.playGameMusic();
+    } else {
+        AudioSys.stopGameMusic();
+    }
+
     // 2. Capture EXACT current editor view
     const currentLvlData = levelsData[currentLevelIdx] || {};
     const lvl = {
@@ -1740,7 +1752,7 @@ function startTest() {
     LEVELS = [lvl];
     
     // 5. Create and Force Load
-    testGame = new GameState();
+    testGame = new GameState(null, true);
     window.game = testGame; // SET THIS BEFORE DIALOGUES
     
     testGame.levelIndex = 0;
@@ -1773,6 +1785,7 @@ function stopTest() {
     // Restore Editor context
     Graphics.init(canvas);
     window.game = mockGame;
+    AudioSys.stopGameMusic();
 }
 
 function handleTestInput(e) {

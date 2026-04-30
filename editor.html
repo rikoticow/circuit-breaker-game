@@ -260,6 +260,10 @@
             <input type="number" id="lvl-battery" placeholder="Bat" style="width: 50px;">
             <span style="font-size: 14px; color: #aaa;">Tempo:</span>
             <input type="number" id="lvl-timer" placeholder="Sec" style="width: 50px;">
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 14px; color: #aaa; cursor: pointer; background: #222; padding: 2px 8px; border: 1px solid #444; border-radius: 4px;">
+                <input type="checkbox" id="check-editor-music" checked style="width: 14px; height: 14px; accent-color: #00ff9f;">
+                <span>🎵 MÚSICA</span>
+            </label>
         </div>
     </div>
 
@@ -489,7 +493,13 @@
     <script src="js/lib/popper.min.js"></script>
     <script src="js/lib/tippy-bundle.umd.js"></script>
     <script src="js/dialogue.js"></script>
-    <script src="js/audio.js"></script>
+    <script src="js/audio/core.js"></script>
+    <script src="js/audio/mechanisms_doors.js"></script>
+    <script src="js/audio/mechanisms_blocks.js"></script>
+    <script src="js/audio/mechanisms_energy.js"></script>
+    <script src="js/audio/ambient.js"></script>
+    <script src="js/audio/ui.js"></script>
+    <script src="js/audio/music.js"></script>
     <script src="js/graphics.js"></script>
     <script src="js/resultScreen.js"></script>
     <script src="js/game.js"></script>
