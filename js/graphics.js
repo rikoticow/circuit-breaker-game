@@ -1530,6 +1530,125 @@ const Graphics = {
         this.ctx.restore();
     },
 
+    drawPortal(x, y, channel, frame, color = '#ffd700') {
+        const ctx = this.ctx;
+        const cx = x * 32 + 16;
+        const cy = y * 32 + 16;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // GLOW BLOOM (Based on custom color)
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+        glow.addColorStop(0, color + '66'); // 40% alpha
+        glow.addColorStop(0.6, color + '1a'); // 10% alpha
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.globalCompositeOperation = 'screen';
+        ctx.fillRect(-32, -32, 64, 64);
+
+        // CORE VORTEX
+        const layers = 6;
+        for (let i = 0; i < layers; i++) {
+            const rot = frame * 0.04 * (1 + i * 0.25);
+            const scale = 1.1 - i * 0.16;
+            const alpha = 0.8 - i * 0.12;
+
+            ctx.save();
+            ctx.rotate(rot);
+            ctx.scale(scale, scale);
+
+            ctx.beginPath();
+            const segments = 12;
+            for (let a = 0; a <= Math.PI * 2; a += (Math.PI * 2 / segments)) {
+                const r = 14 + Math.sin(a * 4 + frame * 0.1) * 3;
+                const px = Math.cos(a) * r;
+                const py = Math.sin(a) * r;
+                if (a === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+
+            const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, 16);
+            grad.addColorStop(0, '#ffffff'); // Center always white-hot
+            grad.addColorStop(0.5, color); 
+            grad.addColorStop(1, color + '33'); 
+            
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 4 - i * 0.5;
+            ctx.globalAlpha = alpha;
+            ctx.stroke();
+
+            if (i === 0) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = color;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(0, 0, 3 + Math.sin(frame * 0.2) * 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // ORBITAL SPARKS (Custom Color)
+        for (let j = 0; j < 20; j++) {
+            const pRot = (frame * 0.08 + j * (Math.PI * 2 / 20)) + Math.sin(frame * 0.02 + j) * 0.5;
+            const pDist = 16 + Math.sin(frame * 0.12 + j * 0.5) * 6;
+            const px = Math.cos(pRot) * pDist;
+            const py = Math.sin(pRot) * pDist;
+            const pSize = 1.2 + Math.sin(frame * 0.1 + j) * 0.8;
+            
+            ctx.fillStyle = j % 2 === 0 ? color : '#ffffff'; 
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = color;
+            ctx.fillRect(px - pSize/2, py - pSize/2, pSize, pSize);
+        }
+
+        ctx.restore();
+    },
+
+    drawLimboHologram(x, y, block, frame) {
+        if (!block) return;
+        const ctx = this.ctx;
+        const cx = x * 32 + 16;
+        const cy = y * 32 + 16;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        // Oscilação de holograma
+        const scale = 0.6 + Math.sin(frame * 0.1) * 0.05;
+        ctx.scale(scale, scale);
+        ctx.rotate(block.dir * Math.PI / 2);
+        
+        // Desenha uma versão simplificada/fantasmal do bloco
+        ctx.globalAlpha = 0.4 + Math.sin(frame * 0.15) * 0.1;
+        
+        // Base escura
+        ctx.fillStyle = '#1a1a2a';
+        ctx.fillRect(-12, -12, 24, 24);
+        
+        // Seta Neon
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(6, 0);
+        ctx.lineTo(2, 0);
+        ctx.lineTo(2, 8);
+        ctx.lineTo(-2, 8);
+        ctx.lineTo(-2, 0);
+        ctx.lineTo(-6, 0);
+        ctx.closePath();
+        ctx.fillStyle = '#00f0ff';
+        ctx.fill();
+        
+        // Borda de interferência
+        ctx.strokeStyle = '#bf00ff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-12, -12, 24, 24);
+
+        ctx.restore();
+    },
+
     drawEmitter(x, y, dir, frame) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;

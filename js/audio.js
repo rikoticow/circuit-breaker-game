@@ -603,6 +603,55 @@ const AudioSys = window.AudioSys = {
         this.playTone(grindFreq, 'square', 0.2, 0.04);
     },
 
+    playPortalWarp() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // Sucking effect (Rise)
+        const osc1 = audioCtx.createOscillator();
+        const g1 = audioCtx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(100, now);
+        osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.15);
+        g1.gain.setValueAtTime(0, now);
+        g1.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        g1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc1.connect(g1); g1.connect(audioCtx.destination);
+        osc1.start(now); osc1.stop(now + 0.15);
+
+        // Expansion effect (Fall)
+        setTimeout(() => {
+            const osc2 = audioCtx.createOscillator();
+            const g2 = audioCtx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc2.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+            g2.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+            osc2.connect(g2); g2.connect(audioCtx.destination);
+            osc2.start(); osc2.stop(audioCtx.currentTime + 0.2);
+        }, 100);
+    },
+
+    playPortalClick() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // Heavy metallic clack
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(50, now + 0.1);
+        g.gain.setValueAtTime(0.15, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.1);
+        
+        // High frequency resonance
+        this.playTone(1800, 'sine', 0.05, 0.03);
+    },
+
     undo() {
         this.playTone(300, 'square', 0.1, 0.05);
         setTimeout(() => this.playTone(200, 'square', 0.15, 0.05), 50);

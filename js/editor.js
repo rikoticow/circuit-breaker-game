@@ -24,7 +24,7 @@ let hoveredChannel = null;
 const PALETTE = [
     { title: "Estrutura", tiles: [{c: '#', n: 'Teto (Bronze)'}, {c: 'W', n: 'Parede Frontal'}, {c: 'G', n: 'Vidro Blindado'}, {c: ' ', n: 'Chão (Borracha)'}, {c: '*', n: 'Buraco/Abismo'}, {c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}] },
     { title: "Estrutura (Overlay)", tiles: [{c: 'D', n: 'Porta'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}] },
-    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}] },
+    { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
 
     { title: "Fios", tiles: [{c: 'H', n: 'Horiz'}, {c: 'V', n: 'Vert'}, {c: '+', n: 'Cruz'}] },
@@ -135,6 +135,8 @@ function createTilePreview(char) {
         Graphics.drawCatalyst(0, 0, true, animFrame);
     } else if (char === 'G') {
         Graphics.drawGlassWall(0, 0, animFrame, true);
+    } else if (char === 'O') {
+        Graphics.drawPortal(0, 0, 0, animFrame, false);
     } else if (char === '💬') {
         tCtx.fillStyle = '#00ff9f';
         tCtx.font = '20px VT323';
@@ -541,6 +543,7 @@ function rebuildMock() {
     mockGame.quantumFloors = [];
     mockGame.emitters = [];
     mockGame.catalysts = [];
+    mockGame.portals = [];
     mockGame.glassWallsHit = new Set();
 
 
@@ -602,6 +605,10 @@ function rebuildMock() {
                 else mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
             } else if (c === 'Q') {
                 mockGame.catalysts.push({ x, y, active: false });
+            } else if (c === 'O') {
+                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
+                const pColor = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_color`]) || '#ffd700';
+                mockGame.portals.push({ x, y, channel: chan, slot: { content: null }, color: pColor });
             }
 
 
@@ -640,6 +647,12 @@ function rebuildMock() {
                     }
                 } else {
                     if (!mockGame.blocks.some(b => b.x === x && b.y === y)) mockGame.blocks.push({ x, y, dir, type: 'PRISM' });
+                }
+            } else if (oc === 'O') {
+                const chan = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}`]) || 0;
+                const pColor = (levelsData[currentLevelIdx].links && levelsData[currentLevelIdx].links[`${x},${y}_color`]) || '#ffd700';
+                if (!mockGame.portals.some(p => p.x === x && p.y === y)) {
+                    mockGame.portals.push({ x, y, channel: chan, slot: { content: null }, color: pColor });
                 }
             }
 
@@ -711,6 +724,20 @@ function rebuildMock() {
         const len = chain.length;
         for (const c of chain) c.beltLength = len;
     }
+    // Link portals and shared limboSlot
+    const channelSlots = new Map();
+    for (let portal of mockGame.portals) {
+        const target = mockGame.portals.find(p => p.channel === portal.channel && (p.x !== portal.x || p.y !== portal.y));
+        if (target) {
+            portal.targetX = target.x;
+            portal.targetY = target.y;
+            if (!channelSlots.has(portal.channel)) {
+                channelSlots.set(portal.channel, { content: null });
+            }
+            portal.slot = channelSlots.get(portal.channel);
+        }
+    }
+
     window.game = mockGame;
     // Ensure spawn is a station
     if (!mockGame.chargingStations.some(s => s.x === mockGame.startPos.x && s.y === mockGame.startPos.y)) {
@@ -887,6 +914,38 @@ function setupEvents() {
         saveHistory();
         rebuildMock();
     };
+
+    document.getElementById('prop-portal-color').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const color = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        
+        // Synchronize color for ALL portals in the same channels as the selected ones
+        const affectedChannels = new Set();
+        for (const target of editTargets) {
+            const chan = lvl.links[`${target.x},${target.y}`] || 0;
+            affectedChannels.add(chan);
+            lvl.links[`${target.x},${target.y}_color`] = color;
+        }
+
+        // Apply to all other tiles on the map with the same channels
+        for (let y = 0; y < currentMap.length; y++) {
+            for (let x = 0; x < currentMap[y].length; x++) {
+                const char = currentMap[y][x];
+                const oChar = currentOverlayMap[y][x];
+                if (char === 'O' || oChar === 'O') {
+                    const chan = lvl.links[`${x},${y}`] || 0;
+                    if (affectedChannels.has(chan)) {
+                        lvl.links[`${x},${y}_color`] = color;
+                    }
+                }
+            }
+        }
+
+        saveHistory();
+        rebuildMock();
+    };
     
     document.getElementById('btn-clear-channel').onclick = () => {
         if (editTargets.length === 0) return;
@@ -914,6 +973,7 @@ function setupEvents() {
         delete lvl.links[`${key}_behavior`];
         delete lvl.links[`${key}_init`];
         delete lvl.links[`${key}_dir`];
+        delete lvl.links[`${key}_color`];
     }
 
     function updateChannelGrid() {
@@ -1161,7 +1221,7 @@ function setupEvents() {
                     const checkLayers = [currentBlocksMap, currentOverlayMap, currentMap];
                     for (let map of checkLayers) {
                         const char = map[p.y][p.x];
-                        if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?' || char === 'E' || char === 'M' || ['(', ')', '[', ']'].includes(char)) {
+                        if (char === 'T' || (char >= '1' && char <= '9') || char === 'D' || char === '_' || char === 'P' || char === '?' || char === 'E' || char === 'M' || char === 'O' || ['(', ')', '[', ']'].includes(char)) {
                             targets.push({x: p.x, y: p.y, char});
                             break;
                         }
@@ -1184,17 +1244,18 @@ function setupEvents() {
                     panel.style.top = `${rect.top + p.y * 32 - 100}px`;
 
                     const typeLabel = targets.length > 1 ? `Múltiplos (${targets.length})` : 
-                        (primary.char === 'D' ? 'Porta' : (primary.char === '?' ? 'Chão Quântico' : (primary.char === 'E' ? 'Emissor (Canhão)' : (primary.char === 'M' ? 'Prisma' : (primary.char === 'T' || (primary.char >= '1' && primary.char <= '9') ? 'Núcleo Alvo' : (['(', ')', '[', ']'].includes(primary.char) ? 'Esteira' : 'Botão Industrial'))))));
+                        (primary.char === 'D' ? 'Porta' : (primary.char === '?' ? 'Chão Quântico' : (primary.char === 'O' ? 'Portal Quântico' : (primary.char === 'E' ? 'Emissor (Canhão)' : (primary.char === 'M' ? 'Prisma' : (primary.char === 'T' || (primary.char >= '1' && primary.char <= '9') ? 'Núcleo Alvo' : (['(', ')', '[', ']'].includes(primary.char) ? 'Esteira' : 'Botão Industrial')))))));
                     
                     document.getElementById('prop-type').innerText = `Tipo: ${typeLabel}`;
                     
                     const hasCores = targets.some(t => t.char === 'T' || (t.char >= '1' && t.char <= '9'));
-                    const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || t.char === 'E' || t.char === 'M' || ['(', ')', '[', ']'].includes(t.char));
+                    const hasLinkables = targets.some(t => t.char === 'D' || t.char === '_' || t.char === 'P' || t.char === '?' || t.char === 'E' || t.char === 'M' || t.char === 'O' || ['(', ')', '[', ']'].includes(t.char));
                     const hasButtons = targets.some(t => t.char === '_' || t.char === 'P');
                     const hasDialogue = targets.some(t => t.isDialogue);
 
                     document.getElementById('prop-amps').parentElement.style.display = hasCores ? 'flex' : 'none';
                     document.getElementById('prop-channel-container').style.display = (hasLinkables) ? 'flex' : 'none';
+                    document.getElementById('prop-color-container').style.display = (primary.char === 'O') ? 'flex' : 'none';
                     document.getElementById('prop-behavior-container').style.display = (hasButtons || primary.char === 'E' || primary.char === 'M') ? 'flex' : 'none';
                     document.getElementById('prop-dialogue-container').style.display = hasDialogue ? 'flex' : 'none';
                     
@@ -1204,6 +1265,12 @@ function setupEvents() {
                         const chan = (lvl.links && lvl.links[`${primary.x},${primary.y}`]) || 0;
                         document.getElementById('prop-channel').value = chan;
                         updateChannelGrid();
+
+                        // Load portal color
+                        if (primary.char === 'O') {
+                            const pCol = (lvl.links && lvl.links[`${primary.x},${primary.y}_color`]) || '#ffd700';
+                            document.getElementById('prop-portal-color').value = pCol;
+                        }
                     }
                     if (hasButtons || primary.char === 'E' || primary.char === 'M') {
                         const behaviorSelect = document.getElementById('prop-behavior');
@@ -1487,6 +1554,15 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     } else if (c === 'G') {
         const isHit = (mockGame.glassWallsHit && mockGame.glassWallsHit.has(`${x},${y}`)) || true; // Always on in editor for effect
         Graphics.drawGlassWall(x, y, animFrame, isHit);
+    } else if (c === 'O') {
+        const portal = mockGame.portals ? mockGame.portals.find(p => p.x === x && p.y === y) : null;
+        const channel = portal ? portal.channel : 0;
+        const color = portal ? portal.color : '#ffd700';
+        const hasBlock = portal && portal.slot && portal.slot.content;
+        Graphics.drawPortal(x, y, channel, animFrame, color);
+        if (hasBlock) {
+            Graphics.drawLimboHologram(x, y, portal.slot.content, animFrame);
+        }
     } else if (c === '💬') {
         ctx.fillStyle = '#00ff9f';
         ctx.font = '20px VT323';
@@ -1820,6 +1896,8 @@ function testLoop(timestamp) {
         Graphics.drawCatalyst(cat.x, cat.y, cat.active, testAnimFrame);
     }
 
+    // Pass 2.04 (Removed, moved to Top Layer)
+
     // Safety Pass: Draw from map if not in array (ensures visibility)
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
@@ -1852,6 +1930,10 @@ function testLoop(timestamp) {
     for (const p of testGame.debris) Graphics.drawDebris(p);
     Graphics.drawParticles();
     
+    // Pass 3.0: High-Layer Solar Portals (Glow over everything)
+    for (const p of testGame.portals) {
+        Graphics.drawPortal(p.x, p.y, p.channel, testAnimFrame, p.color);
+    }
     for (const t of testGame.targets) {
         const d = testGame.poweredTargets.get(`${t.x},${t.y}`) || { charge: 0 };
         Graphics.drawCoreRequirement(t.x, t.y, t.required, d.charge);

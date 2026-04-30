@@ -505,7 +505,7 @@ function gameLoop(timestamp) {
     // Pass 1.06: Draw Quantum Floors (Above trails)
     for (const qf of game.quantumFloors) {
         if (qf.x >= startX && qf.x <= endX && qf.y >= startY && qf.y <= endY) {
-            const overHole = game.grid[qf.y][qf.x] === 0;
+            const overHole = game.map[qf.y] && game.map[qf.y][qf.x] === '*';
             Graphics.drawQuantumFloor(qf.x, qf.y, qf.active, animFrame, qf.flashTimer, qf.pulseIntensity, qf.entrySide, qf.whiteGlow, overHole);
         }
     }
@@ -570,6 +570,8 @@ function gameLoop(timestamp) {
         Graphics.drawCatalyst(cat.x, cat.y, cat.active, animFrame);
     }
 
+    // Pass 2.04 (Removed, moved to Pass 3.0)
+
     // Draw Cores
     for (const s of game.sources) {
         Graphics.drawCore(s.x, s.y, 'B', true);
@@ -617,7 +619,10 @@ function gameLoop(timestamp) {
 
     // Pass 2.08: Draw Particles (Now behind doors)
     Graphics.drawParticles();
-    
+    // Pass 3.0: Solar Portals (Top Layer)
+    for (const p of game.portals) {
+        Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
+    }
 
     // FINAL PASS: Core Requirements (Always on top of robot/smoke)
     for (const t of game.targets) {

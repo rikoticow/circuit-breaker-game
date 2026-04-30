@@ -15,7 +15,9 @@ class GameState {
         this.quantumFloors = [];
         this.emitters = [];
         this.catalysts = [];
+        this.portals = [];
         this.debris = [];
+        this.brokenCores = [];
         this.glassWallsHit = new Set();
 
 
@@ -231,6 +233,8 @@ class GameState {
         this.quantumFloors = [];
         this.emitters = [];
         this.catalysts = [];
+        this.portals = [];
+        this.glassWallsHit = new Set();
         this.poweredDoors = new Set();
 
         this.scrapPositions.clear();
@@ -331,6 +335,15 @@ class GameState {
                     this.emitters.push({ x, y, dir, laserTarget: null, channel: chan, inverted });
                 } else if (c === 'Q') {
                     this.catalysts.push({ x, y, active: false });
+                } else if (c === 'O') {
+                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                    const pCol = (levelData.links && levelData.links[`${x},${y}_color`]) || '#ffd700';
+                    this.portals.push({ 
+                        x, y, 
+                        channel: chan,
+                        color: pCol,
+                        visualRotation: 0
+                    });
                 }
 
 
@@ -435,6 +448,17 @@ class GameState {
                         if (!this.catalysts.some(c => c.x === x && c.y === y)) {
                             this.catalysts.push({ x, y, active: false });
                         }
+                    } else if (oc === 'O') {
+                        const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                        const pCol = (levelData.links && levelData.links[`${x},${y}_color`]) || '#ffd700';
+                        if (!this.portals.some(p => p.x === x && p.y === y)) {
+                            this.portals.push({ 
+                                x, y, 
+                                channel: chan,
+                                color: pCol,
+                                visualRotation: 0
+                            });
+                        }
                     } else if (oc === 'G') {
                         row[x] = 'G';
                     }
@@ -470,6 +494,23 @@ class GameState {
                 }
             }
         }
+
+        // Link portals and shared limboSlot
+        const channelSlots = new Map(); // channel -> { limboSlot }
+        for (let portal of this.portals) {
+            const target = this.portals.find(p => p.channel === portal.channel && (p.x !== portal.x || p.y !== portal.y));
+            if (target) {
+                portal.targetX = target.x;
+                portal.targetY = target.y;
+                
+                // Share a single limboSlot reference for the channel
+                if (!channelSlots.has(portal.channel)) {
+                    channelSlots.set(portal.channel, { content: null });
+                }
+                portal.slot = channelSlots.get(portal.channel);
+            }
+        }
+
         // Ensure spawn is always a station
         if (!this.chargingStations.some(s => s.x === this.startPos.x && s.y === this.startPos.y)) {
             this.chargingStations.push({ ...this.startPos });
@@ -519,6 +560,40 @@ class GameState {
         this.player.visualX += (this.player.x - this.player.visualX) * 0.4; // 0.4 is fast and responsive
         this.player.visualY += (this.player.y - this.player.visualY) * 0.4;
 
+        // --- PORTAL TELEPORTATION (Visual Continuity Logic) ---
+        const pPortal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
+        if (pPortal && this.player.isTeleporting) {
+            const distToCenter = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
+            if (distToCenter < 0.15) {
+                const dx = this.player.teleportDir?.dx || 0;
+                const dy = this.player.teleportDir?.dy || 0;
+                const oldX = this.player.x;
+                const oldY = this.player.y;
+                
+                this.player.x = pPortal.targetX + dx;
+                this.player.y = pPortal.targetY + dy;
+                this.player.visualX = pPortal.targetX;
+                this.player.visualY = pPortal.targetY;
+                this.player.lastTX = this.player.x;
+                this.player.lastTY = this.player.y;
+                this.player.isTeleporting = false;
+
+                if (window.AudioSys) AudioSys.playPortalWarp();
+                // MASSIVE DYNAMIC BURST (120 particles)
+                const entryColor = pPortal.color || '#ffd700';
+                const targetPortal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
+                const exitColor = (targetPortal ? targetPortal.color : entryColor);
+                
+                for (let i = 0; i < 120; i++) {
+                    const pColEntry = Math.random() > 0.4 ? entryColor : '#ffffff';
+                    const pColExit = Math.random() > 0.4 ? exitColor : '#ffffff';
+                    Graphics.spawnParticle(oldX * 32 + 16, oldY * 32 + 16, pColEntry, 'spark');
+                    Graphics.spawnParticle(this.player.x * 32 + 16, this.player.y * 32 + 16, pColExit, 'spark');
+                }
+                this.updateEnergy();
+            }
+        }
+
         // Smooth player rotation
         if (this.player.visualAngle === undefined) this.player.visualAngle = this.player.dir * (Math.PI / 2);
         let pTargetAngle = this.player.dir * (Math.PI / 2);
@@ -549,6 +624,14 @@ class GameState {
                 if (!onConveyor) {
                     Graphics.spawnTrailSegment(this.player.lastTX, this.player.lastTY, this.player.visualAngle);
                 }
+            }
+        }
+        
+        // Ambient Portal Particles (High Intensity)
+        for (const p of this.portals) {
+            if (Math.random() < 0.15) {
+                const pColor = p.color || '#ffd700';
+                Graphics.spawnParticle(p.x * 32 + 16 + (Math.random()-0.5)*20, p.y * 32 + 16 + (Math.random()-0.5)*20, pColor, 'spark');
             }
         }
 
@@ -603,6 +686,34 @@ class GameState {
                             b.fallTimer = 0;
                             if (window.AudioSys) AudioSys.playFall();
                         }
+                    }
+                }
+
+                // --- BLOCK PORTAL TELEPORTATION ---
+                if (b.isTeleporting) {
+                    const bPortal = this.portals.find(p => p.x === b.x && p.y === b.y);
+                    const distToCenter = Math.abs(b.x - b.visualX) + Math.abs(b.y - b.visualY);
+                    if (bPortal && distToCenter < 0.15) {
+                        const tdx = b.teleportDir?.dx || 0;
+                        const tdy = b.teleportDir?.dy || 0;
+                        const oldX = b.x;
+                        const oldY = b.y;
+
+                        b.x = bPortal.targetX + tdx;
+                        b.y = bPortal.targetY + tdy;
+                        b.visualX = bPortal.targetX;
+                        b.visualY = bPortal.targetY;
+                        b.vx = 0; b.vy = 0; 
+                        b.isTeleporting = false;
+
+                        if (window.AudioSys) AudioSys.playPortalWarp();
+                        // MASSIVE BLOCK BURST
+                        for (let i = 0; i < 80; i++) {
+                            const pCol = Math.random() > 0.5 ? '#ffd700' : '#ffaa00';
+                            Graphics.spawnParticle(oldX * 32 + 16, oldY * 32 + 16, pCol, 'spark');
+                            Graphics.spawnParticle(b.x * 32 + 16, b.y * 32 + 16, pCol, 'spark');
+                        }
+                        this.updateEnergy();
                     }
                 }
 
@@ -1153,34 +1264,65 @@ class GameState {
         let moveSuccessful = false;
 
         // Check block push (support multiple blocks in a row)
+        // 1. SCAN FOR BLOCKS (Following Portals)
         let blocksToPush = [];
         let scanX = nx, scanY = ny;
         while (true) {
+            // If the scanning pointer hits a portal, teleport the pointer to the exit
+            const portal = this.portals.find(p => p.x === scanX && p.y === scanY);
+            if (portal) {
+                scanX = portal.targetX + dx;
+                scanY = portal.targetY + dy;
+            }
+
             const b = this.blocks.find(block => block.x === scanX && block.y === scanY);
             if (b) {
+                if (blocksToPush.includes(b)) break; // Safety against infinite portal loops
                 blocksToPush.push(b);
                 scanX += dx; scanY += dy;
             } else { break; }
         }
 
         if (blocksToPush.length > 0) {
-            // Check if every block in the chain can move to its next tile (e.g. not into a Quantum Floor)
+            // Check if every block in the chain can move to its next tile (recursively through portals)
             const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy));
             
             if (allBlocksCanMove) {
                 this.saveUndo();
+                // Move blocks from front to back of the chain to prevent collisions
                 for (let i = blocksToPush.length - 1; i >= 0; i--) {
-                    blocksToPush[i].x += dx;
-                    blocksToPush[i].y += dy;
+                    const b = blocksToPush[i];
+                    let targetX = b.x + dx;
+                    let targetY = b.y + dy;
+
+                    // EXIT EJECTION: If moving into a portal, teleport the block to the TILE AFTER the exit portal
+                    const portal = this.portals.find(p => p.x === targetX && p.y === targetY);
+                    if (portal) {
+                        // Mark for visual teleportation
+                        b.x = targetX;
+                        b.y = targetY;
+                        b.isTeleporting = true;
+                        b.teleportDir = { dx, dy };
+                    } else {
+                        b.x = targetX;
+                        b.y = targetY;
+                    }
                 }
 
-                this.player.x = nx;
-                this.player.y = ny;
+                // Player Ejection
+                const pPortal = this.portals.find(p => p.x === nx && p.y === ny);
+                if (pPortal) {
+                    this.player.x = pPortal.targetX + dx;
+                    this.player.y = pPortal.targetY + dy;
+                } else {
+                    this.player.x = nx;
+                    this.player.y = ny;
+                }
                 AudioSys.push();
                 this.updateEnergy();
                 moveSuccessful = true;
             }
-        } else if (this.isTilePassable(nx, ny, this.player)) {
+        } else if (this.isTilePassable(nx, ny, this.player, dx, dy)) {
             this.saveUndo();
             this.player.x = nx;
             this.player.y = ny;
@@ -1193,6 +1335,13 @@ class GameState {
             if (qf && window.AudioSys) {
                 // Coordinate-based variation for "each tile" signature tone
                 AudioSys.playQuantumHum(false, (this.player.x + this.player.y) % 4);
+            }
+
+            // Portal Detection (Handled in update() for visual continuity)
+            const portal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
+            if (portal) {
+                this.player.isTeleporting = true;
+                this.player.teleportDir = { dx, dy };
             }
         } else {
             // Check if it's a hole to fall into
@@ -1260,9 +1409,41 @@ class GameState {
         if (this.player.dir === DIRS.LEFT) tx--;
         if (this.player.dir === DIRS.RIGHT) tx++;
 
-        // 1. Check for Block to rotate
+        // 1. Check for Block or Portal to interact
+        const portal = this.portals.find(p => p.x === tx && p.y === ty);
+        if (portal && portal.slot) {
+            if (portal.slot.content) {
+                // Try to extract block behind the portal
+                const outX = tx + (this.player.dir === DIRS.RIGHT ? 1 : (this.player.dir === DIRS.LEFT ? -1 : 0));
+                const outY = ty + (this.player.dir === DIRS.DOWN ? 1 : (this.player.dir === DIRS.UP ? -1 : 0));
+                
+                if (this.isTilePassable(outX, outY)) {
+                    this.saveUndo();
+                    const b = portal.slot.content;
+                    b.x = outX;
+                    b.y = outY;
+                    b.visualX = outX;
+                    b.visualY = outY;
+                    b.lastTX = outX; // Prevent trail lines
+                    b.lastTY = outY;
+                    this.blocks.push(b);
+                    portal.slot.content = null;
+                    if (window.AudioSys) AudioSys.playPortalWarp();
+                    this.updateEnergy();
+                    actionTaken = true;
+                } else {
+                    // Extraction blocked: Twist block in limbo instead
+                    this.saveUndo();
+                    portal.slot.content.dir = (portal.slot.content.dir + 1) % 4;
+                    if (window.AudioSys) AudioSys.playPortalClick();
+                    this.updateEnergy();
+                    actionTaken = true;
+                }
+            }
+        }
+
         const b = this.blocks.find(b => b.x === tx && b.y === ty);
-        if (b) {
+        if (b && !actionTaken) {
             this.saveUndo();
             b.dir = (b.dir + 1) % 4;
             this.player.visorTimer = 15;
@@ -1340,7 +1521,18 @@ class GameState {
 
     isTilePassable(x, y, ignoreObj = null, dx = 0, dy = 0) {
         if (y < 0 || y >= this.map.length || x < 0 || x >= this.map[0].length) return false;
-        if (this.map[y][x] === '#' || this.map[y][x] === 'W' || this.map[y][x] === 'G') return false;
+        
+        // Portal Pass-through recursion
+        if (dx !== 0 || dy !== 0) {
+            const portal = this.portals.find(p => p.x === x && p.y === y);
+            if (portal) {
+                // If entering a portal, check the exit tile of its pair
+                return this.isTilePassable(portal.targetX + dx, portal.targetY + dy, ignoreObj, dx, dy);
+            }
+        }
+
+        if ((this.map[y][x] === '#' || this.map[y][x] === 'W' || this.map[y][x] === 'G') && 
+            !this.portals.some(p => p.x === x && p.y === y)) return false;
         
         // Convert ignoreObj to array if it's not already
         const ignores = Array.isArray(ignoreObj) ? ignoreObj : (ignoreObj ? [ignoreObj] : []);
@@ -1383,6 +1575,10 @@ class GameState {
                 return false;
             }
         }
+        
+        // Check Portals
+        const portal = this.portals.find(p => p.x === x && p.y === y);
+        if (portal && portal.slot && portal.slot.content) return false;
 
         return true;
     }
@@ -1452,6 +1648,16 @@ class GameState {
         }
 
         if (this.isTilePassable(nx, ny, obj)) {
+            // PORTAL SWALLOW (Conveyor)
+            const portal = this.portals.find(p => p.x === nx && p.y === ny);
+            if (portal && portal.slot && !portal.slot.content && !isPlayer) {
+                portal.slot.content = obj;
+                this.blocks = this.blocks.filter(b => b !== obj);
+                if (window.AudioSys) AudioSys.playPortalWarp();
+                this.updateEnergy();
+                return;
+            }
+
             obj.x = nx;
             obj.y = ny;
             if (isPlayer && window.AudioSys) AudioSys.conveyorSlide();
@@ -1485,13 +1691,37 @@ class GameState {
 
                         // Push the chain
                         for (let j = blocksToPushLaunch.length - 1; j >= 0; j--) {
-                            blocksToPushLaunch[j].x += dx;
-                            blocksToPushLaunch[j].y += dy;
+                            const lb = blocksToPushLaunch[j];
+                            const lnx = lb.x + dx;
+                            const lny = lb.y + dy;
+                            const lportal = this.portals.find(p => p.x === lnx && p.y === lny);
+                            
+                            if (lportal) {
+                                lb.x = lnx; 
+                                lb.y = lny;
+                                lb.isTeleporting = true;
+                                lb.teleportDir = { dx, dy };
+                            } else {
+                                lb.x += dx;
+                                lb.y += dy;
+                            }
                         }
-                        obj.x = lx;
-                        obj.y = ly;
-                        // Spawn some sparks at each step of the launch
-                        for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#bf00ff', 'spark');
+
+                        // Pusher block movement
+                        const selfPortal = this.portals.find(p => p.x === lx && p.y === ly);
+                        if (selfPortal) {
+                            obj.x = lx;
+                            obj.y = ly;
+                            obj.isTeleporting = true;
+                            obj.teleportDir = { dx, dy };
+                            this.updateEnergy();
+                            return; 
+                        } else {
+                            obj.x = lx;
+                            obj.y = ly;
+                        }
+                        // Spawn some sparks at each step of the launch (Golden)
+                        for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#ffcc00', 'spark');
                     } else {
                         break; // Hit a wall or immovable object
                     }
@@ -1787,6 +2017,49 @@ class GameState {
                     }
                 }
             } 
+            
+            // 1.5 Check Portal
+            const portal = this.portals.find(p => p.x === x && p.y === y);
+            if (portal && !blockBlocking) {
+                const limboBlock = portal.slot ? portal.slot.content : null;
+                
+                if (limboBlock) {
+                    // REDIRECTION MODE: Act like a block at Portal B
+                    const entryDir = (dir + 2) % 4;
+                    const isInvalid = limboBlock.dir === entryDir;
+                    const isCorrectEntry = !isInvalid;
+                    
+                    if (isCorrectEntry) {
+                        let nx = portal.targetX, ny = portal.targetY;
+                        if (limboBlock.dir === DIRS.UP) ny--;
+                        else if (limboBlock.dir === DIRS.DOWN) ny++;
+                        else if (limboBlock.dir === DIRS.LEFT) nx--;
+                        else if (limboBlock.dir === DIRS.RIGHT) nx++;
+                        
+                        if (trace(nx, ny, limboBlock.dir, color, charge + 1, path.concat({ x, y }), forceOcean, true)) {
+                            reachedValidTarget = true;
+                        }
+                    } else if (isInvalid) {
+                        for (const p of path.concat({ x, y })) {
+                            const pEntry = this.poweredWires.get(`${p.x},${p.y}`);
+                            if (pEntry && pEntry.color !== 'OCEAN') pEntry.color = 'YELLOW';
+                        }
+                    }
+                } else {
+                    // TUNNEL MODE: Teleport to Portal B and continue in SAME direction
+                    let nx = portal.targetX, ny = portal.targetY;
+                    if (dir === DIRS.UP) ny--;
+                    else if (dir === DIRS.DOWN) ny++;
+                    else if (dir === DIRS.LEFT) nx--;
+                    else if (dir === DIRS.RIGHT) nx++;
+                    
+                    if (trace(nx, ny, dir, color, charge, path.concat({ x, y }), forceOcean, true)) {
+                        reachedValidTarget = true;
+                    }
+                }
+                // Portals block normal propagation on their tile (they are nodes)
+                blockBlocking = true;
+            }
 
             // 2. Check Targets (Only if not blocked by a block on this tile)
             if (!blockBlocking) {
