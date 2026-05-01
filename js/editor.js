@@ -1963,6 +1963,7 @@ function testLoop(timestamp) {
     testAnimFrame++;
 
     testGame.update();
+    if (window.Dialogue) Dialogue.update();
     
     // Render
     Graphics.clear();
@@ -2271,6 +2272,19 @@ function updateDialogueManager() {
                     </select>
                 </div>
                 
+                <div style="grid-column: span 2; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 5px;">
+                    <span style="font-size: 10px; color: #aaa;">POSIÇÃO:</span>
+                    <select style="flex: 1; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;"
+                        onchange="updateDialogueProp('${key}', 'position', this.value, -1)">
+                        <option value="follow" ${eventConfig.position === 'follow' ? 'selected' : ''}>Seguir Robô</option>
+                        <option value="top" ${eventConfig.position === 'top' ? 'selected' : ''}>Topo (Centro)</option>
+                        <option value="bottom" ${eventConfig.position === 'bottom' ? 'selected' : ''}>Rodapé (Centro)</option>
+                        <option value="left" ${eventConfig.position === 'left' ? 'selected' : ''}>Esquerda</option>
+                        <option value="right" ${eventConfig.position === 'right' ? 'selected' : ''}>Direita</option>
+                        <option value="center" ${eventConfig.position === 'center' ? 'selected' : ''}>Centro da Tela</option>
+                    </select>
+                </div>
+
                 <div style="grid-column: span 2; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 5px;">
                     <span style="font-size: 10px; color: #aaa;">RAIO DA ÁREA:</span>
                     <input type="number" min="0" max="10" value="${eventConfig.radius || 0}" 

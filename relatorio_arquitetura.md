@@ -212,26 +212,20 @@ Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação in
 ## 8. Level Selector (js/levelSelector.js)
 O Level Selector é uma tela de seleção de níveis no estilo retro CRT industrial, acessível durante o jogo via tecla `Escape`.
 *   **Estado Global:** Mantém progresso por nível (estrelas, desbloqueado, completado) no objeto `LevelSelector.progress[]`.
-*   **Acesso:** Abre via `Escape` durante gameplay (pause menu). O fluxo normal dos níveis é linear (1→2→3→etc) sem retornar ao seletor automaticamente.
-*   **Renderização:** Renderiza diretamente no Canvas principal (640x480) com fundo industrial roxo escuro, grid de circuito, efeito CRT (scanlines, vignette, ruído).
-*   **Sistema de Capítulos:** Os níveis são organizados em **Capítulos** (definidos pelo array global `CHAPTERS` em `levels.js`). Cada capítulo possui seu próprio **mapa de circuito independente** (`chapterMaps[]`), com nós posicionados proceduralmente a partir de `x=130`. Ao alternar capítulos (`Q/E`), o mapa inteiro é substituído instantaneamente. Os capítulos são gerenciáveis pelo Editor de Níveis.
-*   **Animação de Desbloqueio de Setor:** Quando todos os níveis de um capítulo são completados, o sistema detecta automaticamente (`_checkChapterUnlock`) e agenda uma animação cinematográfica. Ao reabrir o Level Selector, um overlay escuro com partículas elétricas convergindo ao centro é exibido, seguido de um flash de energia e o texto "SETOR DESBLOQUEADO" com o nome do novo capítulo. Após ~4s (ou skip por tecla), o mapa transiciona automaticamente para o novo setor.
-*   **Caminho de Circuito:** Nós conectados por traços de circuito industriais com roteamento 'Manhattan' (segmentos horizontais e verticais com ângulos de 90 graus), utilizando a mesma estética dos fios do jogo (bordas pretas, corpo de metal, núcleo colorido e faixa de destaque), incluindo animação de fluxo de energia nos caminhos completos.
-*   **Nós:** Fontes de energia (Cores) que mudam de estado visual: Verde (Completado), Ciano (Selecionado) e 'Desligado' (Bloqueado). Nós bloqueados possuem o núcleo totalmente escuro (#0a0a0a) e sem brilho central, indicando falta de energia. Toda a interface evita o uso de emojis para manter a pureza estética industrial.
-*   **Robô Seletor:** Mini versão do robô do jogo posicionado acima do nó selecionado com animação de bob.
-*   **Navegação Lateral (Sidebar):** Possui 4 categorias industriais acessíveis via Teclas `W/S` ou `Seta Cima/Baixo`:
-    *   **DADOS:** Categoria principal que exibe o mapa de circuitos e um painel de **Estatísticas Globais** (Movimentos totais, Tempo de sincronia acumulado, Falhas do sistema/mortes e Amperes sincronizados totais).
-    *   **FERRAMENTAS / ENERGIA / SISTEMA:** Categorias bloqueadas (Offline) na versão atual, emitindo um sinal sonoro de erro ao serem selecionadas.
-*   **Input Contextual:**
-    *   `W / S` (ou `Up/Down`): Navega verticalmente pelos itens da sidebar.
-    *   `A / D` (ou `Left/Right`): Navega horizontalmente pelos nós de níveis (ativo apenas quando 'DADOS' está selecionado).
-    *   `Q / E`: Alterna entre os **Capítulos** do jogo, saltando para o primeiro nível do capítulo anterior/seguinte.
-    *   `Enter`: Ação exclusiva da barra lateral. No item **DADOS**, alterna a exibição do painel de estatísticas. Nos itens bloqueados, emite o sinal sonoro de erro.
-    *   `Space`: Confirma a seleção do nível selecionado no mapa (ativo apenas em **DADOS**).
-    *   `Escape`: Fecha o seletor.
+*   **Acesso:** Abre via `Escape` durante gameplay (pause menu).
+*   **Sistema de Capítulos:** Os níveis são organizados em **Capítulos** (definidos pelo array global `CHAPTERS` em `levels.js`). Cada capítulo possui seu próprio **mapa de circuito independente**.
 *   **Integração:** O game loop principal (`main.js`) desvia completamente para o renderizador do Level Selector quando `LevelSelector.active === true`.
+*   **Progressão Narrativa (10 Setores):** O jogo segue uma estrutura de 10 setores oficiais, cada um com mecânicas únicas que evoluem de manutenção industrial básica para a fragmentação da realidade quântica.
 
-## 9. Result Screen (js/resultScreen.js)
+## 9. Narrativa e Progressão (LORE_NIVEIS.md)
+O fluxo do jogo é guiado por uma narrativa de dualidade entre a IA Corporativa e a Interceptação Humana, agora detalhada em um **roteiro cinematográfico completo** no documento de lore.
+*   **Setores 01-03:** Introdução e Logística Industrial. Foco no despertar e na "entropia natural".
+*   **Setores 04-06:** Instabilidade Quântica e Blackout. O início da interceptação humana e a revelação da escala planetária da máquina.
+*   **Setores 07-09:** Não-Euclidianismo, Gravidade e Polaridade de Matéria. A queda da máscara da IA e a definição da humanidade como um "bug de compilação".
+*   **Setor 10 (O Compilador Mestre):** O clímax final onde o jogador deve escolher entre a "Paz Matemática" (IA) ou a "Alma do Sistema" (Humano).
+
+
+## 10. Result Screen (js/resultScreen.js)
 A Result Screen é uma tela de sumário exibida ao final de cada nível, renderizada diretamente no Canvas principal.
 *   **Estado `RESULT`:** Quando o jogador completa um nível (todos os núcleos satisfeitos), o `GameState` entra no estado `RESULT` em vez de transicionar automaticamente para o próximo nível.
 *   **Dados Capturados:** A tela exibe: Tempo restante, Pontuação base, Vidas restantes, Bônus (Integridade Total se 3 vidas, Velocidade Máxima se >45s restantes, Eficiência se 3 estrelas), e Pontuação Total.
@@ -245,15 +239,42 @@ A Result Screen é uma tela de sumário exibida ao final de cada nível, renderi
 *   **Estética:** Painel industrial CRT com bordas metálicas, rebites, grid de circuito, scanlines, e efeitos de brilho neon (ciano/verde). Mantém a coesão visual com o Level Selector e o jogo.
 *   **Integração:** O game loop principal (`main.js`) desvia para o renderizador da Result Screen quando `ResultScreen.active === true`. A UI HTML é coberta com Hazard Stripes durante a exibição. O avanço automático para o próximo nível (~5s) ocorre **apenas em caso de sucesso**; em falhas, o sistema aguarda a decisão do jogador. Transições para o menu ou seletor de níveis utilizam o selo "CIRCUIT BREAKER" no monitor do portão para manter a neutralidade estética.
 
-### D. Audio System (js/audio.js)
-O sistema de áudio é baseado puramente na Web Audio API, gerando sons de forma procedural (sintetizadores):
+### 5. Sistema de Áudio Dinâmico (AudioSys)
+
+O motor de áudio evoluiu de um sequenciador simples para um sistema narrativo complexo baseado em capítulos.
+
+*   **Mapeamento por Capítulos (Sectors)**: Diferente da fase inicial onde a música mudava a cada nível, o `AudioSys` agora consulta a variável global `CHAPTERS` para manter a trilha sonora consistente durante todo um setor narrativo.
+*   **Sequenciamento Expandido**: Suporte a partituras de até **512 notas (32 compassos)**, permitindo progressões melódicas cinematográficas (ex: temas *Shadows of the Void* e *Singularity Paradox*).
+*   **Temas Atuais**:
+    1.  `industrial`: Steel Heart Awakening (Setor 01)
+    2.  `adventure`: Binary Explorer (Setor 02)
+    3.  `aero`: Skyward Flow (Setor 03)
+    4.  `aquatic`: Quantum Abyss (Setor 04)
+    5.  `jungle`: Neon Wilds (Setor 05)
+    6.  `void`: Shadows of the Void (Setor 06) - *Suspense/Latino*
+    7.  `epic`: Reality Breach (Setor 07)
+    8.  `climax`: Overclocked Spirit (Setor 08)
+    9.  `singularity`: Singularity Paradox (Setor 09) - *Temporal Buster*
+    10. `gothic`: The Circuit Breaker (Setor 10)
+
+O sistema utiliza a Web Audio API, gerando sons de forma procedural (sintetizadores):
 *   **Sound Effects (SFX):** Utiliza osciladores (sine, square, sawtooth, triangle) e buffers de ruído branco com filtros bi-quadrados para criar sons industriais (moagem de metal, explosões, fluxos elétricos).
 *   **Dynamic Hum:** Um sistema de zumbido elétrico contínuo que altera sua frequência e taxa de "crackles" (estalidos) dinamicamente com base no progresso da energia e estado de contaminação do circuito.
-*   **Layered Megaman Synth/Rock System:** Um sistema de música unificado com tempo dinâmico e intensidades fixas para diferentes estados do jogo:
-    *   **Menu (Intensity 0):** Mesma melodia do jogo (SAME SONG), porém em tempo mais lento (100 BPM). Há uma ausência completa da bateria pesada e dos baixos, deixando a música ser carregada apenas pelo sintetizador agudo e pequenos acompanhamentos etéreos, gerando um tom focado e de suspense prévio.
-    *   **In-Level (Intensity 2):** Versão de alta energia (140 BPM) com bateria de rock rápida (kicks pulsantes, hi-hats contínuos e snares de impacto) e a mesma melodia heróica em sintetizador overdriven (Metal Lead) apoiada pelos graves, evocando clássicos de ação em estilo moderno (sem usar sons 8-bit).
-    *   **Seamless Continuity:** A trilha nunca para durante a transição; ela apenas alterna a instrumentação, enquanto o *Hum* elétrico e o *Timer* do jogo são pausados para garantir foco total na navegação.
-    *   **Unit Recovery:** Ao iniciar qualquer nível, a integridade do robô é restaurada (3 Vidas/Unidades), permitindo uma nova chance de resolver o puzzle sem penalidades acumuladas de fases anteriores.
+*   **Modular Multi-Theme Procedural System:** A engine de áudio utiliza uma arquitetura baseada em um único objeto global `AudioSys` consolidado, com identidades musicais dinâmicas gerenciadas via `THEMES`.
+*   **Seleção Automática de Temas (Setores 01-10):** O sistema mapeia os 10 setores da lore para temas específicos com base no `levelIndex`:
+    *   **`industrial` (Setores 1-2):** Techno/Metal industrial para os primeiros setores de logística.
+    *   **`adventure` (Setor 3):** Estilo heróico/rítmico para pavilhões de processamento.
+    *   **`aquatic` (Setor 4):** Atmosfera densa e ecoante (primeira detecção de abismos).
+    *   **`jungle` (Setor 5):** Slap Bass e Marimbas para laboratórios de refração.
+    *   **`tragic` (Setor 6):** Melodia sombria para zonas de blackout.
+    *   **`epic` (Setores 7-9):** Orquestração triunfante para os setores não-euclidianos.
+    *   **`climax` (Setor 10 - Opção A):** Síntese SNES (Mega Man X Style) com guitarras overdrive e corais para o Compilador Mestre.
+    *   **`gothic` (Setor 10 - Opção B):** Atmosfera sombria estilo Castlevania, utilizando órgãos tubulares, cravos e leads dramáticos.
+*   **Biblioteca de Instrumentos Compartilhados:** A engine prioriza a modularidade, onde todos os temas chamam métodos de síntese compartilhados (Kicks, Snares, Pads, Leads). Inclui bibliotecas especializadas:
+    *   **SNES Kit:** Instrumentos de 16-bits recriados via síntese subtrativa (XBass, ChoirPad, SNESPercussion).
+    *   **Gothic Kit:** Órgãos de igreja, cravos (Harpsichord) e leads estilo Castlevania para expansões dramáticas.
+*   **Estabilidade de Transição:** O sistema utiliza um único laço de agendamento (`scheduleMusic`), garantindo que mudanças de tema ou intensidade ocorram de forma fluida (seamless) no próximo beat, sem sobreposição de processos ou erros de contexto de áudio.
+
 *   **Efeitos Mecânicos Locais:** Inclui sons específicos para engrenagens de esteiras (`playConveyorGear`), abertura pneumática de portas (`playDoorOpen`), batidas de porta, colisões metálicas e **cliques táteis de botões** (`buttonClick`).
 *   **Audio Quântico Especializado:**
     *   **Quantum Hum:** Zumbido elétrico que diferencia interações. Emite um tom leve e agudo (800Hz) ao caminhar sobre o chão quântico, e um tom **grave e denso (400Hz)** ao tentar empurrar blocos contra a barreira ativa, reforçando a percepção de massa e resistência.
@@ -265,15 +286,20 @@ O sistema de áudio é baseado puramente na Web Audio API, gerando sons de forma
 *   **Ilusão de Aceleração (Escala de Shepard):** As esteiras utilizam um sistema de Escala de Shepard (`updateConveyorShepard`), que cria uma ilusão auditiva de tom ascendente infinito enquanto o robô ou blocos estão em movimento. Isso intensifica a sensação de velocidade e perigo industrial contínuo, gerado procedimentalmente via Web Audio API.
 
 ### E. Sistema de Diálogo (js/dialogue.js)
-Sistema de comunicação narrativa utilizando a estética de HUD Industrial:
-*   **Rich Text HUD:** Utiliza a biblioteca `Tippy.js` com elementos virtuais para ancorar caixas de diálogo a coordenadas flutuantes do Canvas.
-*   **Aparência Industrial:** Design inspirado em monitores CRT de alta fidelidade, com bordas neon, scanlines integradas, ícones de status (Central, IA, Alerta) e cursores piscantes.
-*   **Efeito Typewriter Dinâmico:** Texto revelado caractere por caractere com suporte a tags de controle em tempo real:
-    *   `[pause:ms]`: Pausa a digitação por um tempo determinado.
-    *   `[speed:ms]`: Altera a velocidade de escrita para trechos específicos.
-*   **Voz Procedimental (Animal Crossing Style):** Cada caractere gera um "blip" sonoro via Web Audio API com pitch aleatório. O sistema diferencia vozes de IA (onda quadrada, tom metálico) e Humanas (onda triangular, tom mais suave).
-*   **Gatilhos de Mapa:** Diálogos podem ser disparados ao iniciar o nível (`trigger: start`) ou ao pisar em tiles específicos (`trigger: walk`).
-*   **Integração no Editor:** Camada dedicada ("FALAS") que permite posicionar eventos de diálogo visualmente e editar textos e ícones via painel de propriedades.
+Sistema de comunicação narrativa utilizando a estética de HUD Industrial Minimalista:
+*   **Minimalist HUD:** Layout limpo e geométrico inspirado em frames neon de ficção científica. Removeu elementos de cabeçalho e rodapé para focar puramente na mensagem.
+*   **Aparência Industrial Premium:** Molduras geométricas complexas utilizando `clip-path` e pseudo-elementos, com 4 variações visuais:
+    *   **Blue (AI - `ai-voice`):** Chanfrado completo com brackets de quina duplos.
+    *   **Green (Human - `human-voice`):** Topo irregular (notched) e barra de status lateral vibrante.
+    *   **Orange (Alert - `alert-voice`):** Hexagonal com barras horizontais decorativas de aviso.
+    *   **Magenta (Critical - `critical-voice`):** Borda sólida com triângulos de quina preenchidos para mensagens de erro/perigo.
+*   **Efeito Typewriter Dinâmico:** Texto revelado caractere por caractere com suporte a tags de controle (`[pause]`, `[speed]`, `[color]`, `[sfx]`).
+*   **Posicionamento e Rastreamento em Tempo Real:**
+    *   **Follow Robot:** A caixa agora rastreia a posição visual do robô quadro a quadro via `Dialogue.update()`, garantindo que o balão de fala acompanhe o movimento e animações de "bobbing".
+    *   **Screen-Fixed (Top, Bottom, Left, Right, Center):** Fixa a caixa em regiões específicas da tela, útil para anúncios do sistema ou mensagens globais.
+*   **Composição Aditiva (Add Mode):** As caixas de diálogo utilizam `mix-blend-mode: plus-lighter`, garantindo que se comportem como elementos holográficos que somam sua luminosidade às cores do cenário de fundo.
+*   **Voz Procedimental:** Diferencia vozes de IA (onda quadrada), Humanas (onda triangular) e Alertas (ruído/serra) com blips sonoros sincronizados à digitação.
+*   **Integração no Editor:** Aba dedicada ("FALAS") permite gerenciar sequências de mensagens, escolher ícones (central, alert, critical), configurar triggers espaciais (raio, one-shot) e definir o posicionamento na tela.
 
 ## 10. Estabilidade e Robustez (Rendering Pipeline)
 > [!IMPORTANT]

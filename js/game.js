@@ -582,8 +582,9 @@ class GameState {
 
         if (window.AudioSys && !this.isEditor) {
             AudioSys.setMusicIntensity(2); // Levels always play the full "Action" version
-            AudioSys.playGameMusic();
+            AudioSys.playGameMusic(this.levelIndex);
         }
+
 
         // Trigger start dialogues (Handled in main.js when transition finishes)
         
@@ -3081,6 +3082,7 @@ class GameState {
                             text: msg.text,
                             icon: msg.icon || 'central',
                             isAI: msg.icon !== 'human',
+                            position: config.position || 'center',
                             autoDismiss: config.autoDismiss !== false,
                             lockPlayer: config.lockPlayer !== false,
                             dismissDelay: config.dismissDelay || 1500

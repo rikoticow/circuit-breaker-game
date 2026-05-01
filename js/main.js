@@ -464,6 +464,7 @@ function gameLoop(timestamp) {
     }
 
     game.update();
+    if (window.Dialogue) Dialogue.update();
     updateTransitionLogic();
 
     const mapH = game.map.length;

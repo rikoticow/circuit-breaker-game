@@ -40,7 +40,7 @@ const Dialogue = {
             return;
         }
 
-        const { 
+        let { 
             text, 
             icon = 'central', 
             isAI = true, 
@@ -49,11 +49,13 @@ const Dialogue = {
             theme = 'industrial-hud',
             autoDismiss = true,
             lockPlayer = true,
-            dismissDelay = 1500
+            dismissDelay = 1500,
+            position = 'center'
         } = config;
 
         let voiceTheme = isAI ? 'ai-voice-box' : 'human-voice-box';
         if (icon === 'alert') voiceTheme = 'alert-voice-box';
+        if (icon === 'critical') voiceTheme = 'critical-voice-box';
         const fullTheme = `${theme} ${voiceTheme}`;
 
         this.isTyping = true;
@@ -75,41 +77,72 @@ const Dialogue = {
         const content = document.createElement('div');
         let voiceClass = isAI ? 'ai-voice' : 'human-voice';
         if (icon === 'alert') voiceClass = 'alert-voice';
-        
-        let titleText = 'CENTRAL_COMMAND';
-        if (isAI) titleText = 'SYSTEM_AI_V7';
-        if (icon === 'alert') titleText = 'SYSTEM_ALERT';
+        if (icon === 'critical') voiceClass = 'critical-voice';
 
         content.className = `dialogue-container ${voiceClass}`;
         content.innerHTML = `
-            <div class="hud-header">
-                <div class="hud-icon ${icon}"></div>
-                <div class="hud-title">${titleText}</div>
-                <div class="hud-decor"></div>
-            </div>
-            <div class="hud-body"></div>
-            <div class="hud-footer">
-                <span class="hud-status">SYNC_ACTIVE</span>
+            <div class="hud-minimal-frame">
+                <div class="hud-body"></div>
                 <div class="hud-indicator"></div>
-                <div class="hud-blink-cursor"></div>
             </div>
         `;
 
         const body = content.querySelector('.hud-body');
         const indicator = content.querySelector('.hud-indicator');
         
+        // Screen Positioning Logic
+        let tippyTarget = target;
+        let placement = 'top';
+
+        if (position && position !== 'follow') {
+            tippyTarget = {
+                getBoundingClientRect: () => {
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    const w = 300, h = 20;
+                    let x = (vw - w) / 2;
+                    let y = (vh - h) / 2;
+
+                    if (position === 'top') {
+                        y = 40; 
+                        placement = 'bottom';
+                    } else if (position === 'bottom') {
+                        y = vh - 40; 
+                        placement = 'top';
+                    } else if (position === 'left') {
+                        x = 40;
+                        placement = 'right';
+                    } else if (position === 'right') {
+                        x = vw - 40;
+                        placement = 'left';
+                    } else if (position === 'center') {
+                        placement = 'top'; // Center of the virtual rect
+                    }
+
+                    return {
+                        width: w, height: h,
+                        top: y, left: x,
+                        bottom: y + h, right: x + w,
+                        x: x, y: y
+                    };
+                }
+            };
+            arrow = false;
+        }
+
         // Initialize Tippy
         this.activeTippy = tippy(document.body, {
-            getReferenceClientRect: target.getBoundingClientRect,
+            getReferenceClientRect: tippyTarget.getBoundingClientRect,
             content: content,
             allowHTML: true,
             arrow: arrow,
             theme: fullTheme,
+            placement: placement,
             interactive: true,
             trigger: 'manual',
             hideOnClick: false,
-            maxWidth: 350,
-            onShown: (instance) => {
+            maxWidth: 450,
+            onMount: (instance) => {
                 if (window.AudioSys && window.audioCtx && audioCtx.state === 'suspended') {
                     audioCtx.resume();
                 }
@@ -118,9 +151,20 @@ const Dialogue = {
         });
 
         this.activeTippy.show();
+        this.tippyTarget = tippyTarget; // Store for update loop
 
         // Register global input listener
         document.addEventListener('keydown', this.handleInput);
+    },
+
+    update() {
+        if (this.activeTippy && this.currentConfig && this.currentConfig.position === 'follow') {
+            // Tippy uses the getBoundingClientRect of the target, 
+            // but we need to tell popper to recalculate
+            if (this.activeTippy.popperInstance) {
+                this.activeTippy.popperInstance.update();
+            }
+        }
     },
 
     /**
@@ -152,18 +196,17 @@ const Dialogue = {
         }
     },
 
-    async startTypewriter(element, indicator, fullText, config, onComplete) {
-        // 1. Pre-calculate width to avoid horizontal jump
+    async startTypewriter(element, indicator, fullText = "", config, onComplete) {
+        if (!fullText) {
+            this.isDone = true;
+            this.isTyping = false;
+            if (onComplete) onComplete();
+            this.hide();
+            return;
+        }
+
         const cleanText = fullText.replace(/\[.*?\]/g, '');
-        element.style.width = 'auto';
-        element.innerHTML = cleanText;
-        
-        // Measure only width (vertical remains flexible as requested)
-        const targetWidth = element.scrollWidth;
-        
-        // Lock width dimension
-        element.style.width = targetWidth + 'px';
-        element.innerHTML = ""; // Reset for actual typewriter
+        element.innerHTML = ""; 
 
         let currentText = "";
         let i = 0;

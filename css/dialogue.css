@@ -1,159 +1,205 @@
 :root {
-    --hud-green: #00ff9f;
-    --hud-cyan: #00f0ff;
-    --hud-yellow: #ffcc00;
-    --hud-red: #ff3333;
+    --hud-green: #00ff6a;
+    --hud-cyan: #00a2ff;
+    --hud-yellow: #ff8c00;
+    --hud-magenta: #ff006a;
+    --hud-bg: rgba(5, 10, 15, 0.4);
 }
 
-.tippy-box[data-theme~='industrial-hud'] {
-    --theme-color: var(--hud-green);
-    --theme-glow: rgba(0, 255, 159, 0.3);
-    background-color: rgba(5, 10, 5, 0.95);
-    border: 1px solid var(--theme-color);
-    border-left: 5px solid var(--theme-color);
-    box-shadow: 0 0 20px var(--theme-glow), inset 0 0 15px rgba(0, 0, 0, 1);
-    color: var(--theme-color);
-    font-family: 'VT323', monospace;
-    padding: 0;
-    overflow: hidden;
-    border-radius: 0;
-}
-
-/* Specific theme color overrides */
+/* Themes mapping */
 .tippy-box[data-theme~='ai-voice-box'] { 
     --theme-color: var(--hud-cyan); 
-    --theme-glow: rgba(0, 240, 255, 0.3);
+    --theme-glow: rgba(0, 162, 255, 0.5);
+    --style-class: style-blue;
 }
 .tippy-box[data-theme~='alert-voice-box'] { 
     --theme-color: var(--hud-yellow); 
-    --theme-glow: rgba(255, 204, 0, 0.3);
+    --theme-glow: rgba(255, 140, 0, 0.5);
+    --style-class: style-orange;
 }
 .tippy-box[data-theme~='human-voice-box'] { 
     --theme-color: var(--hud-green); 
-    --theme-glow: rgba(0, 255, 159, 0.3);
+    --theme-glow: rgba(0, 255, 106, 0.5);
+    --style-class: style-green;
+}
+.tippy-box[data-theme~='critical-voice-box'] { 
+    --theme-color: var(--hud-magenta); 
+    --theme-glow: rgba(255, 0, 106, 0.5);
+    --style-class: style-magenta;
 }
 
-.tippy-box[data-theme~='industrial-hud'] .tippy-arrow {
+.tippy-box[data-theme~='industrial-hud'] {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
     color: var(--theme-color);
+    font-family: 'VT323', monospace;
+    padding: 0;
+    border-radius: 0;
 }
 
 .dialogue-container {
-    padding: 12px;
+    padding: 0;
     position: relative;
-    background-image: linear-gradient(rgba(0, 255, 159, 0.03) 1px, transparent 1px);
-    background-size: 100% 4px;
-    min-width: 250px;
+    min-width: 280px;
+}
+
+/* Base Frame */
+.hud-minimal-frame {
+    position: relative;
+    padding: 25px 35px;
+    background: var(--hud-bg);
     color: var(--theme-color);
+    box-sizing: border-box;
+    filter: drop-shadow(0 0 8px var(--theme-glow));
+    transition: all 0.3s ease;
+    backdrop-filter: blur(4px);
+    mix-blend-mode: plus-lighter; /* Additive blending */
 }
 
-.hud-header {
-    display: flex;
-    align-items: center;
-    border-bottom: 1px solid rgba(0, 255, 159, 0.4);
-    margin-bottom: 10px;
-    padding-bottom: 6px;
+/* --- Style Blue (AI) --- */
+.ai-voice .hud-minimal-frame {
+    clip-path: polygon(
+        15px 0%, calc(100% - 15px) 0%, 100% 15px, 
+        100% calc(100% - 15px), calc(100% - 15px) 100%, 
+        15px 100%, 0% calc(100% - 15px), 0% 15px
+    );
+    border: 1px solid rgba(0, 162, 255, 0.3);
 }
 
-.hud-icon {
-    width: 24px;
-    height: 24px;
+.ai-voice .hud-minimal-frame::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border: 2px solid var(--theme-color);
+    clip-path: polygon(
+        0 30px, 0 0, 30px 0,
+        30px 2px, 2px 2px, 2px 30px
+    );
+}
+
+.ai-voice .hud-minimal-frame::after {
+    content: '';
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 40px; height: 40px;
+    border-right: 3px solid var(--theme-color);
+    border-bottom: 3px solid var(--theme-color);
+    clip-path: polygon(100% 0, 100% 100%, 0 100%, 0 92%, 92% 92%, 92% 0);
+}
+
+/* --- Style Green (Human) --- */
+.human-voice .hud-minimal-frame {
+    clip-path: polygon(
+        0 0, 80% 0, 85% 8px, 100% 8px, 
+        100% 100%, 15px 100%, 0 85%
+    );
+    border-left: 2px solid var(--theme-color);
+}
+
+.human-voice .hud-minimal-frame::before {
+    content: '';
+    position: absolute;
+    top: 15px; right: 5px; bottom: 15px;
+    width: 3px;
     background: var(--theme-color);
-    margin-right: 10px;
-    clip-path: polygon(25% 0%, 75% 0%, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0% 75%, 0% 25%);
     box-shadow: 0 0 10px var(--theme-color);
 }
 
-/* Icon Overrides (Keep icons distinct but color-matched) */
-.hud-icon.central { background: var(--hud-red); box-shadow: 0 0 10px var(--hud-red); }
-.hud-icon.ai { background: var(--hud-cyan); box-shadow: 0 0 10px var(--hud-cyan); }
-.hud-icon.alert { background: var(--hud-yellow); box-shadow: 0 0 10px var(--hud-yellow); }
+/* --- Style Orange (Alert) --- */
+.alert-voice .hud-minimal-frame {
+    clip-path: polygon(
+        10px 0, calc(100% - 10px) 0, 100% 10px,
+        100% calc(100% - 10px), calc(100% - 10px) 100%,
+        10px 100%, 0 calc(100% - 10px), 0 10px
+    );
+    border: 1px solid rgba(255, 140, 0, 0.4);
+}
 
-.hud-title {
-    font-size: 16px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+.alert-voice .hud-minimal-frame::before {
+    content: '';
+    position: absolute;
+    top: 4px; left: 20%; right: 20%;
+    height: 3px;
+    background: var(--theme-color);
+}
+
+.alert-voice .hud-minimal-frame::after {
+    content: '';
+    position: absolute;
+    bottom: 4px; left: 30%; right: 30%;
+    height: 2px;
+    background: var(--theme-color);
+    opacity: 0.6;
+}
+
+/* --- Style Magenta (Critical) --- */
+.critical-voice .hud-minimal-frame {
+    border: 1px solid var(--theme-color);
+    padding: 30px;
+}
+
+.critical-voice .hud-minimal-frame::before {
+    content: '';
+    position: absolute;
+    top: -5px; left: -5px;
+    width: 20px; height: 20px;
+    background: var(--theme-color);
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.critical-voice .hud-minimal-frame::after {
+    content: '';
+    position: absolute;
+    top: 5px; left: 5px; right: 5px; bottom: 5px;
+    border: 1px solid rgba(255, 0, 106, 0.3);
+    pointer-events: none;
 }
 
 .hud-body {
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1.1;
-    min-height: 40px;
-    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    min-height: 24px;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 1);
     white-space: pre-wrap;
-    color: inherit;
+    color: #fff; /* White text for better readability inside neon frame */
 }
 
-.hud-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-    margin-top: 10px;
-    padding-top: 5px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    opacity: 0.7;
-}
-
-.hud-status {
-    color: inherit;
-}
-
-.hud-blink-cursor {
-    width: 10px;
-    height: 14px;
-    background: var(--theme-color);
-    animation: hud-blink 0.6s step-end infinite;
-}
-
-@keyframes hud-blink {
-    from, to { opacity: 1; }
-    50% { opacity: 0; }
-}
-
-/* Voice Specifics */
-.human-voice .hud-title, .human-voice .hud-status { color: var(--hud-cyan); }
-.human-voice .hud-blink-cursor { background: var(--hud-cyan); }
-
-.ai-voice .hud-title, .ai-voice .hud-status { color: #ffffff; }
-.ai-voice .hud-blink-cursor { background: #ffffff; }
-
-.alert-voice .hud-title, .alert-voice .hud-status { color: var(--hud-red); }
-.alert-voice .hud-blink-cursor { background: var(--hud-red); }
-
-/* Manual Dismiss Indicator */
+/* Interaction Indicator */
 .hud-indicator {
-    display: none;
+    position: absolute;
+    bottom: -25px;
+    right: 10px;
     font-size: 14px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid var(--theme-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
     color: var(--theme-color);
-    padding: 0 5px;
-    margin-right: 10px;
-    animation: indicator-pulse 0.4s infinite alternate;
+    opacity: 0.8;
+    text-shadow: 0 0 5px var(--theme-color);
+    pointer-events: none;
 }
 
 .hud-indicator.visible {
     display: block;
 }
 
-@keyframes indicator-pulse {
-    from { opacity: 0.3; }
-    to { opacity: 1; }
-}
-
 /* Typewriter Inline Cursor */
 .hud-typewriter-cursor {
     display: inline-block;
-    width: 10px;
-    height: 3px;
-    background: currentColor;
-    margin-left: 2px;
-    vertical-align: baseline;
+    width: 8px;
+    height: 16px;
+    background: var(--theme-color);
+    margin-left: 4px;
+    vertical-align: middle;
     animation: cursor-blink 0.4s step-end infinite;
 }
 
 @keyframes cursor-blink {
     from, to { opacity: 1; }
     50% { opacity: 0; }
+}
+
+/* Ensure visibility and z-index */
+.tippy-box {
+    z-index: 9999 !important;
 }
