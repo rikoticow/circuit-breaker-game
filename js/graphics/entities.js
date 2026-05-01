@@ -27,12 +27,10 @@ Object.assign(Graphics, {
         }
 
         if (isOutOfPhase) {
-            // White lines with Phase Glow
+            // Use frequency-specific color for the holographic outline
             const t = (performance.now() * 0.001);
-            this.ctx.strokeStyle = '#fff'; // White lines
-            this.ctx.shadowColor = accentColor; // Phase glow color
-            this.ctx.shadowBlur = 10;
-            this.ctx.lineWidth = 1;
+            this.ctx.strokeStyle = accentColor; // Holographic phase color
+            this.ctx.lineWidth = 1.5;
             
             const getJit = (f, a, s = 0) => Math.sin(t * (f * 0.5) + s) * a + Math.cos(t * (f * 0.8) + s) * (a * 0.5);
             
@@ -87,7 +85,6 @@ Object.assign(Graphics, {
                 this.ctx.restore();
             }
             
-            this.ctx.shadowBlur = 0; // Reset shadow for ghost base
             this.ctx.globalAlpha = 0.1;
             this.ctx.setLineDash([]);
             wRect(px + 2, py + 2, ts - 4, ts - 4, 999);
@@ -129,12 +126,11 @@ Object.assign(Graphics, {
             if (isHit) {
                 const hue = (Date.now() / 10) % 360, grad = this.ctx.createLinearGradient(12, -12, -12, 12);
                 grad.addColorStop(0, `hsl(${hue}, 100%, 70%)`); grad.addColorStop(0.5, `hsl(${(hue + 60) % 360}, 100%, 80%)`); grad.addColorStop(1, `hsl(${(hue + 120) % 360}, 100%, 70%)`);
-                this.ctx.strokeStyle = grad; this.ctx.lineWidth = 5; this.ctx.shadowColor = `hsl(${hue}, 100%, 50%)`; this.ctx.shadowBlur = 12;
+                this.ctx.strokeStyle = grad; this.ctx.lineWidth = 5;
             } else {
                 this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 3;
             }
             this.ctx.beginPath(); this.ctx.moveTo(10, -10); this.ctx.lineTo(-10, 10); this.ctx.stroke();
-            this.ctx.shadowBlur = 0;
             if (isHit && Math.random() > 0.8) this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, `hsl(${(Date.now() / 10) % 360}, 100%, 75%)`, 'spark');
             this.ctx.restore();
             this.ctx.fillStyle = '#1a1a1a'; const bs = 2;
@@ -156,7 +152,6 @@ Object.assign(Graphics, {
         if (powerData) {
             if (powerData.invalid) arrowColor = '#ffcc00';
             else if (powerData.active) arrowColor = powerData.isOcean ? '#00f0ff' : (powerData.color === 'RED' ? '#ff003c' : '#0077ff');
-            if (!isOutOfPhase && (powerData.active || powerData.invalid)) { this.ctx.shadowColor = arrowColor; this.ctx.shadowBlur = 10; }
         }
         this.ctx.fillStyle = arrowColor; this.ctx.beginPath(); const triSize = 8; this.ctx.moveTo(-triSize, -triSize); this.ctx.lineTo(triSize, 0); this.ctx.lineTo(-triSize, triSize); this.ctx.closePath(); this.ctx.fill();
         this.ctx.restore();
@@ -196,9 +191,7 @@ Object.assign(Graphics, {
         this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, 7, 8, 3); 
         if (isGrabbing) {
             this.ctx.fillStyle = '#00f0ff'; // Magnetic Blue
-            this.ctx.shadowBlur = 5; this.ctx.shadowColor = '#00f0ff';
             this.ctx.fillRect(12, 7, 4, 3);
-            this.ctx.shadowBlur = 0;
         }
         this.ctx.restore();
         
@@ -210,19 +203,17 @@ Object.assign(Graphics, {
         this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(4, -10, 8, 3); 
         if (isGrabbing) {
             this.ctx.fillStyle = '#00f0ff';
-            this.ctx.shadowBlur = 5; this.ctx.shadowColor = '#00f0ff';
             this.ctx.fillRect(12, -10, 4, 3);
-            this.ctx.shadowBlur = 0;
         }
         this.ctx.restore();
         this.ctx.save(); this.ctx.translate(isCrushed ? -t * 0.5 : 0, 0); this.ctx.rotate(isCrushed ? -tr * 0.08 : 0); this.ctx.fillStyle = '#3182ce'; this.ctx.fillRect(-14, -8, 6, 16); this.ctx.fillStyle = '#2b6cb0'; this.ctx.fillRect(-14, -8, 2, 16); this.ctx.restore();
         this.ctx.save(); if (isCrushed) { this.ctx.translate(Math.sin(deathTimer)*1.2, Math.cos(deathTimer)*1.2); this.ctx.rotate(tr * 0.03); } this.ctx.fillStyle = '#dd6b20'; this.ctx.fillRect(-8, -8, 14, 16);
-        if (!isDead) { [{x:-12, y:-4, i:10}, {x:-12, y:2, i:11}, {x:-4, y:-6, i:12}].forEach(l => { if (Math.sin(frame * 0.08 + l.i * 2.1) + Math.sin(frame * 0.12 + l.i * 1.2) > 1.3) { this.ctx.fillStyle = '#ffcc00'; this.ctx.shadowColor = '#ffcc00'; this.ctx.shadowBlur = 4; this.ctx.fillRect(l.x, l.y, 2, 2); } }); }
+        if (!isDead) { [{x:-12, y:-4, i:10}, {x:-12, y:2, i:11}, {x:-4, y:-6, i:12}].forEach(l => { if (Math.sin(frame * 0.08 + l.i * 2.1) + Math.sin(frame * 0.12 + l.i * 1.2) > 1.3) { this.ctx.fillStyle = '#ffcc00'; this.ctx.fillRect(l.x, l.y, 2, 2); } }); }
         this.ctx.restore(); if (isDead && deathType === 'SHUTDOWN') { if (frame % 15 === 0) Graphics.spawnParticle(cx, cy, 'rgba(100,100,100,0.5)', 'smoke'); if (frame % 20 === 0) Graphics.spawnParticle(cx, cy, '#ffcc00', 'spark'); } this.ctx.restore();
         this.ctx.save(); this.ctx.translate(bx + (isCrushed ? t * 1.2 : 0), by + (isCrushed ? -t * 0.5 : 0) + headTremble); this.ctx.rotate(dir * Math.PI / 2 + (isCrushed ? tr * 0.2 : 0));
         this.ctx.fillStyle = '#ed8936'; this.ctx.fillRect(-2, -6, 12, 12);
         const vc = isDead ? '#000' : (colorOverride || '#00f0ff'); this.ctx.fillStyle = '#4a5568'; this.ctx.fillRect(-4, -9, 2, 4); this.ctx.fillStyle = vc; this.ctx.beginPath(); this.ctx.arc(-3, -11, 2, 0, Math.PI * 2); this.ctx.fill();
-        this.ctx.fillStyle = '#1a202c'; this.ctx.fillRect(4, -4, 8, 8); this.ctx.fillStyle = vc; if (!isDead) { this.ctx.shadowColor = vc; this.ctx.shadowBlur = 8; } this.ctx.fillRect(6, -2, 4, 4);
+        this.ctx.fillStyle = '#1a202c'; this.ctx.fillRect(4, -4, 8, 8); this.ctx.fillStyle = vc; this.ctx.fillRect(6, -2, 4, 4);
         this.ctx.restore(); this.ctx.restore();
     },
 

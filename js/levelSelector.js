@@ -679,12 +679,9 @@ const LevelSelector = {
         for (const p of this.chapterUnlockParticles) {
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
-            ctx.shadowColor = p.color;
-            ctx.shadowBlur = 8;
             ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
         }
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
 
         // 3. Central electrical flash (frame 55-70)
         if (t > 55 && t < 90) {
@@ -732,18 +729,12 @@ const LevelSelector = {
             const sectorNum = String(this.chapterUnlockTarget + 1).padStart(2, '0');
             ctx.font = 'bold 48px "VT323", monospace';
             ctx.fillStyle = '#00ff9f';
-            ctx.shadowColor = '#00ff9f';
-            ctx.shadowBlur = 20 + Math.sin(t * 0.08) * 5;
             ctx.fillText(`SETOR ${sectorNum}`, cx, H / 2 + 10);
-            ctx.shadowBlur = 0;
 
             // Chapter name
             ctx.font = '22px "VT323", monospace';
             ctx.fillStyle = '#fff';
-            ctx.shadowColor = '#00f0ff';
-            ctx.shadowBlur = 8;
             ctx.fillText(chap.name, cx, H / 2 + 45);
-            ctx.shadowBlur = 0;
 
             ctx.globalAlpha = 1;
         }
@@ -805,17 +796,11 @@ const LevelSelector = {
         ctx.font = '36px "VT323", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 15;
         ctx.fillText(`SETOR ${String(this.chapterIndex + 1).padStart(2, '0')}`, W / 2 + 20, cy);
-        ctx.shadowBlur = 0;
 
         ctx.font = '18px "VT323", monospace';
         ctx.fillStyle = isUnlocked ? '#00ff9f' : '#444';
-        ctx.shadowColor = isUnlocked ? '#00ff9f' : 'transparent';
-        ctx.shadowBlur = 8;
         ctx.fillText(isUnlocked ? chap.name : "???", W / 2 + 20, cy + 24);
-        ctx.shadowBlur = 0;
 
         // Navigation arrows
         const arrowY = cy - 5;
@@ -867,15 +852,9 @@ const LevelSelector = {
 
             ctx.save();
             
-            const drawPath = (width, strokeStyle, shadow = false) => {
+            const drawPath = (width, strokeStyle) => {
                 ctx.lineWidth = width;
                 ctx.strokeStyle = strokeStyle;
-                if (shadow) {
-                    ctx.shadowColor = strokeStyle;
-                    ctx.shadowBlur = 10;
-                } else {
-                    ctx.shadowBlur = 0;
-                }
                 ctx.beginPath();
                 ctx.moveTo(points[0].x, points[0].y);
                 for (let j = 1; j < points.length; j++) {
@@ -891,7 +870,7 @@ const LevelSelector = {
             drawPath(10, borderColor);
 
             // 3. Inner Core
-            drawPath(6, color, isComplete);
+            drawPath(6, color);
 
             // 4. Central Highlight Strip
             drawPath(2, 'rgba(255, 255, 255, 0.4)');
@@ -929,12 +908,9 @@ const LevelSelector = {
                         py = b.y;
                     }
                     
-                    ctx.shadowColor = '#fff';
-                    ctx.shadowBlur = 5;
                     ctx.beginPath();
                     ctx.arc(px, py, 2, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.shadowBlur = 0;
                 }
             }
 
@@ -986,12 +962,6 @@ const LevelSelector = {
             ctx.fillStyle = '#444';
         });
 
-        // Glow for selected
-        if (isSelected && !isLocked) {
-            ctx.shadowColor = coreColor;
-            ctx.shadowBlur = 15 + pulse;
-        }
-
         // 2. Base Plate
         ctx.fillStyle = '#222';
         ctx.beginPath();
@@ -1021,8 +991,6 @@ const LevelSelector = {
             ctx.globalAlpha = 1.0;
         }
 
-        ctx.shadowBlur = 0;
-
         // Number or Locked State (Now at the TOP)
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1035,11 +1003,8 @@ const LevelSelector = {
         } else {
             ctx.font = 'bold 20px "VT323", monospace';
             ctx.fillStyle = '#fff';
-            ctx.shadowColor = '#000';
-            ctx.shadowBlur = 4;
             const levelName = LEVELS[node.lvlIdx]?.name || `LEVEL ${node.lvlIdx + 1}`;
             ctx.fillText(levelName, 0, labelY);
-            ctx.shadowBlur = 0;
         }
 
         // Star banner (keep at bottom or adjust?)
@@ -1061,12 +1026,7 @@ const LevelSelector = {
                 const sx = -14 + s * 14;
                 const sy = bannerY + bannerH / 2;
                 ctx.fillStyle = s < starCount ? '#00f0ff' : '#223344'; // Cyan for energy
-                if (s < starCount) {
-                    ctx.shadowColor = '#00f0ff';
-                    ctx.shadowBlur = 5;
-                }
                 this._drawEnergyBolt(ctx, sx, sy, 10);
-                ctx.shadowBlur = 0;
             }
         }
 
@@ -1170,15 +1130,11 @@ const LevelSelector = {
             ctx.font = '12px "VT323", monospace';
             if (isSelected) {
                 ctx.fillStyle = '#fff';
-                ctx.shadowColor = '#00f0ff';
-                ctx.shadowBlur = 10;
             } else {
                 ctx.fillStyle = isDisabled ? '#444' : '#888';
-                ctx.shadowBlur = 0;
             }
             
             ctx.fillText(items[i], sideW / 2, iy + 30);
-            ctx.shadowBlur = 0;
 
             // "DISABLED" small text
             if (isDisabled && isSelected) {

@@ -77,6 +77,16 @@ const server = http.createServer((req, res) => {
                     if (l.dialogues) {
                         jsContent += `,\n    dialogues: ${JSON.stringify(l.dialogues)}`;
                     }
+
+                    // Save zoneTriggers if they exist
+                    if (l.zoneTriggers && l.zoneTriggers.length > 0) {
+                        jsContent += `,\n    zoneTriggers: ${JSON.stringify(l.zoneTriggers)}`;
+                    }
+
+                    // Save blackout settings
+                    if (l.startWithBlackout) {
+                        jsContent += `,\n    startWithBlackout: true`;
+                    }
                     
                     jsContent += `\n  }${i < data.levels.length - 1 ? ',' : ''}\n`;
                 });

@@ -134,8 +134,6 @@ Object.assign(Graphics, {
 
         if (isPowered) {
             this.ctx.save();
-            this.ctx.shadowColor = '#00ff9f';
-            this.ctx.shadowBlur = 15;
             this.ctx.fillStyle = '#00ff9f';
             this.ctx.fillRect(px + 10, py + 10, ts - 20, ts - 20);
             this.ctx.fillStyle = '#fff';
@@ -145,23 +143,22 @@ Object.assign(Graphics, {
         } else {
             this.ctx.fillStyle = '#0a0a0a'; 
             this.ctx.fillRect(px + 10, py + 10, ts - 20, ts - 20);
-            this.ctx.fillStyle = '#ffcc00';
-            this.ctx.shadowColor = '#ffcc00';
+            
             const s = 2;
             const corners = [
-                {x: px + 6, y: py + 6, i: 0},
-                {x: px + ts - 8, y: py + 6, i: 1},
-                {x: px + 6, y: py + ts - 8, i: 2},
-                {x: px + ts - 8, y: py + ts - 8, i: 3}
+                { x: px + 11, y: py + 11, i: 0 },
+                { x: px + ts - 13, y: py + 11, i: 1 },
+                { x: px + 11, y: py + ts - 13, i: 2 },
+                { x: px + ts - 13, y: py + ts - 13, i: 3 }
             ];
+
+            this.ctx.fillStyle = '#ffcc00';
             for (const c of corners) {
                 const flicker = Math.sin(frame * 0.05 + c.i * 2.1) + Math.sin(frame * 0.08 + c.i * 1.2);
                 if (flicker > 1.2) {
-                    this.ctx.shadowBlur = 5;
                     this.ctx.fillRect(c.x, c.y, s, s);
                 }
             }
-            this.ctx.shadowBlur = 0;
         }
     },
 
@@ -271,7 +268,7 @@ Object.assign(Graphics, {
         this.ctx.arc(cx, cy, 3, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.globalAlpha = 1.0;
-        this.ctx.shadowBlur = 0;
+
     },
 
     drawCatalyst(x, y, active, frame) {
@@ -304,8 +301,6 @@ Object.assign(Graphics, {
 
         this.ctx.save();
         if (active) {
-            this.ctx.shadowColor = '#00f0ff';
-            this.ctx.shadowBlur = 10 + Math.sin(frame * 0.1) * 5;
             this.ctx.fillStyle = '#00f0ff';
         } else {
             this.ctx.fillStyle = '#1a1a1a';

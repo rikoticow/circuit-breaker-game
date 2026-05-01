@@ -5,7 +5,9 @@ Object.assign(Graphics, {
         const ts = this.tileSize;
 
         // Coordinate-based variation (pseudo-random)
-        const seed = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+        const seedX = x + (this.levelSeed || 0);
+        const seedY = y + (this.levelSeed || 0);
+        const seed = Math.abs(Math.sin(seedX * 12.9898 + seedY * 78.233) * 43758.5453) % 1;
 
         // Base Tile Color (Dark Copper / Industrial Rust)
         // Shifting to Copper tones (HSL: 25, 15%, 18%)
@@ -53,10 +55,10 @@ Object.assign(Graphics, {
 
         // 2. LAYERED ORGANIC RIMS (High detail, varied distortion)
         const layers = [
-            { color: '#2a2a35', width: 2.5, intensity: 3.0, seed: 123, offset: 0.5 }, 
-            { color: '#3b3b4a', width: 1.5, intensity: 2.0, seed: 456, offset: 1.0 }, 
-            { color: '#15151a', width: 0.8, intensity: 4.5, seed: 789, offset: 0.0 },
-            { color: '#0a0a0f', width: 2.0, intensity: 1.5, seed: 321, offset: 1.5 }
+            { color: '#2a2a35', width: 2.5, intensity: 3.0, seed: 123 + (this.levelSeed || 0), offset: 0.5 }, 
+            { color: '#3b3b4a', width: 1.5, intensity: 2.0, seed: 456 + (this.levelSeed || 0), offset: 1.0 }, 
+            { color: '#15151a', width: 0.8, intensity: 4.5, seed: 789 + (this.levelSeed || 0), offset: 0.0 },
+            { color: '#0a0a0f', width: 2.0, intensity: 1.5, seed: 321 + (this.levelSeed || 0), offset: 1.5 }
         ];
 
         this.ctx.lineJoin = 'round';
@@ -119,17 +121,17 @@ Object.assign(Graphics, {
         const py = y * this.tileSize;
         const ts = this.tileSize;
 
-        // Base dark metal (Darker)
-        this.ctx.fillStyle = '#121218';
+        // Base dark metal (Further darkened by 10%)
+        this.ctx.fillStyle = '#20202b';
         this.ctx.fillRect(px, py, ts, ts);
         
         // Inner tile border (Bevel)
-        this.ctx.fillStyle = '#1f1f2b';
+        this.ctx.fillStyle = '#252531';
         this.ctx.fillRect(px, py, ts, 2); // Top
         this.ctx.fillRect(px, py, 2, ts); // Left
         
         // Shadows
-        this.ctx.fillStyle = '#0a0a0e';
+        this.ctx.fillStyle = '#0f0f14';
         this.ctx.fillRect(px, py + ts - 2, ts, 2); // Bottom
         this.ctx.fillRect(px + ts - 2, py, 2, ts); // Right
         
@@ -144,7 +146,9 @@ Object.assign(Graphics, {
         const ts = this.tileSize;
         
         // Seeded variant based on position
-        const variant = Math.abs(x * 7 + y * 31) % 10;
+        const seedX = x + (this.levelSeed || 0);
+        const seedY = y + (this.levelSeed || 0);
+        const variant = Math.abs(seedX * 7 + seedY * 31) % 10;
 
         // 1. BASE BACKGROUND (Dark industrial metal)
         this.ctx.fillStyle = '#1c1c24';
@@ -318,8 +322,6 @@ Object.assign(Graphics, {
             if (offset > 0 && offset < ts * 2) {
                 this.ctx.beginPath();
                 this.ctx.lineWidth = i === 0 ? 6 : 2; // Much thicker
-                this.ctx.shadowBlur = 10;
-                this.ctx.shadowColor = '#ffffff';
                 
                 const x1 = Math.max(0, offset - ts);
                 const y1 = Math.min(ts, offset);
@@ -331,7 +333,6 @@ Object.assign(Graphics, {
                     this.ctx.lineTo(px + x2, py + y2);
                 }
                 this.ctx.stroke();
-                this.ctx.shadowBlur = 0;
             }
         }
         this.ctx.restore();
@@ -342,8 +343,6 @@ Object.assign(Graphics, {
             const glowAlpha = 0.2 + Math.sin(frame * 0.2) * 0.1;
             this.ctx.strokeStyle = `rgba(0, 240, 255, ${glowAlpha})`;
             this.ctx.lineWidth = 1;
-            this.ctx.shadowBlur = 5;
-            this.ctx.shadowColor = '#00f0ff';
             this.ctx.strokeRect(px + 1, py + 1, ts - 2, ts - 2);
             this.ctx.restore();
         }

@@ -94,8 +94,6 @@ Object.assign(Graphics, {
         } else if (isError) {
             if (Math.floor(frame / 10) % 2 === 0) {
                 this.ctx.save();
-                this.ctx.shadowColor = '#ffcc00';
-                this.ctx.shadowBlur = 15;
                 this.ctx.fillStyle = '#ffcc00';
                 this.ctx.beginPath();
                 this.ctx.arc(ts/2, ts/2, 6, 0, Math.PI * 2);
@@ -107,8 +105,6 @@ Object.assign(Graphics, {
         if (openPct > 0) {
             this.ctx.save();
             this.ctx.globalAlpha = openPct * 0.5;
-            this.ctx.shadowColor = '#00f0ff';
-            this.ctx.shadowBlur = 10;
             this.ctx.strokeStyle = '#00f0ff';
             this.ctx.lineWidth = 4;
             this.ctx.beginPath();

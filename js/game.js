@@ -30,6 +30,9 @@ class GameState {
         this.gravityStepTimer = 0;
         this.gravityOverlayAlpha = 0;
         this.ambientParticles = [];
+        this.isBlackoutActive = false;
+        this.blackoutAlpha = 0;
+        this.zoneTriggers = [];
 
 
         this.score = 0;
@@ -272,6 +275,9 @@ class GameState {
         this.totalScrap = 0;
         this.debris = []; // Initialize persistent debris
         this.chargingStations = []; 
+        this.zoneTriggers = levelData.zoneTriggers || [];
+        this.isBlackoutActive = levelData.startWithBlackout || false;
+        this.blackoutAlpha = this.isBlackoutActive ? 1 : 0;
 
         const charMap = levelData.map;
         const blocksMap = levelData.blocks; 
@@ -570,6 +576,10 @@ class GameState {
         this.updateEnergy();
         this.saveUndo(); 
 
+        if (window.Graphics) {
+            Graphics.initLevelContext(this);
+        }
+
         if (window.AudioSys && !this.isEditor) {
             AudioSys.setMusicIntensity(2); // Levels always play the full "Action" version
             AudioSys.playGameMusic();
@@ -616,8 +626,8 @@ class GameState {
         const chan = Number(c.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         // If there are NO buttons on this channel, it's ON.
-        // If there ARE buttons, it's ON if at least one is pressed.
-        return chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
+        // If there ARE buttons, it's ON if ALL are pressed.
+        return chanButtons.length === 0 || chanButtons.every(b => b.isPressed);
     }
 
     isEmitterActive(e) {
@@ -625,8 +635,8 @@ class GameState {
         const chan = Number(e.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         
-        // Default behavior: No buttons = ON, With buttons = OFF until pressed.
-        let active = chanButtons.length === 0 || chanButtons.some(b => b.isPressed);
+        // Default behavior: No buttons = ON, With buttons = OFF until ALL pressed.
+        let active = chanButtons.length === 0 || chanButtons.every(b => b.isPressed);
         
         // If inverted, flip the logic.
         if (e.inverted) active = !active;
@@ -642,6 +652,13 @@ class GameState {
             this.gravityOverlayAlpha = Math.min(1, this.gravityOverlayAlpha + 0.1);
         } else {
             this.gravityOverlayAlpha = Math.max(0, this.gravityOverlayAlpha - 0.05);
+        }
+
+        // Blackout Alpha Interpolation (1.5 - 2s fade in)
+        if (this.isBlackoutActive) {
+            this.blackoutAlpha = Math.min(1, this.blackoutAlpha + 0.015);
+        } else {
+            this.blackoutAlpha = Math.max(0, this.blackoutAlpha - 0.02);
         }
 
         // Smooth player interpolation (Juicy movement)
@@ -1244,18 +1261,18 @@ class GameState {
         const toggledChannels = new Set();
         for (let qf of this.quantumFloors) {
             const chanButtons = this.buttons.filter(b => b.channel === qf.channel);
-            const anyPressed = chanButtons.some(b => b.isPressed);
+            const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
             
             // Signal is now handled by the button's internal timer
-            if (anyPressed) {
+            if (allPressed) {
                 qf.closeTimer = 5; // Minimal smoothing delay
             }
             
-            const shouldBeOpen = anyPressed || (qf.closeTimer > 0);
+            const shouldBeOpen = allPressed || (qf.closeTimer > 0);
             const newState = !shouldBeOpen;
 
             // Countdown timer if button released
-            if (qf.closeTimer > 0 && !anyPressed) qf.closeTimer--;
+            if (qf.closeTimer > 0 && !allPressed) qf.closeTimer--;
             
             if (qf.active !== newState && !toggledChannels.has(qf.channel)) {
                 if (window.AudioSys) AudioSys.playQuantumToggle(newState);
@@ -1303,9 +1320,9 @@ class GameState {
             const isPowered = this.poweredDoors.has(`${door.x},${door.y}`);
             // Link door to button: ALL buttons on the same channel must be pressed
             const chanButtons = this.buttons.filter(b => b.channel === door.channel);
-            const anyPressed = chanButtons.some(b => b.isPressed);
+            const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
             
-            const shouldBeOpen = (isPowered || anyPressed);
+            const shouldBeOpen = (isPowered || allPressed);
             const wasOpen = door.state === 'OPEN' || door.state === 'BROKEN_OPEN';
 
             if (door.state === 'BROKEN_OPEN') continue; // Stay open forever
@@ -1416,6 +1433,25 @@ class GameState {
                 }
 
                 this.isSolarPhase = !this.isSolarPhase;
+                
+                // NEW: Force release grabbed block if it becomes intangible
+                if (this.player.grabbedBlock) {
+                    const b = this.player.grabbedBlock;
+                    const isOutOfPhase = b.phase && ((b.phase === 'SOLAR' && !this.isSolarPhase) || (b.phase === 'LUNAR' && this.isSolarPhase));
+                    if (isOutOfPhase) {
+                        this.player.grabbedBlock = null;
+                        this.player.isGrabbing = false;
+                        this.player.visorTimer = 15;
+                        this.player.visorColor = '#ffcc00'; 
+                        if (window.AudioSys) AudioSys.playPortalClick();
+                        
+                        // Particle feedback for the "pop" of losing the grip
+                        for (let i = 0; i < 8; i++) {
+                            Graphics.spawnParticle(this.player.visualX * 32 + 16, this.player.visualY * 32 + 16, '#bf00ff', 'spark');
+                        }
+                    }
+                }
+
                 sw.lightningTimer = 30;
                 sw.lightningSeed = Math.random() * 1000;
                 if (window.AudioSys) AudioSys.playDimensionInversion();
@@ -1623,7 +1659,51 @@ class GameState {
         }
 
         if (moveSuccessful) {
+            this.checkZoneTriggers();
             this.finishMove(ox, oy);
+        }
+    }
+
+    checkZoneTriggers() {
+        for (let i = this.zoneTriggers.length - 1; i >= 0; i--) {
+            const trigger = this.zoneTriggers[i];
+            let inside = false;
+            const radius = trigger.radius || 0;
+            
+            if (radius > 0) {
+                const dist = Math.sqrt(Math.pow(this.player.x - trigger.x, 2) + Math.pow(this.player.y - trigger.y, 2));
+                inside = (dist <= radius);
+            } else {
+                inside = (this.player.x === trigger.x && this.player.y === trigger.y);
+            }
+
+            if (inside) {
+                let fired = false;
+                if (trigger.type === 'blackout') {
+                    if (trigger.action === 'activate' && !this.isBlackoutActive) {
+                        this.isBlackoutActive = true;
+                        if (window.AudioSys) AudioSys.playBlackoutStart();
+                        fired = true;
+                    } else if (trigger.action === 'deactivate' && this.isBlackoutActive) {
+                        this.isBlackoutActive = false;
+                        if (window.AudioSys) AudioSys.playBlackoutEnd();
+                        fired = true;
+                    } else if (trigger.action === 'toggle') {
+                        this.isBlackoutActive = !this.isBlackoutActive;
+                        if (this.isBlackoutActive) {
+                            if (window.AudioSys) AudioSys.playBlackoutStart();
+                        } else {
+                            if (window.AudioSys) AudioSys.playBlackoutEnd();
+                        }
+                        fired = true;
+                    }
+                }
+                
+                // If it fired and is one-shot, remove it so it doesn't fire again
+                if (fired && trigger.oneShot !== false) {
+                    this.zoneTriggers.splice(i, 1);
+                }
+            }
         }
     }
 
@@ -1634,11 +1714,14 @@ class GameState {
             Graphics.spawnParticle(ox * 32 + 16 + offsetX, oy * 32 + 24 + offsetY, 'rgba(240, 240, 240, 0.6)', 'smoke');
         }
         
-        // Force release block if on conveyor (Robot or Block)
-        const robotOnConv = this.conveyors.some(c => c.x === this.player.x && c.y === this.player.y);
-        const blockOnConv = this.player.grabbedBlock && this.conveyors.some(c => c.x === this.player.grabbedBlock.x && c.y === this.player.grabbedBlock.y);
+        // Force release block if on ACTIVE conveyor (Robot or Block)
+        const robotConv = this.conveyors.find(c => c.x === this.player.x && c.y === this.player.y);
+        const blockConv = this.player.grabbedBlock ? this.conveyors.find(c => c.x === this.player.grabbedBlock.x && c.y === this.player.grabbedBlock.y) : null;
         
-        if ((robotOnConv || blockOnConv) && this.player.isGrabbing) {
+        const robotOnActiveConv = robotConv && this.isConveyorActive(robotConv);
+        const blockOnActiveConv = blockConv && this.isConveyorActive(blockConv);
+        
+        if ((robotOnActiveConv || blockOnActiveConv) && this.player.isGrabbing) {
             this.player.grabbedBlock = null;
             this.player.isGrabbing = false;
             this.player.visorTimer = 10;
@@ -1871,6 +1954,9 @@ class GameState {
         if (this.forbiddens.some(f => f.x === x && f.y === y)) return false;
         if (this.brokenCores.some(b => b.x === x && b.y === y)) return false;
         if (this.emitters.some(e => e.x === x && e.y === y)) return false;
+        
+        // Check Singularity Switchers (Blocks cannot enter)
+        if (!isRobot && this.singularitySwitchers.some(s => s.x === x && s.y === y)) return false;
         
         // Check player (unless player is the one moving)
         if (this.player.x === x && this.player.y === y && !ignores.includes(this.player)) return false;

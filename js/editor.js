@@ -34,7 +34,7 @@ const PALETTE = [
     { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}, {c: 'M', n: 'Prisma'}, {c: 'y', n: 'Solar'}, {c: 'p', n: 'Lunar'}] },
     { title: "Esteiras", tiles: [{c: ')', n: 'Esteira Dir'}, {c: '(', n: 'Esteira Esq'}, {c: ']', n: 'Esteira Baixo'}, {c: '[', n: 'Esteira Cima'}] },
     { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] },
-    { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}] }
+    { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}, {c: '⚡', n: 'Gatilho'}] }
 ];
 
 let levelsData = [];
@@ -152,6 +152,12 @@ function createTilePreview(char) {
         tCtx.textAlign = 'center';
         tCtx.textBaseline = 'middle';
         tCtx.fillText('💬', 16, 16);
+    } else if (char === '⚡') {
+        tCtx.fillStyle = '#ffcc00';
+        tCtx.font = '20px VT323';
+        tCtx.textAlign = 'center';
+        tCtx.textBaseline = 'middle';
+        tCtx.fillText('⚡', 16, 16);
     }
 
     
@@ -444,6 +450,7 @@ function loadLevel(idx) {
     document.getElementById('lvl-name').value = lvl.name;
     document.getElementById('lvl-battery').value = lvl.time || 30;
     document.getElementById('lvl-timer').value = lvl.timer || 60;
+    document.getElementById('check-lvl-blackout').checked = lvl.startWithBlackout || false;
     
     // Load map into 2D array
     currentMap = lvl.map.map(row => row.split(''));
@@ -470,10 +477,11 @@ function loadLevel(idx) {
         currentOverlayMap = Array(h).fill(0).map(() => Array(w).fill(' '));
     }
     
-    historyStack = [JSON.parse(JSON.stringify({map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap, dialogues: lvl.dialogues || {}}))];
+    historyStack = [JSON.parse(JSON.stringify({map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap, dialogues: lvl.dialogues || {}, zoneTriggers: lvl.zoneTriggers || []}))];
     Graphics.clearParticles();
     updateLevelList();
     updateDialogueManager();
+    updateTriggerManagerList();
     rebuildMock();
 }
 
@@ -532,6 +540,7 @@ function rebuildMock() {
     lvl.name = document.getElementById('lvl-name').value;
     lvl.time = parseInt(document.getElementById('lvl-battery').value) || 30;
     lvl.timer = parseInt(document.getElementById('lvl-timer').value) || 60;
+    lvl.startWithBlackout = document.getElementById('check-lvl-blackout').checked;
     lvl.map = currentMap.map(row => row.join(''));
     lvl.blocks = currentBlocksMap.map(row => row.join(''));
     lvl.overlays = currentOverlayMap.map(row => row.join(''));
@@ -558,6 +567,9 @@ function rebuildMock() {
     mockGame.glassWallsHit = new Set();
     mockGame.singularitySwitchers = [];
     mockGame.isSolarPhase = true;
+    mockGame.zoneTriggers = JSON.parse(JSON.stringify(lvl.zoneTriggers || []));
+    mockGame.isBlackoutActive = lvl.startWithBlackout || false;
+    mockGame.blackoutAlpha = mockGame.isBlackoutActive ? 1 : 0;
 
 
     const h = currentMap.length;
@@ -779,6 +791,9 @@ function rebuildMock() {
     }
     mockGame.updateEnergy();
     mockGame.updateEmitters();
+    
+    // Setup graphic context seed
+    Graphics.initLevelContext(mockGame);
 }
 
 function saveHistory() {
@@ -787,7 +802,8 @@ function saveHistory() {
         map: currentMap, 
         blocks: currentBlocksMap, 
         overlays: currentOverlayMap,
-        dialogues: lvl.dialogues || {}
+        dialogues: lvl.dialogues || {},
+        zoneTriggers: lvl.zoneTriggers || []
     })));
     if (historyStack.length > 50) historyStack.shift();
 }
@@ -799,6 +815,9 @@ function undo() {
         currentBlocksMap = state.blocks;
         currentOverlayMap = state.overlays;
         levelsData[currentLevelIdx].dialogues = state.dialogues;
+        levelsData[currentLevelIdx].zoneTriggers = state.zoneTriggers;
+        updateDialogueManager();
+        updateTriggerManagerList();
         rebuildMock();
     }
 }
@@ -1409,18 +1428,34 @@ function setupEvents() {
             else if (activeLayer === 'overlays') currentOverlayMap[p.y][p.x] = char;
             else if (activeLayer === 'events') {
                 const lvl = levelsData[currentLevelIdx];
-                if (!lvl.dialogues) lvl.dialogues = {};
-                if (isEraser) {
-                    delete lvl.dialogues[`${p.x},${p.y}`];
-                    updateDialogueManager();
-                } else if (!lvl.dialogues[`${p.x},${p.y}`]) {
-                    lvl.dialogues[`${p.x},${p.y}`] = { text: "Nova fala...", icon: "central", trigger: "walk", autoDismiss: true, lockPlayer: true, dismissDelay: 1500 };
-                    switchTab('tab-dialogues');
-                    const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
-                    if (card) {
-                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const textarea = card.querySelector('textarea');
-                        if (textarea) textarea.focus();
+                if (char === '💬' || (isEraser && lvl.dialogues && lvl.dialogues[`${p.x},${p.y}`])) {
+                    if (!lvl.dialogues) lvl.dialogues = {};
+                    if (isEraser) {
+                        delete lvl.dialogues[`${p.x},${p.y}`];
+                        updateDialogueManager();
+                    } else {
+                        if (!lvl.dialogues[`${p.x},${p.y}`]) {
+                            lvl.dialogues[`${p.x},${p.y}`] = { text: "Nova fala...", icon: "central", trigger: "walk", autoDismiss: true, lockPlayer: true, dismissDelay: 1500 };
+                        }
+                        switchTab('tab-dialogues');
+                        updateDialogueManager();
+                        // Scroll to the card
+                        setTimeout(() => {
+                            const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
+                            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 50);
+                    }
+                } else if (char === '⚡' || (isEraser && lvl.zoneTriggers && lvl.zoneTriggers.some(t => t.x === p.x && t.y === p.y))) {
+                    if (!lvl.zoneTriggers) lvl.zoneTriggers = [];
+                    if (isEraser) {
+                        lvl.zoneTriggers = lvl.zoneTriggers.filter(t => t.x !== p.x || t.y !== p.y);
+                        updateTriggerManagerList();
+                    } else {
+                        if (!lvl.zoneTriggers.some(t => t.x === p.x && t.y === p.y)) {
+                            lvl.zoneTriggers.push({ x: p.x, y: p.y, type: 'blackout', action: 'activate', radius: 0, oneShot: true });
+                        }
+                        switchTab('tab-triggers');
+                        updateTriggerManagerList();
                     }
                 }
             }
@@ -1625,6 +1660,13 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         ctx.font = '20px VT323';
         ctx.textAlign = 'center';
         ctx.fillText('💬', x * 32 + 16, y * 32 + 24);
+    } else if (c === '⚡') {
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = '20px VT323';
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 10; ctx.shadowColor = '#ffcc00';
+        ctx.fillText('⚡', x * 32 + 16, y * 32 + 24);
+        ctx.shadowBlur = 0;
     }
 
     ctx.restore();
@@ -1720,6 +1762,17 @@ function renderLoop() {
                 ctx.fillText('💬', x * 32 + 16, y * 32 + 24);
                 ctx.restore();
             }
+            // PASS 6.5: Zone Triggers
+            const hasTrigger = lvl.zoneTriggers && lvl.zoneTriggers.some(t => t.x === x && t.y === y);
+            if (hasTrigger) {
+                ctx.save();
+                ctx.fillStyle = '#ffcc00';
+                ctx.font = '20px VT323';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 10; ctx.shadowColor = '#ffcc00';
+                ctx.fillText('⚡', x * 32 + 16, y * 32 + 24);
+                ctx.restore();
+            }
         }
     }
 
@@ -1813,7 +1866,9 @@ function startTest() {
         blocks: currentBlocksMap.map(row => row.join('')),
         overlays: currentOverlayMap.map(row => row.join('')),
         links: JSON.parse(JSON.stringify(currentLvlData.links || {})),
-        dialogues: JSON.parse(JSON.stringify(currentLvlData.dialogues || {}))
+        dialogues: JSON.parse(JSON.stringify(currentLvlData.dialogues || {})),
+        startWithBlackout: document.getElementById('check-lvl-blackout').checked,
+        zoneTriggers: JSON.parse(JSON.stringify(currentLvlData.zoneTriggers || []))
     };
 
     console.log("Iniciando Teste:", lvl.name);
@@ -1831,6 +1886,7 @@ function startTest() {
     window.game = testGame; // SET THIS BEFORE DIALOGUES
     
     testGame.levelIndex = 0;
+    testGame.originalLevelIndex = currentLevelIdx;
     testGame.loadLevel(0); // Force load now that LEVELS is [lvl]
     testGame.checkDialogues('start');
     
@@ -1841,6 +1897,7 @@ function startTest() {
     // 6. Graphics Setup
     const testCanvas = document.getElementById('test-canvas');
     Graphics.init(testCanvas);
+    Graphics.initLevelContext(testGame);
     
     testAnimFrame = 0;
     testLastTime = performance.now();
@@ -2045,6 +2102,9 @@ function testLoop(timestamp) {
 
     ctx.restore();
     
+    // Draw Blackout (Fog of War)
+    Graphics.drawBlackout(testGame);
+    
     // Draw HUD manually (editor doesn't use the HTML bars for test)
     updateTestUI();
 
@@ -2113,6 +2173,9 @@ function switchTab(tabId) {
 
     if (tabId === 'tab-dialogues') {
         updateDialogueManager();
+    }
+    if (tabId === 'tab-triggers') {
+        updateTriggerManagerList();
     }
 }
 
@@ -2339,3 +2402,79 @@ function removeDialogue(key) {
         rebuildMock();
     }
 }
+
+function updateTriggerManagerList() {
+    const list = document.getElementById('trigger-manager-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.zoneTriggers || lvl.zoneTriggers.length === 0) {
+        list.innerHTML = '<div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum gatilho de zona nesta fase.<br><br>Use a ferramenta de ⚡ GATILHOS para adicionar.</div>';
+        return;
+    }
+    
+    lvl.zoneTriggers.forEach((trigger, idx) => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background: #1a1a1a; border: 1px solid #333; padding: 10px; border-radius: 4px;';
+        
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="color: #ffcc00; font-size: 11px; font-weight: bold;">GATILHO: ${trigger.x}, ${trigger.y}</span>
+                <button onclick="removeTrigger(${idx})" style="background: none; border: none; color: #ff0055; cursor: pointer; padding: 0; font-size: 14px;">✖</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; gap: 5px;">
+                    <select onchange="updateTriggerProp(${idx}, 'type', this.value)" style="flex: 1; background: #000; color: #ffcc00; border: 1px solid #444; font-size: 11px; padding: 2px;">
+                        <option value="blackout" ${trigger.type === 'blackout' ? 'selected' : ''}>APAGÃO (Blackout)</option>
+                    </select>
+                    <select onchange="updateTriggerProp(${idx}, 'action', this.value)" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;">
+                        <option value="activate" ${trigger.action === 'activate' ? 'selected' : ''}>ATIVAR</option>
+                        <option value="deactivate" ${trigger.action === 'deactivate' ? 'selected' : ''}>DESATIVAR</option>
+                        <option value="toggle" ${trigger.action === 'toggle' ? 'selected' : ''}>ALTERNAR</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 10px; color: #aaa;">RAIO:</span>
+                    <input type="number" min="0" max="10" value="${trigger.radius || 0}" 
+                        style="width: 40px; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;"
+                        onchange="updateTriggerProp(${idx}, 'radius', parseInt(this.value))">
+                    
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 10px; color: #fff; margin-left: auto;">
+                        <input type="checkbox" ${trigger.oneShot !== false ? 'checked' : ''} onchange="updateTriggerProp(${idx}, 'oneShot', this.checked)"> Único
+                    </label>
+                </div>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function updateTriggerProp(idx, prop, value) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.zoneTriggers && lvl.zoneTriggers[idx]) {
+        lvl.zoneTriggers[idx][prop] = value;
+        saveHistory();
+    }
+}
+
+function removeTrigger(idx) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.zoneTriggers) {
+        lvl.zoneTriggers.splice(idx, 1);
+        updateTriggerManagerList();
+        saveHistory();
+        rebuildMock();
+    }
+}
+
+window.removeTrigger = removeTrigger;
+window.updateTriggerProp = updateTriggerProp;
+window.removeDialogue = removeDialogue;
+window.addDialogueMessage = addDialogueMessage;
+window.removeDialogueMessage = removeDialogueMessage;
+window.updateDialogueProp = updateDialogueProp;
+window.switchTab = switchTab;
+

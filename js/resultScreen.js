@@ -306,10 +306,7 @@ const ResultScreen = {
         // Outer glow border
         ctx.strokeStyle = '#00f0ff';
         ctx.lineWidth = 1;
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 8;
         ctx.strokeRect(panelX - 1, panelY - 1, panelW + 2, panelH + 2);
-        ctx.shadowBlur = 0;
 
         // Corner rivets
         const rivets = [
@@ -373,12 +370,8 @@ const ResultScreen = {
         const bannerY = 20; // Overlap the top edge of the main panel (centered on the edge)
 
         // Header Box (Button Style)
-        // Glow
-        ctx.shadowColor = this.failed ? '#ff003c' : '#00ff9f';
-        ctx.shadowBlur = 15;
         ctx.fillStyle = this.failed ? '#ff003c' : '#00ff9f';
         ctx.fillRect(bannerX - 2, bannerY - 2, bannerW + 4, bannerH + 4);
-        ctx.shadowBlur = 0;
 
         // Inner Body
         ctx.fillStyle = '#0a2030';
@@ -394,10 +387,7 @@ const ResultScreen = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#fff';
-        ctx.shadowColor = '#00ff9f';
-        ctx.shadowBlur = 5;
         ctx.fillText(titleText, W / 2, bannerY + bannerH / 2);
-        ctx.shadowBlur = 0;
     },
 
     _drawStars(ctx, W) {
@@ -414,10 +404,6 @@ const ResultScreen = {
             ctx.save();
 
             if (isRevealed && isEarned) {
-                // Glow for active stars
-                ctx.shadowColor = '#00f0ff';
-                ctx.shadowBlur = (12 + Math.sin(this.animFrame * 0.08 + i) * 4) * scale;
-                
                 // Draw with dynamic scale and full colors
                 const baseSize = 28;
                 this._drawEnergyBolt(ctx, bx, starY, baseSize * scale);
@@ -474,13 +460,10 @@ const ResultScreen = {
         grad.addColorStop(0, '#00ff9f'); // Bright Neon Green
         grad.addColorStop(1, '#008855'); // Darker Green
         
-        ctx.shadowColor = '#00ff9f';
-        ctx.shadowBlur = 8;
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(x, y, coreSize / 2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
 
         // Glass highlight
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
@@ -492,9 +475,6 @@ const ResultScreen = {
     _drawClockIcon(ctx, x, y, size) {
         const r = size / 2;
         ctx.strokeStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 5;
-        ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.stroke();
@@ -505,28 +485,22 @@ const ResultScreen = {
         ctx.moveTo(x, y);
         ctx.lineTo(x + r * 0.4, y);
         ctx.stroke();
-        ctx.shadowBlur = 0;
     },
 
     _drawArrowIcon(ctx, x, y, size) {
         const s = size * 0.8;
         ctx.fillStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.moveTo(x - s/2, y);
         ctx.lineTo(x + s/2, y);
         ctx.lineTo(x, y - s/2);
         ctx.fill();
         ctx.fillRect(x - s/4, y, s/2, s/2);
-        ctx.shadowBlur = 0;
     },
 
     _drawHeartIcon(ctx, x, y, size) {
         const h = size * 0.8;
         ctx.fillStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.moveTo(x, y + h/4);
         ctx.bezierCurveTo(x, y, x - h/2, y, x - h/2, y + h/4);
@@ -534,13 +508,10 @@ const ResultScreen = {
         ctx.bezierCurveTo(x, y + h*0.8, x + h/2, y + h/2, x + h/2, y + h/4);
         ctx.bezierCurveTo(x + h/2, y, x, y, x, y + h/4);
         ctx.fill();
-        ctx.shadowBlur = 0;
     },
     _drawScrapIcon(ctx, x, y, size) {
         const r = size / 2;
         ctx.fillStyle = '#ffcc00';
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 5;
         // Draw a small hex nut or gear shape
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -549,7 +520,6 @@ const ResultScreen = {
         }
         ctx.closePath();
         ctx.fill();
-        ctx.shadowBlur = 0;
     },
 
     _drawTrophyIcon(ctx, x, y, size) {
@@ -557,9 +527,6 @@ const ResultScreen = {
         const h = size;
         const scale = size / 20;
         
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 8;
-
         const drawCup = (ox = 0, oy = 0) => {
             ctx.beginPath();
             // Cup body
@@ -613,7 +580,7 @@ const ResultScreen = {
         drawHandles();
         ctx.stroke();
 
-        ctx.shadowBlur = 0;
+
     },
 
     _drawStats(ctx, W) {
@@ -701,10 +668,7 @@ const ResultScreen = {
             ctx.font = '18px "VT323", monospace';
             ctx.fillStyle = '#00ff9f';
             ctx.textAlign = 'left';
-            ctx.shadowColor = '#00ff9f';
-            ctx.shadowBlur = 4;
             ctx.fillText(this.data.bonusLabel || 'SEM BÔNUS ADICIONAL', statsX + 28, bonusY);
-            ctx.shadowBlur = 0;
         }
 
         // --- TOTAL SCORE ---
@@ -724,10 +688,7 @@ const ResultScreen = {
             ctx.font = 'bold 28px "VT323", monospace';
             ctx.textAlign = 'center';
             ctx.fillStyle = '#00f0ff';
-            ctx.shadowColor = '#00f0ff';
-            ctx.shadowBlur = 12;
             ctx.fillText(`TOTAL: ${this.data.totalScore} CREDITS`, W / 2, totalY + 6);
-            ctx.shadowBlur = 0;
         }
     },
 
@@ -747,10 +708,7 @@ const ResultScreen = {
         ctx.font = '18px "VT323", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#00ff9f';
-        ctx.shadowColor = '#00ff9f';
-        ctx.shadowBlur = 6;
         ctx.fillText(msg, W / 2, msgY);
-        ctx.shadowBlur = 0;
     },
 
     _drawButtons(ctx, W, H) {
@@ -800,12 +758,8 @@ const ResultScreen = {
 
             // Button background
             if (isSelected) {
-                // Selected glow
-                ctx.shadowColor = btnColor;
-                ctx.shadowBlur = 12;
                 ctx.fillStyle = btnColor;
                 ctx.fillRect(bx - 2, buttonY - 2, btn.width + 4, buttonH + 4);
-                ctx.shadowBlur = 0;
 
                 // Inner
                 ctx.fillStyle = '#0a2030';
@@ -831,12 +785,7 @@ const ResultScreen = {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = isSelected ? btnColor : '#667788';
-            if (isSelected) {
-                ctx.shadowColor = btnColor;
-                ctx.shadowBlur = 6;
-            }
             ctx.fillText(btn.label, bx + btn.width / 2, buttonY + buttonH / 2 + 1);
-            ctx.shadowBlur = 0;
 
             // Selection indicator arrows
             if (isSelected) {

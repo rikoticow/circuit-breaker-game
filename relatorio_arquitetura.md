@@ -42,6 +42,7 @@ O "Cérebro" do jogo. Gerencia:
     *   **Inércia do Robô:** O robô jogador mantém uma velocidade de deslizamento menor (`threshold` de 0.05), simulando sua massa superior e estabilidade mecânica em comparação às caixas leves.
     *   **Consumo Zero:** Movimentação via esteira não decrementa o `Power`, incentivando o uso tático do cenário.
     *   **Desativação de Controles:** Durante o deslizamento em esteiras, os controles de deslocamento manual são desabilitados para reforçar a mecânica de "fluxo forçado".
+    *   **Soltura de Carga:** O robô solta automaticamente qualquer bloco que esteja segurando ao entrar em uma esteira (ou se o bloco entrar nela) **somente se a esteira estiver ligada (ON)**. Esteiras desligadas permitem que o robô mantenha a posse do objeto.
     *   **Feedback Sonoro Industrial:** Quando o robô ou um bloco está sobre uma esteira magnética, o sistema de áudio emite um som rítmico de engrenagens mecânicas e cliques metálicos (`playConveyorGear`), reforçando a percepção de maquinário industrial em operação contínua.
     *   **Símbolos:** `(` (Esq), `)` (Dir), `[` (Cima), `]` (Baixo).
     *   **Sistema de Canais:** Suporta até 30 canais independentes (0-29). Se uma esteira tiver canal e não houver botões vinculados, ela permanece ON. Se houver botões, ela segue o estado lógico (`anyPressed`).
@@ -176,6 +177,16 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
         *   **Bloqueio Elétrico:** Como uma estrutura isolante, impede a propagação de energia elétrica (fios e fluxos de blocos).
         *   **Feedback de Interação:** Apresenta um chassi metálico reforçado com rebites industriais. Quando um feixe de laser atravessa o vidro, as bordas internas do chassi emitem um **brilho ciano pulsante** e faíscas ocasionais, indicando a passagem de alta energia luminosa.
 
+    *   **Apagão Industrial (Fog of War):** Mecânica de cegueira espacial controlada por triggers de zona.
+        *   **Overlay de Escuridão:** Um retângulo `rgba(5, 5, 8, 0.98)` que cobre todo o cenário de jogo (acima de todas as camadas de mundo, mas abaixo do HUD e transições).
+        *   **Sistema de Máscara (Offscreen Buffer):** Utiliza um canvas secundário (`blackoutCanvas`) para desenhar a escuridão e então "furar" buracos de visibilidade usando `globalCompositeOperation = 'destination-out'`. Isso permite que a escuridão oculte o mapa enquanto revela áreas específicas em tempo real.
+        *   **Fontes de Luz Dinâmicas:**
+            *   **Robô:** Círculo de luz constante (raio de 1.5 tiles) ao redor do jogador.
+            *   **Rede Elétrica:** Elementos energizados emitem luz própria. Inclui Fios energizados (`OCEAN`/`CIANO`), Blocos ativos, Núcleos/Cores com carga e Catalisadores Quânticos.
+        *   **Transição Atmosférica:** Implementa um fade-in suave de 1.5s a 2s (`blackoutAlpha`) ao entrar em blackout, simulando a falha progressiva dos sistemas de iluminação industrial.
+        *   **Gatilhos de Zona (ZoneTriggers):** Array de objetos no nível que monitoram a posição do jogador para ativar ou desativar o estado global `isBlackoutActive`. Suporta coordenadas específicas `(x, y)` ou áreas retangulares `area: {x, y, w, h}`.
+        *   **Feedback Sonoro Industrial:** Utiliza sons de queda de disjuntores metálicos (`playBlackoutStart`) e reinicialização de reatores (`playBlackoutEnd`) para reforçar a imersão.
+
 
 ## 7. Ferramentas de Desenvolvimento
 ### Level Editor (editor.html)
@@ -193,6 +204,10 @@ Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação in
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.
 *   **Integração Nativa:** Salva diretamente no arquivo `js/levels.js` através de requisições POST para o servidor local.
+*   **Editor de Gatilhos de Zona (Nova Aba "GATILHOS"):** Sistema para gerenciar eventos espaciais como o Apagão Industrial.
+    *   **Configuração de Fase:** Checkbox "🌑 APAGÃO INICIAL" no topo da interface para definir o estado de luz no começo do nível.
+    *   **Propriedades de Gatilho:** Painel dedicado para configurar o tipo de evento (`blackout`), a ação desejada (`activate`, `deactivate`, `toggle`), o raio de influência e a propriedade **One-Shot** (disparo único).
+    *   **Visualização Contextual:** Gatilhos são representados no editor pelo ícone `⚡` (amarelo neon) para fácil identificação sobre a camada de eventos.
 
 ## 8. Level Selector (js/levelSelector.js)
 O Level Selector é uma tela de seleção de níveis no estilo retro CRT industrial, acessível durante o jogo via tecla `Escape`.
@@ -260,4 +275,28 @@ Sistema de comunicação narrativa utilizando a estética de HUD Industrial:
 *   **Gatilhos de Mapa:** Diálogos podem ser disparados ao iniciar o nível (`trigger: start`) ou ao pisar em tiles específicos (`trigger: walk`).
 *   **Integração no Editor:** Camada dedicada ("FALAS") que permite posicionar eventos de diálogo visualmente e editar textos e ícones via painel de propriedades.
 
+## 10. Estabilidade e Robustez (Rendering Pipeline)
+> [!IMPORTANT]
+> A engine implementa salvaguardas críticas no pipeline de renderização para evitar estados de "tela preta" ou travamentos visuais.
 
+*   **Validação de Câmera (NaN Safety):** O loop principal (`main.js`) monitora as coordenadas da câmera em cada quadro. Caso valores `NaN` sejam detectados (geralmente causados por cálculos matemáticos inválidos em transições), o sistema reseta a câmera para `(0,0)` instantaneamente, prevenindo o desaparecimento total do cenário.
+*   **Proteção de Blackout:** O método `Graphics.drawBlackout` possui uma trava lógica rigorosa que verifica `game.isBlackoutActive`. Isso garante que a camada de escuridão total nunca seja renderizada se a mecânica não estiver explicitamente habilitada por um trigger de zona, corrigindo regressões de blackout persistente.
+
+## 11. Otimização de Performance para Baixo Desempenho (Low-End Hardware)
+> [!IMPORTANT]
+> A engine foi otimizada para garantir taxas de quadros estáveis em hardware limitado (notebooks integrados e dispositivos móveis), priorizando a clareza visual sobre efeitos de pós-processamento custosos.
+
+*   **Remoção Global de `shadowBlur`:** O uso da propriedade `ctx.shadowBlur` e `ctx.shadowColor` foi ELIMINADO de todo o código-fonte (Jogo, Editor, Level Selector e Result Screen).
+    *   **Alternativa Estética:** O brilho (glow) procedimental foi substituído por cores neon sólidas, contrastes elevados em gradientes, e camadas de borda (stroke) duplicadas para manter a legibilidade e o "punch" visual sem o custo computacional de filtragem do Canvas.
+*   **Sistema de Baking de Background (`Graphics.bakeBackground`):**
+    *   **Processamento Offscreen:** Elementos estáticos do cenário (Buracos, Chão, Tetos e Vidro Blindado) são desenhados uma única vez em um buffer offscreen (`bgCanvas`) ao carregar o nível.
+    *   **Renderização de Único Passo:** No loop principal, o cenário inteiro é desenhado via uma única chamada `drawImage`, reduzindo drasticamente o overhead de CPU/GPU em mapas grandes.
+*   **Ordem de Renderização Aditiva (Add Pass):**
+    *   **Soltura em Inversão:** Caso o robô esteja agarrando um bloco de singularidade e uma inversão dimensional ocorra tornando o bloco intangível (fora de fase), o robô é forçado a soltá-lo instantaneamente com feedback visual e sonoro de "desacoplamento quântico".
+    *   **Bloqueio de Posição:** Controladores de Fase (`!`) são exclusivos para interação do robô. Blocos (Amplificadores ou Prismas) não podem ser colocados, empurrados ou movidos para cima de um tile contendo um controlador, garantindo que o jogador sempre tenha acesso ao mecanismo de troca de fase.
+    *   **Composição:** Utilizam `globalCompositeOperation = 'lighter'` para garantir que se destaquem sobre os personagens e o cenário, simulando luminosidade física através de mistura aditiva de cores.
+*   **Ajustes de Contraste Ambiental:**
+    *   **Visibilidade de Esteiras:** As esteiras desativadas utilizam tons industriais profundos (Base: `#1b1f1e`, Trilhos: `#2c302f`). Este esquema visual garante que o maquinário pareça "desligado" e sombrio, mantendo apenas a definição estrutural necessária para a legibilidade do mapa.
+    *   **Detalhamento de Teto:** Os tiles de teto (`#`) utilizam um tom metálico extra escuro (`#20202b`) para garantir profundidade visual clara contra o fundo do mapa, mantendo a atmosfera industrial pesada e coesa com o novo esquema das esteiras.
+*   **Sincronização Lógica de Gatilhos (Multi-Button AND):**
+    *   **Ativação Estrita:** Mecanismos vinculados a canais com múltiplos botões agora seguem a lógica estrita de "E" (AND). Todos os botões do canal devem estar pressionados (ou alimentados por energia) simultaneamente para que a Porta, Esteira ou Chão Quântico seja ativado. Isso elimina flutuações de estado não intencionais e aumenta o desafio estratégico.

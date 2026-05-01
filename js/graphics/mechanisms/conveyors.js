@@ -7,7 +7,7 @@ Object.assign(Graphics, {
         const isCorner = inDir !== null && inDir !== dir;
 
         // 1. BASE (Belt track) - Unified Color
-        this.ctx.fillStyle = isActive ? '#161a19' : '#0b0d0c';
+        this.ctx.fillStyle = isActive ? '#161a19' : '#1b1f1e'; // Further darkened inactive base
         
         if (!isCorner) {
             // Straight belt logic: Background only between rails (28px wide)
@@ -97,7 +97,7 @@ Object.assign(Graphics, {
         }
 
         // 3. Side Rails
-        const railColor = isActive ? '#343b39' : '#1f2422';
+        const railColor = isActive ? '#343b39' : '#2c302f';
         this.ctx.fillStyle = railColor;
 
         if (!isCorner) {
@@ -137,8 +137,6 @@ Object.assign(Graphics, {
 
         if (isActive) {
             this.ctx.fillStyle = '#00f0ff';
-            this.ctx.shadowColor = '#00f0ff';
-            this.ctx.shadowBlur = 8;
 
             const cycleLength = beltLength || 10;
             const pauseLength = Math.max(4, Math.floor(cycleLength * 0.3)); 

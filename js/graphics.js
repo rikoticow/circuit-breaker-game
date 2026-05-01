@@ -37,6 +37,10 @@ const Graphics = {
     trails: [],
     trailCanvas: null,
     trailCtx: null,
+    blackoutCanvas: null,
+    blackoutCtx: null,
+    bgCanvas: null,
+    bgCtx: null,
 
     init(canvas) {
         this.ctx = canvas.getContext('2d');
@@ -49,6 +53,8 @@ const Graphics = {
         this.trailCanvas.height = 2000;
         this.trailCtx = this.trailCanvas.getContext('2d');
 
+        // Background Buffer removed, rendering directly now
+
         // Transition Canvas (covers entire UI)
         this.tCanvas = document.getElementById('transitionCanvas');
         if (this.tCanvas) {
@@ -56,25 +62,61 @@ const Graphics = {
             this.tCanvas.height = 560;
             this.tCtx = this.tCanvas.getContext('2d');
         }
+
+        // Blackout Buffer
+        this.blackoutCanvas = document.createElement('canvas');
+        this.blackoutCanvas.width = 640;
+        this.blackoutCanvas.height = 480;
+        this.blackoutCtx = this.blackoutCanvas.getContext('2d');
+    },
+    initLevelContext(game) {
+        const effectiveIndex = game.originalLevelIndex !== undefined ? game.originalLevelIndex : game.levelIndex;
+        this.levelSeed = (effectiveIndex !== undefined && effectiveIndex !== -1) ? effectiveIndex * 137 : Math.floor(Math.random() * 1000);
+    },
+
+    drawStaticBackground(game, startX, endX, startY, endY) {
+        const mapH = game.map.length;
+        const mapW = game.map[0].length;
+        
+        // Clamp bounds
+        startX = Math.max(0, Math.floor(startX));
+        startY = Math.max(0, Math.floor(startY));
+        endX = Math.min(mapW, Math.ceil(endX));
+        endY = Math.min(mapH, Math.ceil(endY));
+
+        // Draw Floors and Holes (Static Base)
+        for (let y = startY; y < endY; y++) {
+            for (let x = startX; x < endX; x++) {
+                const c = game.map[y][x];
+                if (c === '*') {
+                    let mask = 0;
+                    if (y > 0 && game.map[y-1][x] === '*') mask |= 1;
+                    if (x < mapW - 1 && game.map[y][x+1] === '*') mask |= 2;
+                    if (y < mapH - 1 && game.map[y+1][x] === '*') mask |= 4;
+                    if (x > 0 && game.map[y][x-1] === '*') mask |= 8;
+                    this.drawHole(x, y, mask);
+                } else if (c !== '#' && c !== 'W') {
+                    this.drawFloor(x, y);
+                }
+            }
+        }
+
+        // Draw Walls and Ceilings (Static Structures)
+        for (let y = startY; y < endY; y++) {
+            for (let x = startX; x < endX; x++) {
+                const c = game.map[y][x];
+                if (c === '#') {
+                    this.drawCeiling(x, y);
+                } else if (c === 'W') {
+                    this.drawWallFace(x, y);
+                }
+            }
+        }
     },
 
     clear() {
         this.ctx.fillStyle = COLORS.bg;
-        this.ctx.fillRect(0, 0, 640, 480);
-        
-        // Draw grid
-        this.ctx.strokeStyle = '#004422'; // Lighter green for the floor grid
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        for (let x = 0; x <= 640; x += this.tileSize) {
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, 480);
-        }
-        for (let y = 0; y <= 480; y += this.tileSize) {
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(640, y);
-        }
-        this.ctx.stroke();
+        this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     },
 
     drawHUD(game) {
@@ -116,5 +158,81 @@ const Graphics = {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 640, 560);
         ctx.restore();
+    },
+
+    drawBlackout(game) {
+        if (!game.isBlackoutActive || game.blackoutAlpha <= 0) return;
+
+        const bctx = this.blackoutCtx;
+        bctx.clearRect(0, 0, 640, 480);
+
+        // 1. Darkness Layer
+        bctx.globalAlpha = game.blackoutAlpha;
+        bctx.fillStyle = 'rgba(5, 5, 8, 0.98)';
+        bctx.fillRect(0, 0, 640, 480);
+
+        // 2. Punch Lights (Destination-Out)
+        bctx.globalCompositeOperation = 'destination-out';
+        bctx.globalAlpha = 1.0;
+
+        bctx.save();
+        // Match camera transform
+        let sx = 0, sy = 0;
+        if (game.screenShakeTimer > 0) {
+            const intensity = game.screenShakeTimer * 0.5;
+            sx = (Math.random() - 0.5) * intensity;
+            sy = (Math.random() - 0.5) * intensity;
+        }
+        bctx.translate(-Math.floor(game.camera.x) + sx, -Math.floor(game.camera.y) + sy);
+
+        // Player Light (1.5 tile radius approx)
+        const px = game.player.visualX * 32 + 16;
+        const py = game.player.visualY * 32 + 16;
+        this._drawLight(bctx, px, py, 48);
+
+        // Electrical Network Light
+        // Wires
+        for (const [key, flow] of game.poweredWires) {
+            if (flow.color === 'OCEAN' || flow.color === 'CIANO') {
+                const [x, y] = key.split(',').map(Number);
+                this._drawLight(bctx, x * 32 + 16, y * 32 + 16, 32);
+            }
+        }
+        // Blocks
+        for (const [key, bData] of game.poweredBlocks) {
+            if (bData.active && !bData.invalid) {
+                const [x, y] = key.split(',').map(Number);
+                this._drawLight(bctx, x * 32 + 16, y * 32 + 16, 40);
+            }
+        }
+        // Targets/Cores
+        for (const [key, tData] of game.poweredTargets) {
+            if (tData.charge > 0) {
+                const [x, y] = key.split(',').map(Number);
+                this._drawLight(bctx, x * 32 + 16, y * 32 + 16, 50);
+            }
+        }
+        // Catalysts
+        for (const cat of game.catalysts) {
+            if (cat.active) {
+                this._drawLight(bctx, cat.x * 32 + 16, cat.y * 32 + 16, 60);
+            }
+        }
+
+        bctx.restore();
+        bctx.globalCompositeOperation = 'source-over';
+
+        // Draw the blackout buffer to the main context
+        this.ctx.drawImage(this.blackoutCanvas, 0, 0);
+    },
+
+    _drawLight(ctx, x, y, radius) {
+        const grad = ctx.createRadialGradient(x, y, radius * 0.2, x, y, radius);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
     }
 };

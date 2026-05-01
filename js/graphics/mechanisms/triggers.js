@@ -35,8 +35,6 @@ Object.assign(Graphics, {
 
             if (charge > 0) {
                 this.ctx.strokeStyle = `rgb(${ledR}, ${ledG}, ${ledB})`;
-                this.ctx.shadowColor = `rgb(${ledR}, ${ledG}, ${ledB})`;
-                this.ctx.shadowBlur = 8;
                 this.ctx.lineWidth = 2.5;
                 this.ctx.lineCap = 'square';
                 const p = charge;
@@ -54,8 +52,6 @@ Object.assign(Graphics, {
                 let ledPulse = isPressed ? 1.0 : Math.pow(0.5 + Math.sin(time - i * 1.57) * 0.5, 3);
                 const color = `rgba(${ledR}, ${ledG}, ${ledB}, ${ledPulse * 0.9})`;
                 this.ctx.fillStyle = color;
-                this.ctx.shadowColor = color;
-                this.ctx.shadowBlur = ledPulse * 5;
                 this.ctx.fillRect(px + pos.x, py + pos.y, ledS, ledS);
             });
         }
@@ -67,7 +63,7 @@ Object.assign(Graphics, {
         this.ctx.beginPath(); this.ctx.arc(cx, cy, radius, 0, Math.PI * 2); this.ctx.fill();
         
         if (isPressed) {
-            this.ctx.save(); this.ctx.strokeStyle = accentColor; this.ctx.lineWidth = 2; this.ctx.shadowColor = accentColor; this.ctx.shadowBlur = 10;
+            this.ctx.save(); this.ctx.strokeStyle = accentColor; this.ctx.lineWidth = 2;
             this.ctx.beginPath(); this.ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2); this.ctx.stroke(); this.ctx.restore();
         } else {
             this.ctx.strokeStyle = '#2d2d2d'; this.ctx.lineWidth = 2;
@@ -117,11 +113,9 @@ Object.assign(Graphics, {
             if (flicker <= 0) {
                 this.ctx.fillStyle = 'rgba(0,0,0,0.5)'; this.ctx.beginPath(); this.ctx.moveTo(7, 0); this.ctx.lineTo(-3, -6); this.ctx.lineTo(-3, 6); this.ctx.closePath(); this.ctx.fill();
             } else {
-                const blur = (isThisActive ? 12 : (6 + pulse * 3)) * flicker;
-                this.ctx.shadowColor = '#0000ff'; this.ctx.shadowBlur = blur;
                 this.ctx.globalAlpha = flicker; this.ctx.fillStyle = '#4488ff';
                 this.ctx.beginPath(); this.ctx.moveTo(7, 0); this.ctx.lineTo(-3, -6); this.ctx.lineTo(-3, 6); this.ctx.closePath();
-                this.ctx.fill(); this.ctx.shadowBlur = blur * 1.5; this.ctx.fill(); this.ctx.globalAlpha = 1.0;
+                this.ctx.fill(); this.ctx.globalAlpha = 1.0;
             }
         } else {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)'; this.ctx.beginPath(); this.ctx.moveTo(7, 0); this.ctx.lineTo(-3, -6); this.ctx.lineTo(-3, 6); this.ctx.closePath(); this.ctx.fill();
@@ -142,8 +136,8 @@ Object.assign(Graphics, {
         const px = x * this.tileSize, py = y * this.tileSize, ts = this.tileSize;
         const cx = px + ts/2, cy = py + ts/2;
         
-        // Color of the NEXT dimension
-        const nextColor = isSolarGlobal ? '#bf00ff' : '#ffcc00';
+        // Color of the CURRENT dimension
+        const nextColor = isSolarGlobal ? '#ffcc00' : '#bf00ff';
         const glowAlpha = 0.5 + Math.sin(frame * 0.1) * 0.3;
         
         this.ctx.save();
@@ -155,8 +149,6 @@ Object.assign(Graphics, {
         this.ctx.strokeRect(px + 4, py + 4, ts - 8, ts - 8);
         
         // Pulsing core
-        this.ctx.shadowColor = nextColor;
-        this.ctx.shadowBlur = 15 * glowAlpha;
         this.ctx.fillStyle = nextColor;
         this.ctx.globalAlpha = glowAlpha;
         
@@ -222,7 +214,7 @@ Object.assign(Graphics, {
         }
         if (flashTimer > 0 && flashTimer <= 15) {
             this.ctx.save(); const progress = 1 - (flashTimer / 15), alpha = (flashTimer / 15) * intensity;
-            this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 2 * intensity; this.ctx.globalAlpha = alpha; this.ctx.shadowColor = '#fff'; this.ctx.shadowBlur = 5 * intensity;
+            this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 2 * intensity; this.ctx.globalAlpha = alpha;
             const cx = px + ts / 2, cy = py + ts / 2;
             if (entrySide && (entrySide.dx !== 0 || entrySide.dy !== 0)) {
                 const dist = ts * progress; this.ctx.beginPath();
@@ -263,13 +255,13 @@ Object.assign(Graphics, {
             ctx.closePath();
             const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, 16); grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, color); grad.addColorStop(1, color + '33'); 
             ctx.strokeStyle = grad; ctx.lineWidth = 4 - i * 0.5; ctx.globalAlpha = alpha; ctx.stroke();
-            if (i === 0) { ctx.shadowBlur = 15; ctx.shadowColor = color; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 3 + Math.sin(localFrame * 0.2) * 1, 0, Math.PI * 2); ctx.fill(); }
+            if (i === 0) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 3 + Math.sin(localFrame * 0.2) * 1, 0, Math.PI * 2); ctx.fill(); }
             ctx.restore();
         }
         for (let j = 0; j < 20; j++) {
             const pRot = (localFrame * 0.08 + j * (Math.PI * 2 / 20)) + Math.sin(localFrame * 0.02 + j) * 0.5, pDist = 16 + Math.sin(localFrame * 0.12 + j * 0.5) * 6;
             const px = Math.cos(pRot) * pDist, py = Math.sin(pRot) * pDist, pSize = 1.2 + Math.sin(localFrame * 0.1 + j) * 0.8;
-            ctx.fillStyle = j % 2 === 0 ? color : '#ffffff'; ctx.shadowBlur = 4; ctx.shadowColor = color; ctx.fillRect(px - pSize/2, py - pSize/2, pSize, pSize);
+            ctx.fillStyle = j % 2 === 0 ? color : '#ffffff'; ctx.fillRect(px - pSize/2, py - pSize/2, pSize, pSize);
         }
         ctx.restore();
     },

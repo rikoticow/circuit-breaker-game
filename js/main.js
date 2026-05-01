@@ -10,6 +10,10 @@ function init() {
 
     game = new GameState();
     window.game = game; // Essential for Dialogue system to find the active game
+    
+    // Force initial context for the first level
+    Graphics.initLevelContext(game);
+    
     LevelSelector.init();
 
     // Initial Start Gesture (Fixes AudioContext autoplay policy)
@@ -477,6 +481,10 @@ function gameLoop(timestamp) {
         sx = (Math.random() - 0.5) * intensity;
         sy = (Math.random() - 0.5) * intensity;
     }
+    // Safety: ensure camera is never NaN
+    if (isNaN(game.camera.x)) game.camera.x = 0;
+    if (isNaN(game.camera.y)) game.camera.y = 0;
+
     ctx.translate(-Math.floor(game.camera.x) + sx, -Math.floor(game.camera.y) + sy);
 
     // Visible tile bounds (Culling)
@@ -485,22 +493,8 @@ function gameLoop(timestamp) {
     const startY = Math.floor(game.camera.y / 32);
     const endY = Math.ceil((game.camera.y + 480) / 32);
 
-    // Pass 1: Draw Floors and Holes
-    for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
-        for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
-            const c = game.map[y][x];
-            if (c === '*') {
-                let mask = 0;
-                if (y > 0 && game.map[y-1][x] === '*') mask |= 1;
-                if (x < mapW - 1 && game.map[y][x+1] === '*') mask |= 2;
-                if (y < mapH - 1 && game.map[y+1][x] === '*') mask |= 4;
-                if (x > 0 && game.map[y][x-1] === '*') mask |= 8;
-                Graphics.drawHole(x, y, mask);
-            } else if (c !== '#' && c !== 'W') {
-                Graphics.drawFloor(x, y);
-            }
-        }
-    }
+    // Draw Static Background (Floors, Holes, Walls, Ceilings)
+    Graphics.drawStaticBackground(game, startX, endX, startY, endY);
 
     // Pass 1.01: Draw Wires (On floor, below trails/quantum/conveyors)
     for (const w of game.wires) {
@@ -527,9 +521,9 @@ function gameLoop(timestamp) {
         Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
     }
 
-    // Pass 1.075: Draw Singularity Switchers
-    for (const sw of game.singularitySwitchers) {
-        Graphics.drawSingularitySwitcher(sw.x, sw.y, game.isSolarPhase, animFrame, sw.lightningTimer, game.map, sw.lightningSeed);
+    // Pass 1.075: Draw Doors (moved from background)
+    for (const d of game.doors) {
+        Graphics.drawDoor(d.x, d.y, d.state, d.error, d.openPct);
     }
     
     // Pass 1.08: Draw Gravity Buttons
@@ -558,19 +552,12 @@ function gameLoop(timestamp) {
         Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
     }
 
-    // Pass 2: Draw Objects, Walls, and Ceiling
+    // Pass 2: Draw Scrap (Static in background but some have animations?) 
+    // Actually scrap is dynamic, let's keep it here but without walls loop
     for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(mapW, endX); x++) {
-            const c = game.map[y][x];
-            if (c === '#') {
-                Graphics.drawCeiling(x, y);
-            } else if (c === 'W') {
-                Graphics.drawWallFace(x, y);
-            } else {
-                // Draw scrap if present
-                if (game.scrapPositions.has(`${x},${y}`)) {
-                    Graphics.drawScrap(x, y, animFrame);
-                }
+            if (game.scrapPositions.has(`${x},${y}`)) {
+                Graphics.drawScrap(x, y, animFrame);
             }
         }
     }
@@ -583,25 +570,6 @@ function gameLoop(timestamp) {
     // Pass 2.03: Draw Quantum Catalysts
     for (const cat of game.catalysts) {
         Graphics.drawCatalyst(cat.x, cat.y, cat.active, animFrame);
-    }
-
-    // Pass 2.04 (Removed, moved to Pass 3.0)
-
-    // Draw Cores
-    for (const s of game.sources) {
-        Graphics.drawCore(s.x, s.y, 'B', true);
-    }
-    for (const s of game.redSources) {
-        Graphics.drawCore(s.x, s.y, 'X', true);
-    }
-    for (const t of game.targets) {
-        const key = `${t.x},${t.y}`;
-        const data = game.poweredTargets.get(key) || { charge: 0, contaminated: false };
-        const powered = data.charge >= t.required && !data.contaminated;
-        Graphics.drawCore(t.x, t.y, 'T', powered, t.required, data.charge, data.contaminated);
-    }
-    for (const f of game.forbiddens) {
-        Graphics.drawCore(f.x, f.y, 'X', false);
     }
 
     // Draw Broken Cores (purely visual)
@@ -631,6 +599,29 @@ function gameLoop(timestamp) {
         const vy = game.player.y - game.player.visualY;
         Graphics.drawRobot(game.player.visualX, game.player.visualY, game.player.dir, animFrame, visorColor, vx, vy, game.player.isDead, game.player.deathType, game.player.deathTimer, game.player.deathDir, game.player.isGrabbing);
     }
+
+    // --- SINGULAR CORES (Drawn above everything in ADD mode) ---
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of game.sources) {
+        Graphics.drawCore(s.x, s.y, 'B', true);
+    }
+    for (const s of game.redSources) {
+        Graphics.drawCore(s.x, s.y, 'X', true);
+    }
+    for (const t of game.targets) {
+        const key = `${t.x},${t.y}`;
+        const data = game.poweredTargets.get(key) || { charge: 0, contaminated: false };
+        const powered = data.charge >= t.required && !data.contaminated;
+        Graphics.drawCore(t.x, t.y, 'T', powered, t.required, data.charge, data.contaminated);
+    }
+    for (const f of game.forbiddens) {
+        Graphics.drawCore(f.x, f.y, 'X', false);
+    }
+    for (const sw of game.singularitySwitchers) {
+        Graphics.drawSingularitySwitcher(sw.x, sw.y, game.isSolarPhase, animFrame, sw.lightningTimer, game.map, sw.lightningSeed);
+    }
+    ctx.restore();
     
     // Pass 2.05: Draw Persistent Debris (Irregular pieces on floor)
     for (const p of game.debris) {
@@ -659,10 +650,13 @@ function gameLoop(timestamp) {
         Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
     }
 
-    // FINAL PASS: Out-of-phase holographic blocks (Above EVERYTHING)
+    // FINAL PASS: Out-of-phase holographic blocks (Above EVERYTHING in ADD mode)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const b of outOfPhaseBlocks) {
         Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, null, 0, b.dir, b.type, 0, b.phase, game.isSolarPhase);
     }
+    ctx.restore();
 
     for (const t of game.targets) {
         const key = `${t.x},${t.y}`;
@@ -677,7 +671,10 @@ function gameLoop(timestamp) {
         Graphics.drawGravityOverlay(game.lastGravityDir, animFrame, game.gravityOverlayAlpha);
     }
 
-    // Draw Transition Door
+    // Draw Blackout (Fog of War)
+    Graphics.drawBlackout(game);
+
+    // Draw Transition Door (Above Blackout)
     if (game.transitionState !== 'NONE') {
         Graphics.drawDoorTransition(game, game.transitionProgress);
     }

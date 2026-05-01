@@ -71,14 +71,14 @@ Object.assign(Graphics, {
             ctx.fillStyle = sC; ctx.fillRect(sX, sY, sW, sH);
             ctx.save();
             if (Math.random() > 0.05) {
-                ctx.fillStyle = tC; ctx.textAlign = 'center'; ctx.shadowColor = tC; ctx.shadowBlur = 10;
+                ctx.fillStyle = tC; ctx.textAlign = 'center';
                 if (promptText) {
                     ctx.font = 'bold 16px "VT323", monospace'; ctx.fillText(statusText, sX + sW/2, sY + 25);
                     const pulse = Math.sin(Date.now() / 200) * 0.5 + 0.5; ctx.globalAlpha = 0.5 + pulse * 0.5; ctx.font = 'bold 18px "VT323", monospace'; ctx.fillText(promptText, sX + sW/2, sY + 55);
                 } else {
                     ctx.font = 'bold 24px "VT323", monospace'; ctx.textBaseline = 'middle'; ctx.fillText(statusText, sX + sW/2, sY + sH/2);
                 }
-                ctx.shadowBlur = 0; ctx.globalAlpha = 0.2; ctx.fillStyle = '#000';
+                ctx.globalAlpha = 0.2; ctx.fillStyle = '#000';
                 for(let i=0; i<sH; i+=3) ctx.fillRect(sX, sY + i, sW, 1);
             }
             ctx.restore();
@@ -94,7 +94,7 @@ Object.assign(Graphics, {
         for (let i = 0; i < 5; i++) { this.ctx.fillRect(0, (frame * 5 + i * 100) % H, W, Math.random() * 20); }
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
         for (let y = 0; y < H; y += 4) { this.ctx.fillRect(0, y, W, 2); }
-        this.ctx.font = 'bold 24px "VT323", monospace'; this.ctx.textAlign = 'right'; this.ctx.fillStyle = '#00f0ff'; this.ctx.shadowColor = '#00f0ff'; this.ctx.shadowBlur = 10;
+        this.ctx.font = 'bold 24px "VT323", monospace'; this.ctx.textAlign = 'right'; this.ctx.fillStyle = '#00f0ff';
         if (Math.floor(frame / 10) % 2 === 0) { this.ctx.fillText("<< REVERSÃO QUÂNTICA", W - 20, 40); }
         for (let i = 0; i < 20; i++) { this.ctx.fillStyle = 'rgba(255,255,255,0.1)'; this.ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
         this.ctx.restore();
@@ -168,8 +168,6 @@ Object.assign(Graphics, {
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = 1.0 + Math.random() * 1.5;
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 10;
             // Fast fade out
             ctx.globalAlpha = Math.max(0, (1.0 - (progress - rayThreshold) * 3)) * (0.6 + Math.random() * 0.4);
             

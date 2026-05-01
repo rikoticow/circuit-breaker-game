@@ -230,5 +230,62 @@ Object.assign(window.AudioSys, {
         filter.connect(gain);
         gain.connect(audioCtx.destination);
         noise.start(now);
+    },
+
+    playBlackoutStart() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // 1. Heavy Metal Slam (Breaker Trip)
+        const slamOsc = audioCtx.createOscillator();
+        const slamGain = audioCtx.createGain();
+        slamOsc.type = 'sawtooth';
+        slamOsc.frequency.setValueAtTime(60, now);
+        slamOsc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+        slamGain.gain.setValueAtTime(0.15, now);
+        slamGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        slamOsc.connect(slamGain); slamGain.connect(audioCtx.destination);
+        slamOsc.start(now); slamOsc.stop(now + 0.5);
+
+        // 2. Rotor Wind Down (Buzz losing power)
+        const buzzOsc = audioCtx.createOscillator();
+        const buzzGain = audioCtx.createGain();
+        buzzOsc.type = 'square';
+        buzzOsc.frequency.setValueAtTime(100, now);
+        buzzOsc.frequency.exponentialRampToValueAtTime(20, now + 2.0);
+        buzzGain.gain.setValueAtTime(0.05, now);
+        buzzGain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+        buzzOsc.connect(buzzGain); buzzGain.connect(audioCtx.destination);
+        buzzOsc.start(now); buzzOsc.stop(now + 2.0);
+    },
+
+    playBlackoutEnd() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        // 1. Reactor Power Up (Rise)
+        const riseOsc = audioCtx.createOscillator();
+        const riseGain = audioCtx.createGain();
+        riseOsc.type = 'sine';
+        riseOsc.frequency.setValueAtTime(40, now);
+        riseOsc.frequency.exponentialRampToValueAtTime(200, now + 1.5);
+        riseGain.gain.setValueAtTime(0, now);
+        riseGain.gain.linearRampToValueAtTime(0.1, now + 0.2);
+        riseGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+        riseOsc.connect(riseGain); riseGain.connect(audioCtx.destination);
+        riseOsc.start(now); riseOsc.stop(now + 1.5);
+
+        // 2. Electrical Cracks
+        for (let i = 0; i < 5; i++) {
+            const crackTime = now + i * 0.15 + Math.random() * 0.1;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1500 + Math.random() * 1000, crackTime);
+            g.gain.setValueAtTime(0.03, crackTime);
+            g.gain.exponentialRampToValueAtTime(0.001, crackTime + 0.05);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(crackTime); osc.stop(crackTime + 0.05);
+        }
     }
 });
