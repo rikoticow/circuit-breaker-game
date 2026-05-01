@@ -2098,6 +2098,21 @@ class GameState {
                     const lx = obj.x + dx;
                     const ly = obj.y + dy;
                     
+                    // Check if player is in the way
+                    if (this.player.x === lx && this.player.y === ly) {
+                        if (this.isTilePassable(lx + dx, ly + dy, this.player, dx, dy, true)) {
+                            this.player.x += dx;
+                            this.player.y += dy;
+                            obj.x = lx;
+                            obj.y = ly;
+                            if (window.AudioSys) AudioSys.push();
+                            for(let s=0; s<5; s++) Graphics.spawnParticle(lx * 32 + 16, ly * 32 + 16, '#fff', 'spark');
+                        } else {
+                            break; // Player blocked
+                        }
+                        continue;
+                    }
+
                     // Check if we hit a chain of blocks during launch
                     let blocksToPushLaunch = [];
                     let sx = lx, sy = ly;
@@ -2113,9 +2128,6 @@ class GameState {
                     const selfCanMove = this.isTilePassable(obj.x + dx, obj.y + dy, obj, dx, dy, false);
 
                     if (this.isTilePassable(sx, sy, [obj, ...blocksToPushLaunch], dx, dy, false) && allBlocksCanMoveLaunch && selfCanMove) {
-
-
-
                         // Push the chain
                         for (let j = blocksToPushLaunch.length - 1; j >= 0; j--) {
                             const lb = blocksToPushLaunch[j];
@@ -2170,6 +2182,16 @@ class GameState {
                 }
             }
             this.updateEnergy();
+        } else if (!isPlayer && this.player.x === nx && this.player.y === ny) {
+            // PUSH PLAYER (on conveyor)
+            if (this.isTilePassable(nx + dx, ny + dy, this.player, dx, dy, true)) {
+                this.player.x += dx;
+                this.player.y += dy;
+                obj.x = nx;
+                obj.y = ny;
+                if (window.AudioSys) AudioSys.push();
+                this.updateEnergy();
+            }
         } else {
             // Holes and other hazards are now handled by the main update loop's visual proximity check
             // to allow for smooth falling animations.

@@ -7,7 +7,7 @@ Object.assign(Graphics, {
         const isCorner = inDir !== null && inDir !== dir;
 
         // 1. BASE (Belt track) - Unified Color
-        this.ctx.fillStyle = isActive ? '#2c3440' : '#1e252e';
+        this.ctx.fillStyle = isActive ? '#161a19' : '#0b0d0c';
         
         if (!isCorner) {
             // Straight belt logic: Background only between rails (28px wide)
@@ -18,7 +18,7 @@ Object.assign(Graphics, {
             }
 
             // 2. Animated Belt Texture (Lines moving)
-            this.ctx.strokeStyle = isActive ? 'rgba(100, 150, 255, 0.4)' : 'rgba(70, 80, 90, 0.3)';
+            this.ctx.strokeStyle = isActive ? 'rgba(80, 100, 95, 0.35)' : 'rgba(45, 55, 52, 0.25)';
             this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             const offset = isActive ? ((frame * 0.8) % 12) : 0;
@@ -64,7 +64,7 @@ Object.assign(Graphics, {
             this.ctx.fill();
 
             // 2. Animated Belt Texture
-            this.ctx.strokeStyle = isActive ? 'rgba(100, 150, 255, 0.4)' : 'rgba(70, 80, 90, 0.3)';
+            this.ctx.strokeStyle = isActive ? 'rgba(80, 100, 95, 0.35)' : 'rgba(45, 55, 52, 0.25)';
             this.ctx.lineWidth = 1;
 
             if (isActive) {
@@ -97,7 +97,7 @@ Object.assign(Graphics, {
         }
 
         // 3. Side Rails
-        const railColor = isActive ? '#4a5568' : '#2d3748';
+        const railColor = isActive ? '#343b39' : '#1f2422';
         this.ctx.fillStyle = railColor;
 
         if (!isCorner) {

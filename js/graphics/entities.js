@@ -233,12 +233,19 @@ Object.assign(Graphics, {
         for (let i = 0; i < 3; i++) {
             const seed = (x * 7 + y * 13 + i * 17), type = seed % 4, bob = Math.sin(frame * 0.08 + seed) * 4, rot = frame * (0.04 + i * 0.01) + seed;
             this.ctx.save(); this.ctx.translate(cx + Math.cos(seed * 0.5) * 6, cy + Math.sin(seed * 0.5) * 6 + bob); this.ctx.rotate(rot);
-            this.ctx.fillStyle = '#888'; this.ctx.strokeStyle = '#333'; this.ctx.lineWidth = 1;
-            if (type === 0) { const r = 5; this.ctx.beginPath(); for (let j = 0; j < 8; j++) { const a = (j / 8) * Math.PI * 2, na = ((j + 0.5) / 8) * Math.PI * 2; this.ctx.lineTo(Math.cos(a) * (r + 3), Math.sin(a) * (r + 3)); this.ctx.lineTo(Math.cos(na) * (r + 3), Math.sin(na) * (r + 3)); this.ctx.lineTo(Math.cos(na) * r, Math.sin(na) * r); } this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = '#222'; this.ctx.beginPath(); this.ctx.arc(0, 0, 1.5, 0, Math.PI * 2); this.ctx.fill(); }
-            else if (type === 1) { this.ctx.fillRect(-4, -6, 8, 3); this.ctx.strokeRect(-4, -6, 8, 3); this.ctx.fillRect(-2, -3, 4, 8); this.ctx.strokeRect(-2, -3, 4, 8); this.ctx.fillStyle = '#222'; this.ctx.fillRect(-3, -5.5, 6, 1); }
-            else if (type === 2) { const r = 6; this.ctx.beginPath(); for (let j = 0; j < 6; j++) this.ctx.lineTo(Math.cos((j / 6) * Math.PI * 2) * r, Math.sin((j / 6) * Math.PI * 2) * r); this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = '#222'; this.ctx.beginPath(); this.ctx.arc(0, 0, 2, 0, Math.PI * 2); this.ctx.fill(); }
-            else { const r = 3; this.ctx.beginPath(); for (let j = 0; j < 6; j++) { const a = (j / 6) * Math.PI * 2, na = ((j + 0.5) / 6) * Math.PI * 2; this.ctx.lineTo(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2)); this.ctx.lineTo(Math.cos(na) * (r + 2), Math.sin(na) * (r + 2)); } this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = '#222'; this.ctx.beginPath(); this.ctx.arc(0, 0, 1, 0, Math.PI * 2); this.ctx.fill(); }
-            this.ctx.fillStyle = 'rgba(255,255,255,0.4)'; this.ctx.fillRect(-1.5, -1.5, 1.5, 1.5); this.ctx.restore();
+            
+            // Varied grayscale/metallic colors
+            const sat = (seed % 5); // Very low saturation
+            const lum = 30 + (seed % 50); // Significant luminosity variation
+            this.ctx.fillStyle = `hsl(0, ${sat}%, ${lum}%)`;
+            this.ctx.strokeStyle = `hsl(0, ${sat}%, ${Math.max(0, lum - 20)}%)`;
+            this.ctx.lineWidth = 1;
+            
+            if (type === 0) { const r = 5; this.ctx.beginPath(); for (let j = 0; j < 8; j++) { const a = (j / 8) * Math.PI * 2, na = ((j + 0.5) / 8) * Math.PI * 2; this.ctx.lineTo(Math.cos(a) * (r + 3), Math.sin(a) * (r + 3)); this.ctx.lineTo(Math.cos(na) * (r + 3), Math.sin(na) * (r + 3)); this.ctx.lineTo(Math.cos(na) * r, Math.sin(na) * r); } this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; this.ctx.beginPath(); this.ctx.arc(0, 0, 1.5, 0, Math.PI * 2); this.ctx.fill(); }
+            else if (type === 1) { this.ctx.fillRect(-4, -6, 8, 3); this.ctx.strokeRect(-4, -6, 8, 3); this.ctx.fillRect(-2, -3, 4, 8); this.ctx.strokeRect(-2, -3, 4, 8); this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; this.ctx.fillRect(-3, -5.5, 6, 1); }
+            else if (type === 2) { const r = 6; this.ctx.beginPath(); for (let j = 0; j < 6; j++) this.ctx.lineTo(Math.cos((j / 6) * Math.PI * 2) * r, Math.sin((j / 6) * Math.PI * 2) * r); this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; this.ctx.beginPath(); this.ctx.arc(0, 0, 2, 0, Math.PI * 2); this.ctx.fill(); }
+            else { const r = 3; this.ctx.beginPath(); for (let j = 0; j < 6; j++) { const a = (j / 6) * Math.PI * 2, na = ((j + 0.5) / 6) * Math.PI * 2; this.ctx.lineTo(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2)); this.ctx.lineTo(Math.cos(na) * (r + 2), Math.sin(na) * (r + 2)); } this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; this.ctx.beginPath(); this.ctx.arc(0, 0, 1, 0, Math.PI * 2); this.ctx.fill(); }
+            this.ctx.fillStyle = 'rgba(255,255,255,0.2)'; this.ctx.fillRect(-1.5, -1.5, 1.5, 1.5); this.ctx.restore();
         }
     },
 

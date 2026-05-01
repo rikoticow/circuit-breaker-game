@@ -4,25 +4,32 @@ Object.assign(Graphics, {
         const py = y * this.tileSize;
         const ts = this.tileSize;
 
-        // Base Tile Color (Slightly lighter bronze/brown)
-        this.ctx.fillStyle = '#261e1b';
+        // Coordinate-based variation (pseudo-random)
+        const seed = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+
+        // Base Tile Color (Dark Copper / Industrial Rust)
+        // Shifting to Copper tones (HSL: 25, 15%, 18%)
+        const h = 25 + (seed - 0.5) * 6;
+        const s = 15 + (seed - 0.5) * 4;
+        const l = 18 + (seed - 0.5) * 5;
+        this.ctx.fillStyle = `hsl(${h}, ${s}%, ${l}%)`;
         this.ctx.fillRect(px, py, ts, ts);
 
-        // Suble Border/Bevel (Brighter copper highlight)
-        this.ctx.strokeStyle = '#3d302a';
+        // Subtle Border/Bevel (Copper highlight)
+        this.ctx.strokeStyle = `hsl(${h}, ${s}%, ${l + 8}%)`;
         this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(px + 1, py + 1, ts - 2, ts - 2);
+        this.ctx.strokeRect(px + 0.5, py + 0.5, ts - 1, ts - 1);
 
-        // Rivets in corners (More visible copper)
-        this.ctx.fillStyle = '#4a3a34';
+        // Rivets in corners (Deep Copper Shadow)
+        this.ctx.fillStyle = `hsl(${h}, ${s}%, ${l - 10}%)`;
         const rs = 2; // Rivet size
         this.ctx.fillRect(px + 4, py + 4, rs, rs);
         this.ctx.fillRect(px + ts - 6, py + 4, rs, rs);
         this.ctx.fillRect(px + 4, py + ts - 6, rs, rs);
         this.ctx.fillRect(px + ts - 6, py + ts - 6, rs, rs);
         
-        // Subtle diagonal texture
-        this.ctx.strokeStyle = 'rgba(255, 150, 100, 0.02)';
+        // Subtle diagonal texture (Copper sheen)
+        this.ctx.strokeStyle = 'rgba(255, 180, 100, 0.04)';
         this.ctx.beginPath();
         this.ctx.moveTo(px + 5, py + 5);
         this.ctx.lineTo(px + ts - 5, py + ts - 5);
@@ -112,22 +119,22 @@ Object.assign(Graphics, {
         const py = y * this.tileSize;
         const ts = this.tileSize;
 
-        // Base dark metal
-        this.ctx.fillStyle = '#1c1c24';
+        // Base dark metal (Darker)
+        this.ctx.fillStyle = '#121218';
         this.ctx.fillRect(px, py, ts, ts);
         
         // Inner tile border (Bevel)
-        this.ctx.fillStyle = '#2d2d3b';
+        this.ctx.fillStyle = '#1f1f2b';
         this.ctx.fillRect(px, py, ts, 2); // Top
         this.ctx.fillRect(px, py, 2, ts); // Left
         
         // Shadows
-        this.ctx.fillStyle = '#0f0f14';
+        this.ctx.fillStyle = '#0a0a0e';
         this.ctx.fillRect(px, py + ts - 2, ts, 2); // Bottom
         this.ctx.fillRect(px + ts - 2, py, 2, ts); // Right
         
         // Small rivet in center
-        this.ctx.fillStyle = '#111';
+        this.ctx.fillStyle = '#050505';
         this.ctx.fillRect(px + ts/2 - 2, py + ts/2 - 2, 4, 4);
     },
 
