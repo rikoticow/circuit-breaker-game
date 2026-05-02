@@ -245,21 +245,21 @@ Object.assign(Graphics, {
         glow.addColorStop(0, color + '66'); glow.addColorStop(0.6, color + '1a'); glow.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = glow; ctx.globalCompositeOperation = 'screen'; ctx.fillRect(-32, -32, 64, 64);
         
-        for (let i = 0; i < 6; i++) {
-            const rot = localFrame * 0.04 * (1 + i * 0.25), scale = 1.1 - i * 0.16, alpha = 0.8 - i * 0.12;
+        for (let i = 0; i < 3; i++) {
+            const rot = localFrame * (0.04 + i * 0.02), scale = 1.1 - i * 0.25, alpha = 0.8 - i * 0.2;
             ctx.save(); ctx.rotate(rot); ctx.scale(scale, scale); ctx.beginPath();
-            for (let a = 0; a <= Math.PI * 2; a += (Math.PI * 2 / 12)) {
+            for (let a = 0; a <= Math.PI * 2; a += (Math.PI * 2 / 8)) { // Reduced points from 12 to 8
                 const r = 14 + Math.sin(a * 4 + localFrame * 0.1) * 3, px = Math.cos(a) * r, py = Math.sin(a) * r;
                 if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             }
             ctx.closePath();
             const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, 16); grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, color); grad.addColorStop(1, color + '33'); 
-            ctx.strokeStyle = grad; ctx.lineWidth = 4 - i * 0.5; ctx.globalAlpha = alpha; ctx.stroke();
+            ctx.strokeStyle = grad; ctx.lineWidth = 3 - i * 0.5; ctx.globalAlpha = alpha; ctx.stroke();
             if (i === 0) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 3 + Math.sin(localFrame * 0.2) * 1, 0, Math.PI * 2); ctx.fill(); }
             ctx.restore();
         }
-        for (let j = 0; j < 20; j++) {
-            const pRot = (localFrame * 0.08 + j * (Math.PI * 2 / 20)) + Math.sin(localFrame * 0.02 + j) * 0.5, pDist = 16 + Math.sin(localFrame * 0.12 + j * 0.5) * 6;
+        for (let j = 0; j < 12; j++) { // Reduced particle count from 20 to 12
+            const pRot = (localFrame * 0.08 + j * (Math.PI * 2 / 12)) + Math.sin(localFrame * 0.02 + j) * 0.5, pDist = 16 + Math.sin(localFrame * 0.12 + j * 0.5) * 6;
             const px = Math.cos(pRot) * pDist, py = Math.sin(pRot) * pDist, pSize = 1.2 + Math.sin(localFrame * 0.1 + j) * 0.8;
             ctx.fillStyle = j % 2 === 0 ? color : '#ffffff'; ctx.fillRect(px - pSize/2, py - pSize/2, pSize, pSize);
         }

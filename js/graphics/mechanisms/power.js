@@ -206,7 +206,7 @@ Object.assign(Graphics, {
             });
         }
         if (frame % 12 === 0) {
-            this.spawnParticle(cx, cy, '#ffcc00', 'spark');
+            // this.spawnParticle(cx, cy, '#ffcc00', 'spark'); // REMOVED
         }
         this.ctx.restore();
     },
@@ -321,7 +321,6 @@ Object.assign(Graphics, {
             const angle = frame * 0.1;
             this.ctx.arc(cx, cy, 5, angle, angle + Math.PI);
             this.ctx.stroke();
-            if (Math.random() > 0.8) this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, '#00f0ff', 'spark');
         }
         this.ctx.restore();
         this.ctx.restore();

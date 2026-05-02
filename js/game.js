@@ -40,6 +40,7 @@ class GameState {
         this.alarmTimer = 0;
         this.activeSequences = [];
         this.frame = 0;
+        this.lasersNeedUpdate = true; // Initial calculation required
 
 
         this.score = 0;
@@ -248,6 +249,7 @@ class GameState {
         this.moveCount = 0;
         if (!keepLives) this.lives = 3; // Restore lives only if not a respawn
         this.state = 'PLAYING';
+        this.warmupFrames = 60; // 1 second of particle suppression after opening
         this.undoStack = [];
         this.glassWallsHit = new Set();
         if (window.Graphics) {
@@ -787,11 +789,15 @@ class GameState {
             }
         }
         
+        if (this.warmupFrames > 0) this.warmupFrames--;
+        
         // Ambient Portal Particles (High Intensity)
-        for (const p of this.portals) {
-            if (Math.random() < 0.15) {
-                const pColor = p.color || '#ffd700';
-                Graphics.spawnParticle(p.x * 32 + 16 + (Math.random()-0.5)*20, p.y * 32 + 16 + (Math.random()-0.5)*20, pColor, 'spark');
+        if (this.transitionState === 'NONE' && this.warmupFrames === 0) {
+            for (const p of this.portals) {
+                if (Math.random() < 0.15) {
+                    const pColor = p.color || '#ffd700';
+                    Graphics.spawnParticle(p.x * 32 + 16 + (Math.random()-0.5)*20, p.y * 32 + 16 + (Math.random()-0.5)*20, pColor, 'spark');
+                }
             }
         }
 
@@ -1111,7 +1117,16 @@ class GameState {
             }
         }
         
-        this.updateEmitters();
+        
+        // --- Optimized Emitter Updates ---
+        // Only update if requested by an event OR if something is currently moving/rotating
+        const isMotion = (Math.abs(this.player.visualX - this.player.x) > 0.01 || Math.abs(this.player.visualY - this.player.y) > 0.01) || 
+                         this.blocks.some(b => Math.abs(b.visualX - b.x) > 0.01 || Math.abs(b.visualY - b.y) > 0.01 || Math.abs((b.visualAngle || (b.dir * Math.PI / 2)) - (b.dir * Math.PI / 2)) > 0.01);
+
+        if (this.lasersNeedUpdate || isMotion) {
+            this.updateEmitters();
+            this.lasersNeedUpdate = false;
+        }
         
         // --- Laser Audio (After state update) ---
         if (window.AudioSys && this.state === 'PLAYING') {
@@ -1129,7 +1144,7 @@ class GameState {
                 if (this.undoStack.length > 1) {
                     const prevState = this.undoStack.pop();
                     this.applyState(prevState, true); // SNAP visuals
-                    if (Math.random() > 0.8) AudioSys.doorGrind();
+                    AudioSys.doorGrind();
                 } else {
                     if (this.undoStack.length === 1) {
                         this.applyState(this.undoStack[0], true);
@@ -2107,6 +2122,7 @@ class GameState {
             if (this.moves <= 0) {
                 this.handleDeath(false);
             }
+            this.lasersNeedUpdate = true;
         } else {
             // Check if we hit a core (even if it didn't cost energy, we might want a small puff)
             const isTarget = this.targets.some(t => t.x === tx && t.y === ty);
@@ -2389,7 +2405,7 @@ class GameState {
                             obj.x = lx;
                             obj.y = ly;
                             if (window.AudioSys) AudioSys.push();
-                            for(let s=0; s<5; s++) Graphics.spawnParticle(lx * 32 + 16, ly * 32 + 16, '#fff', 'spark');
+                            // for(let s=0; s<5; s++) Graphics.spawnParticle(lx * 32 + 16, ly * 32 + 16, '#fff', 'spark'); // REMOVED as per user request
                         } else {
                             break; // Player blocked
                         }
@@ -2442,8 +2458,10 @@ class GameState {
                             obj.x = lx;
                             obj.y = ly;
                         }
-                        // Spawn some sparks at each step of the launch (Golden)
-                        for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#ffcc00', 'spark');
+                        // Spawn some sparks at each step of the launch (Golden) - Skip for Prisms
+                        if (obj.type !== 'PRISM') {
+                            for(let s=0; s<3; s++) Graphics.spawnParticle(obj.x * 32 + 16, obj.y * 32 + 16, '#ffcc00', 'spark');
+                        }
                     } else {
                         break; // Hit a wall or immovable object
                     }
@@ -2476,10 +2494,9 @@ class GameState {
                 this.updateEnergy();
             }
         } else {
-            // Holes and other hazards are now handled by the main update loop's visual proximity check
-            // to allow for smooth falling animations.
             obj.x = nx;
             obj.y = ny;
+            this.lasersNeedUpdate = true;
         }
     }
 
@@ -2564,7 +2581,7 @@ class GameState {
                             e.laserPath.push({ x: cx, y: cy, type: 'PRISM', nextDx: dx, nextDy: dy });
                             continue; // Bends and continues
                         } else {
-                            e.laserPath.push({ x: cx, y: cy, type: 'BLOCK' });
+                            e.laserPath.push({ x: cx, y: cy, type: 'PRISM_HIT' });
                             break;
                         }
                     } else {
@@ -2995,6 +3012,7 @@ class GameState {
         this.audioState = { anyActive, progress, contaminated: isContaminated };
 
         this.checkWinCondition();
+        this.lasersNeedUpdate = true;
     }
 
     wireHasConnection(type, side) {

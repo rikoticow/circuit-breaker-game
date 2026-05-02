@@ -27,70 +27,67 @@ Object.assign(Graphics, {
         }
 
         if (isOutOfPhase) {
-            // Use frequency-specific color for the holographic outline
-            const t = (performance.now() * 0.001);
-            this.ctx.strokeStyle = accentColor; // Holographic phase color
-            this.ctx.lineWidth = 1.5;
+            const t = (performance.now() * 0.005);
+            const blockSeed = (x * 17 + y * 23);
+            this.ctx.strokeStyle = accentColor;
+            this.ctx.lineWidth = 1.2;
             
-            const getJit = (f, a, s = 0) => Math.sin(t * (f * 0.5) + s) * a + Math.cos(t * (f * 0.8) + s) * (a * 0.5);
+            // Pre-calculate 4 corner jitters
+            const j1x = Math.sin(t + blockSeed) * 1.5, j1y = Math.cos(t * 1.1 + blockSeed) * 1.5;
+            const j2x = Math.sin(t * 0.9 + blockSeed + 2) * 1.5, j2y = Math.cos(t * 1.2 + blockSeed + 3) * 1.5;
+            const j3x = Math.sin(t * 1.1 + blockSeed + 4) * 1.5, j3y = Math.cos(t * 0.8 + blockSeed + 5) * 1.5;
+            const j4x = Math.sin(t * 0.8 + blockSeed + 6) * 1.5, j4y = Math.cos(t * 1.3 + blockSeed + 7) * 1.5;
+
+            this.ctx.beginPath();
             
-            const wRect = (rx, ry, rw, rh, seed) => {
-                const a = 1.0;
-                this.ctx.beginPath();
-                this.ctx.moveTo(rx + getJit(15, a, seed), ry + getJit(17, a, seed + 1));
-                this.ctx.lineTo(rx + rw + getJit(13, a, seed + 2), ry + getJit(19, a, seed + 3));
-                this.ctx.lineTo(rx + rw + getJit(14, a, seed + 4), ry + rh + getJit(16, a, seed + 5));
-                this.ctx.lineTo(rx + getJit(18, a, seed + 6), ry + rh + getJit(12, a, seed + 7));
-                this.ctx.closePath();
-                this.ctx.stroke();
+            // Helper for adding a wiggled rect to the current path
+            const addWiggledRect = (rx, ry, rw, rh) => {
+                this.ctx.moveTo(rx + j1x, ry + j1y);
+                this.ctx.lineTo(rx + rw + j2x, ry + j2y);
+                this.ctx.lineTo(rx + rw + j3x, ry + rh + j3y);
+                this.ctx.lineTo(rx + j4x, ry + rh + j4y);
+                this.ctx.lineTo(rx + j1x, ry + j1y);
             };
 
-            this.ctx.setLineDash([12, 6]);
-            this.ctx.lineDashOffset = -t * 8;
-            wRect(px + 2, py + 2, ts - 4, ts - 4, 100);
+            // Main Outline
+            addWiggledRect(px + 2, py + 2, ts - 4, ts - 4);
             
             if (type === 'PRISM' || type === 'prism') {
                 const winMargin = 6;
-                this.ctx.setLineDash([8, 4]);
-                this.ctx.lineDashOffset = -t * 6;
-                wRect(px + winMargin, py + winMargin, ts - winMargin*2, ts - winMargin*2, 200);
-                
+                addWiggledRect(px + winMargin, py + winMargin, ts - winMargin*2, ts - winMargin*2);
+            } else {
+                const bcs = 8;
+                addWiggledRect(px + 2, py + 2, bcs, bcs);
+                addWiggledRect(px + ts - bcs - 2, py + 2, bcs, bcs);
+                addWiggledRect(px + 2, py + ts - bcs - 2, bcs, bcs);
+                addWiggledRect(px + ts - bcs - 2, py + ts - bcs - 2, bcs, bcs);
+                addWiggledRect(px + 6, py + 6, ts - 12, ts - 12);
+            }
+            
+            this.ctx.stroke(); // ONE STROKE for the entire block structure
+
+            // Triangle/Mirror (needs separate path if rotated)
+            if (type === 'PRISM' || type === 'prism') {
                 this.ctx.save();
-                const mirrorRotation = visualAngle !== undefined ? visualAngle : (logicalDir * (Math.PI / 2));
-                this.ctx.rotate(mirrorRotation);
+                this.ctx.rotate(visualAngle !== undefined ? visualAngle : (logicalDir * (Math.PI / 2)));
                 this.ctx.beginPath();
-                this.ctx.moveTo(10 + getJit(20, 1.2, 50), -10 + getJit(22, 1.2, 51));
-                this.ctx.lineTo(-10 + getJit(24, 1.2, 52), 10 + getJit(18, 1.2, 53));
+                this.ctx.moveTo(10 + j1x, -10 + j2y);
+                this.ctx.lineTo(-10 + j3x, 10 + j4y);
                 this.ctx.stroke();
                 this.ctx.restore();
             } else {
-                this.ctx.setLineDash([4, 2]);
-                this.ctx.lineDashOffset = -t * 5;
-                const bcs = 8;
-                wRect(px + 2, py + 2, bcs, bcs, 300);
-                wRect(px + ts - bcs - 2, py + 2, bcs, bcs, 400);
-                wRect(px + 2, py + ts - bcs - 2, bcs, bcs, 500);
-                wRect(px + ts - bcs - 2, py + ts - bcs - 2, bcs, bcs, 600);
-                wRect(px + 6, py + 6, ts - 12, ts - 12, 700);
-                
                 this.ctx.save();
                 this.ctx.rotate(visualAngle);
                 this.ctx.beginPath();
                 const triSize = 8;
-                this.ctx.moveTo(-triSize + getJit(30, 1.0, 10), -triSize + getJit(31, 1.0, 11));
-                this.ctx.lineTo(triSize + getJit(32, 1.0, 12), 0 + getJit(33, 1.0, 13));
-                this.ctx.lineTo(-triSize + getJit(34, 1.0, 14), triSize + getJit(35, 1.0, 15));
+                this.ctx.moveTo(-triSize + j1x, -triSize + j2y);
+                this.ctx.lineTo(triSize + j3x, 0 + j4y);
+                this.ctx.lineTo(-triSize + j1y, triSize + j2x);
                 this.ctx.closePath();
                 this.ctx.stroke();
                 this.ctx.restore();
             }
-            
-            this.ctx.globalAlpha = 0.1;
-            this.ctx.setLineDash([]);
-            wRect(px + 2, py + 2, ts - 4, ts - 4, 999);
-            this.ctx.globalAlpha = 1.0;
 
-            this.ctx.setLineDash([]); 
             this.ctx.restore();
             return;
         }
@@ -131,7 +128,7 @@ Object.assign(Graphics, {
                 this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 3;
             }
             this.ctx.beginPath(); this.ctx.moveTo(10, -10); this.ctx.lineTo(-10, 10); this.ctx.stroke();
-            if (isHit && Math.random() > 0.8) this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, `hsl(${(Date.now() / 10) % 360}, 100%, 75%)`, 'spark');
+            // if (isHit && Math.random() > 0.8) this.spawnParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, `hsl(${(Date.now() / 10) % 360}, 100%, 75%)`, 'spark'); // REMOVED
             this.ctx.restore();
             this.ctx.fillStyle = '#1a1a1a'; const bs = 2;
             this.ctx.fillRect(px + 4, py + 4, bs, bs); this.ctx.fillRect(px + ts - 6, py + 4, bs, bs); this.ctx.fillRect(px + 4, py + ts - 6, bs, bs); this.ctx.fillRect(px + ts - 6, py + ts - 6, bs, bs);

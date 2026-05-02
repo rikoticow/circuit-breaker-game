@@ -149,14 +149,15 @@ function init() {
                 }
                 return;
             }
-            if (e.key === 'ArrowUp' || e.key === 'w') game.movePlayer(0, -1);
-            else if (e.key === 'ArrowDown' || e.key === 's') game.movePlayer(0, 1);
-            else if (e.key === 'ArrowLeft' || e.key === 'a') game.movePlayer(-1, 0);
-            else if (e.key === 'ArrowRight' || e.key === 'd') game.movePlayer(1, 0);
-            else if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'e' || e.key === 'E') game.interact();
-            else if (e.key === 'Shift') game.toggleGrab();
-            else if (e.key === 'z' || e.key === 'Z') game.doUndo();
-            else if (e.key === 'r' || e.key === 'R') {
+            const key = e.key.toLowerCase();
+            if (key === 'arrowup' || key === 'w') game.movePlayer(0, -1);
+            else if (key === 'arrowdown' || key === 's') game.movePlayer(0, 1);
+            else if (key === 'arrowleft' || key === 'a') game.movePlayer(-1, 0);
+            else if (key === 'arrowright' || key === 'd') game.movePlayer(1, 0);
+            else if (e.key === ' ' || key === 'spacebar' || key === 'e') game.interact();
+            else if (key === 'shift') game.toggleGrab();
+            else if (key === 'z') game.doUndo();
+            else if (key === 'r') {
                 if (rebootConfirmTimer) {
                     // 2nd press within 3s: Actually Reboot
                     clearTimeout(rebootConfirmTimer);
@@ -182,14 +183,14 @@ function init() {
                     }, 3000);
                 }
             }
-            else if (e.key === 'p' || e.key === 'P') {
+            else if (key === 'p') {
                 Graphics.clearParticles();
                 game.loadLevel(game.levelIndex + 1);
             }
         } else if (game.state === 'LEVEL_COMPLETE') {
             // Already handled automatically in game.update
         } else if (game.state === 'GAMEOVER') {
-            if (e.key === 'r' || e.key === 'R') {
+            if (key === 'r') {
                 Graphics.clearParticles();
                 game.score = 0;
                 game.lives = 3;
@@ -200,7 +201,7 @@ function init() {
                 game.transitionStayClosed = false;
             }
         } else if (game.state === 'VICTORY') {
-            if (e.key === 'r' || e.key === 'R') {
+            if (key === 'r') {
                 game.startTransition(() => {
                     game.lives = 3;
                     game.score = 0;
@@ -519,10 +520,6 @@ function gameLoop(timestamp) {
         Graphics.drawButton(btn.x, btn.y, btn.isPressed, btn.behavior, btn.charge || 0);
     }
 
-    // Pass 1.075: Draw Doors (moved from background)
-    for (const d of game.doors) {
-        Graphics.drawDoor(d.x, d.y, d.state, d.error, d.openPct);
-    }
     
     // Pass 1.08: Draw Gravity Buttons
     for (const gb of game.gravityButtons) {
@@ -667,7 +664,7 @@ function gameLoop(timestamp) {
 
     // Draw Lasers and Particles ABOVE the blackout (Emissive light)
     for (const e of game.emitters) {
-        Graphics.drawLaser(e, animFrame);
+        Graphics.drawLaser(e, animFrame, game.transitionState === 'NONE');
     }
     Graphics.drawParticles(game);
 

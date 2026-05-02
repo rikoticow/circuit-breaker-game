@@ -43,7 +43,7 @@ Object.assign(Graphics, {
         this.ctx.restore();
     },
 
-    drawLaser(e, frame) {
+    drawLaser(e, frame, allowParticles = true) {
         if (!e.laserPath || e.laserPath.length < 2) return;
         const ts = this.tileSize;
         const pixelPath = [];
@@ -74,77 +74,57 @@ Object.assign(Graphics, {
         }
 
         this.ctx.save();
-        const flicker = (Math.random() - 0.5) * 10;
-        const beamIntensity = 0.4 + Math.random() * 0.4;
+        this.ctx.globalCompositeOperation = 'lighter';
+        
+        // --- Visual Variation (Subtle Jitter & Pulse) ---
+        const time = frame * 0.5;
+        const pulse = Math.sin(time) * 0.5 + 0.5;
         const targetNode = e.laserPath[e.laserPath.length - 1];
 
-        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.1 * beamIntensity})`;
-        this.ctx.lineWidth = 24 + flicker;
+        // 1. Core Border (Translucent purple with subtle pulsating width)
+        this.ctx.strokeStyle = 'rgba(191, 0, 255, 0.5)';
+        this.ctx.lineWidth = 7 + pulse * 2;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
+        
         this.ctx.beginPath();
-        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
-        for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
-        this.ctx.stroke();
-
-        this.ctx.strokeStyle = `rgba(230, 180, 255, ${0.8 * beamIntensity})`;
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
-        for (let i = 0; i < pixelPath.length - 1; i++) {
-            const start = pixelPath[i];
-            const end = pixelPath[i + 1];
-            const segments = 8;
-            const sdx = (end.x - start.x) / segments;
-            const sdy = (end.y - start.y) / segments;
-            const isVert = Math.abs(end.x - start.x) < 1;
-            for (let j = 1; j < segments; j++) {
-                this.ctx.lineTo(start.x + sdx * j + (isVert ? (Math.random() - 0.5) * 12 : 0), start.y + sdy * j + (!isVert ? (Math.random() - 0.5) * 12 : 0));
-            }
-            this.ctx.lineTo(end.x, end.y);
+        // Minimal jitter to the start point
+        const startJitter = Math.sin(time * 1.1) * 0.3;
+        this.ctx.moveTo(pixelPath[0].x + startJitter, pixelPath[0].y + startJitter);
+        
+        for (let i = 1; i < pixelPath.length; i++) {
+            // Very subtle vibration offset
+            const segmentJitterX = Math.sin(time * 1.5 + i * 2.0) * 0.3;
+            const segmentJitterY = Math.cos(time * 1.3 + i * 1.7) * 0.3;
+            this.ctx.lineTo(pixelPath[i].x + segmentJitterX, pixelPath[i].y + segmentJitterY);
         }
         this.ctx.stroke();
 
-        this.ctx.strokeStyle = `rgba(191, 0, 255, ${0.6 * beamIntensity})`;
-        this.ctx.lineWidth = 8 + (Math.random() - 0.5) * 4;
-        this.ctx.beginPath();
-        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
-        for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
+        // 2. Inner Beam (Semi-transparent White core, slightly thinner)
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 + pulse * 0.2})`;
+        this.ctx.lineWidth = 2 + pulse * 1.5;
         this.ctx.stroke();
 
-        this.ctx.strokeStyle = '#fff';
-        this.ctx.lineWidth = 4 + (Math.random() - 0.5) * 2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(pixelPath[0].x, pixelPath[0].y);
-        for (let i = 1; i < pixelPath.length; i++) this.ctx.lineTo(pixelPath[i].x, pixelPath[i].y);
-        this.ctx.stroke();
-
-        if (targetNode.type !== 'NONE') {
+        const type = targetNode.type;
+        if (type === 'WALL' || type === 'DOOR' || type === 'PLAYER') {
             const tx = pixelPath[pixelPath.length - 1].x;
             const ty = pixelPath[pixelPath.length - 1].y;
-            const flareSize = 10 + Math.random() * 15;
-            const grad = this.ctx.createRadialGradient(tx, ty, 0, tx, ty, flareSize);
-            grad.addColorStop(0, '#fff');
-            grad.addColorStop(0.3, 'rgba(191, 0, 255, 0.8)');
-            grad.addColorStop(1, 'rgba(191, 0, 255, 0)');
-            this.ctx.fillStyle = grad;
-            this.ctx.beginPath();
-            this.ctx.arc(tx, ty, flareSize, 0, Math.PI * 2);
-            this.ctx.fill();
-            if (frame % 2 === 0) {
+            
+            if (frame % 2 === 0 && allowParticles) {
                 this.spawnParticle(tx, ty, '#bf00ff', 'spark');
-                if (Math.random() > 0.5) this.spawnParticle(tx, ty, '#ffffff', 'spark');
+                if (Math.random() > 0.4) this.spawnParticle(tx, ty, '#ffffff', 'spark');
             }
-            this.ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-            this.ctx.lineWidth = 1;
-            for (let i = 0; i < 6; i++) {
-                const ang = Math.random() * Math.PI * 2;
-                const l = 5 + Math.random() * 15;
-                this.ctx.beginPath();
-                this.ctx.moveTo(tx, ty);
-                this.ctx.lineTo(tx + Math.cos(ang) * l, ty + Math.sin(ang) * l);
-                this.ctx.stroke();
-            }
+
+            // Translucent Flare (Additive matching)
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            this.ctx.beginPath();
+            this.ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            this.ctx.fillStyle = 'rgba(191, 0, 255, 0.3)';
+            this.ctx.beginPath();
+            this.ctx.arc(tx, ty, 8, 0, Math.PI * 2);
+            this.ctx.fill();
         }
         this.ctx.restore();
     }
