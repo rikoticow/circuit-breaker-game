@@ -34,44 +34,36 @@ const PALETTE = [
     { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}, {c: '⚡', n: 'Gatilho'}] }
 ];
 
-let levelsData = [];
-let chaptersData = [];
-let currentLevelIdx = 0;
-let currentChapterIdx = 0;
-let currentMap = [];
-let currentOverlayMap = [];
-let currentBlocksMap = [];
-let selectedTile = '#';
-let activeLayer = 'base';
-let currentTool = 'brush';
-let isDrawing = false;
-let startX = -1, startY = -1;
-let historyStack = [];
-let clipboard = null;
-let selectionStart = null;
-let selectionEnd = null;
-let hoverPos = {x: 0, y: 0};
-let editTargets = [];
-let isTestMode = false;
-let testGame = null;
-let testAnimFrame = 0;
-let testLastTime = 0;
-let rebootConfirmTimer = null;
-let originalLevels = null;
-let canvas, ctx;
-let mockGame = null;
-let animFrame = 0;
-let hoveredChannel = null;
-
-// Expose core variables to window for other modules
-Object.assign(window, {
-    PALETTE, levelsData, chaptersData, currentLevelIdx, currentChapterIdx,
-    currentMap, currentOverlayMap, currentBlocksMap, selectedTile,
-    activeLayer, currentTool, isDrawing, historyStack, clipboard,
-    selectionStart, selectionEnd, hoverPos, editTargets, isTestMode,
-    testGame, testAnimFrame, testLastTime, rebootConfirmTimer,
-    originalLevels, canvas, ctx, mockGame, animFrame, hoveredChannel
-});
+window.levelsData = [];
+window.chaptersData = [];
+window.currentLevelIdx = 0;
+window.currentChapterIdx = 0;
+window.currentMap = [];
+window.currentOverlayMap = [];
+window.currentBlocksMap = [];
+window.selectedTile = '#';
+window.activeLayer = 'base';
+window.currentTool = 'brush';
+window.isDrawing = false;
+window.startX = -1;
+window.startY = -1;
+window.historyStack = [];
+window.clipboard = null;
+window.selectionStart = null;
+window.selectionEnd = null;
+window.hoverPos = {x: 0, y: 0};
+window.editTargets = [];
+window.isTestMode = false;
+window.testGame = null;
+window.testAnimFrame = 0;
+window.testLastTime = 0;
+window.rebootConfirmTimer = null;
+window.originalLevels = null;
+window.canvas = null;
+window.ctx = null;
+window.mockGame = null;
+window.animFrame = 0;
+window.hoveredChannel = null;
 
 window.onload = () => {
     levelsData = JSON.parse(JSON.stringify(LEVELS));
@@ -226,7 +218,10 @@ function rebuildMock() {
 
             let bc = currentBlocksMap[y][x];
             if (['>', '<', '^', 'v', 'y', 'p'].includes(bc)) {
-                let dir = 0; if (bc === '<') dir = 2; if (bc === '^') dir = 3; if (bc === 'v') dir = 1;
+                let dir = (lvl.links && lvl.links[`${x},${y}_dir`]);
+                if (dir === undefined) {
+                    dir = 0; if (bc === '<') dir = 2; if (bc === '^') dir = 3; if (bc === 'v') dir = 1;
+                }
                 if (!mockGame.blocks.some(b => b.x === x && b.y === y)) {
                     let phase = bc === 'y' ? 'SOLAR' : (bc === 'p' ? 'LUNAR' : null);
                     mockGame.blocks.push({ x, y, dir, phase });
@@ -306,6 +301,21 @@ function getGridPos(e) {
     return {x: Math.max(0, Math.min(currentMap[0].length - 1, x)), y: Math.max(0, Math.min(currentMap.length - 1, y))};
 }
 
+function getLinePoints(x1, y1, x2, y2) {
+    let points = [];
+    let dx = Math.abs(x2 - x1), dy = Math.abs(y2 - y1);
+    let sx = (x1 < x2) ? 1 : -1, sy = (y1 < y2) ? 1 : -1;
+    let err = dx - dy;
+    while (true) {
+        points.push({ x: x1, y: y1 });
+        if (x1 === x2 && y1 === y2) break;
+        let e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; x1 += sx; }
+        if (e2 < dx) { err += dx; y1 += sy; }
+    }
+    return points;
+}
+
 function getNextRotation(c) {
     if (c === 'H') return 'V'; if (c === 'V') return 'H';
     if (c === 'L') return 'J'; if (c === 'J') return 'C'; if (c === 'C') return 'F'; if (c === 'F') return 'L';
@@ -345,7 +355,10 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     } else if (['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(c)) Graphics.drawWire(x, y, c, mockGame.poweredWires.get(`${x},${y}`), animFrame);
     else if (c === 'S') Graphics.drawScrap(x, y, animFrame);
     else if (['>', '<', '^', 'v', 'y', 'p'].includes(c)) {
-        let dir = 0; if(c==='v') dir=1; if(c==='<') dir=2; if(c==='^') dir=3;
+        let dir = (levelsData[currentLevelIdx].links?.[`${x},${y}_dir`]);
+        if (dir === undefined) {
+            dir = 0; if(c==='v') dir=1; if(c==='<') dir=2; if(c==='^') dir=3;
+        }
         Graphics.drawBlock(x, y, dir * Math.PI / 2, mockGame.poweredBlocks.get(`${x},${y}`), 0, dir, 'NORMAL', 0, c==='y'?'SOLAR':(c==='p'?'LUNAR':null), mockGame.isSolarPhase);
     } else if (['(', ')', '[', ']'].includes(c)) {
         let dir = 2; if(c===')') dir=0; if(c==='[') dir=3; if(c===']') dir=1;
@@ -362,12 +375,22 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
     else if (c === 'O') {
         const p = mockGame.portals.find(p => p.x === x && p.y === y);
         Graphics.drawPortal(x, y, p?.channel || 0, animFrame, p?.color || '#ffd700');
+    } else if (c === '?') {
+        const qf = mockGame.quantumFloors.find(f => f.x === x && f.y === y);
+        Graphics.drawQuantumFloor(x, y, qf?.active !== false, animFrame);
+    } else if (c === 'Q') Graphics.drawCatalyst(x, y, true, animFrame);
+    else if (c === 'G') Graphics.drawGlassWall(x, y, animFrame, true);
+    else if (c === '!') Graphics.drawSingularitySwitcher(x, y, true, animFrame);
+    else if (['n', 's', 'e', 'w'].includes(c)) {
+        let d = DIRS.UP; if (c === 's') d = DIRS.DOWN; if (c === 'e') d = DIRS.RIGHT; if (c === 'w') d = DIRS.LEFT;
+        Graphics.drawGravityButton(x, y, d, animFrame, 0, false);
     } else if (c === '💬') { ctx.fillStyle = '#00ff9f'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('💬', x*32+16, y*32+24); }
     else if (c === '⚡') { ctx.fillStyle = '#ffcc00'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('⚡', x*32+16, y*32+24); }
     ctx.restore();
 }
 
 function renderLoop() {
+    const lvl = levelsData[currentLevelIdx];
     if (isTestMode || !mockGame) return requestAnimationFrame(renderLoop);
     Graphics.clear();
     const h = currentMap.length, w = currentMap[0].length;
@@ -389,9 +412,34 @@ function renderLoop() {
         if (currentMap[y][x] === '#' || currentMap[y][x] === 'W') drawChar(x, y, currentMap[y][x]);
     }
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const lvl = levelsData[currentLevelIdx];
         if (lvl.dialogues?.[`${x},${y}`]) { ctx.fillStyle = '#00ff9f'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('💬', x*32+16, y*32+24); }
         if (lvl.zoneTriggers?.some(t => t.x === x && t.y === y)) { ctx.fillStyle = '#ffcc00'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('⚡', x*32+16, y*32+24); }
+    }
+    
+    // Render Trigger Areas
+    if (lvl.zoneTriggers) {
+        lvl.zoneTriggers.forEach(t => {
+            ctx.save();
+            if (t.w !== undefined && t.h !== undefined) {
+                ctx.fillStyle = 'rgba(255, 204, 0, 0.15)';
+                ctx.strokeStyle = 'rgba(255, 204, 0, 0.6)';
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                const ox = (t.offX || 0);
+                const oy = (t.offY || 0);
+                ctx.fillRect((t.x + ox) * 32, (t.y + oy) * 32, t.w * 32, t.h * 32);
+                ctx.strokeRect((t.x + ox) * 32, (t.y + oy) * 32, t.w * 32, t.h * 32);
+            } else if (t.radius > 0) {
+                ctx.beginPath();
+                ctx.arc(t.x * 32 + 16, t.y * 32 + 16, t.radius * 32, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 204, 0, 0.15)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 204, 0, 0.6)';
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+            }
+            ctx.restore();
+        });
     }
     for (const gb of ghostBlocks) drawChar(gb.x, gb.y, gb.c, 0.4, true);
     if (!isDrawing && currentTool !== 'select') drawChar(hoverPos.x, hoverPos.y, currentTool === 'eraser' ? ' ' : selectedTile, 0.5);
@@ -399,9 +447,18 @@ function renderLoop() {
     for(let x=0; x<=w*32; x+=32) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h*32); ctx.stroke(); }
     for(let y=0; y<=h*32; y+=32) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w*32,y); ctx.stroke(); }
     if (selectionStart && selectionEnd) {
-        const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
-        const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
-        ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(x1*32, y1*32, (x2-x1+1)*32, (y2-y1+1)*32); ctx.setLineDash([]);
+        ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+        if (currentTool === 'line') {
+            ctx.beginPath();
+            ctx.moveTo(selectionStart.x * 32 + 16, selectionStart.y * 32 + 16);
+            ctx.lineTo(selectionEnd.x * 32 + 16, selectionEnd.y * 32 + 16);
+            ctx.stroke();
+        } else {
+            const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
+            const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
+            ctx.strokeRect(x1 * 32, y1 * 32, (x2 - x1 + 1) * 32, (y2 - y1 + 1) * 32);
+        }
+        ctx.setLineDash([]);
     }
     if (hoveredChannel !== null) {
         const lvl = levelsData[currentLevelIdx];
@@ -423,6 +480,41 @@ function renderLoop() {
 function setupEvents() {
     const btnTest = document.getElementById('btn-test');
     document.getElementById('btn-test').onclick = startTest;
+    canvas.oncontextmenu = (e) => e.preventDefault();
+    canvas.onwheel = (e) => {
+        e.preventDefault();
+        const delta = Math.sign(e.deltaY);
+        
+        if (e.shiftKey) {
+            // Cycle tools
+            const tools = ['brush', 'eraser', 'rect', 'line', 'select'];
+            let idx = tools.indexOf(currentTool);
+            idx = (idx + delta + tools.length) % tools.length;
+            setTool(tools[idx]);
+        } else {
+            // Cycle tiles in current layer
+            const validTiles = [];
+            PALETTE.forEach(group => {
+                const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
+                const isBlockGroup = group.title === "Amplificadores";
+                const isEventGroup = group.title === "Eventos";
+                const isGravityGroup = group.title === "Gravidade";
+                
+                if (activeLayer === 'overlays' && (isOverlayGroup || isGravityGroup)) group.tiles.forEach(t => validTiles.push(t.c));
+                else if (activeLayer === 'blocks' && isBlockGroup) group.tiles.forEach(t => validTiles.push(t.c));
+                else if (activeLayer === 'events' && isEventGroup) group.tiles.forEach(t => validTiles.push(t.c));
+                else if (activeLayer === 'base' && (!isOverlayGroup && !isBlockGroup && !isEventGroup && !isGravityGroup)) group.tiles.forEach(t => validTiles.push(t.c));
+            });
+            
+            if (validTiles.length > 0) {
+                let idx = validTiles.indexOf(selectedTile);
+                if (idx === -1) idx = 0;
+                idx = (idx + delta + validTiles.length) % validTiles.length;
+                selectedTile = validTiles[idx];
+                buildPalette();
+            }
+        }
+    };
     setupPropertyListeners();
     document.getElementById('lvl-name').oninput = () => { levelsData[currentLevelIdx].name = document.getElementById('lvl-name').value; updateLevelList(); };
     document.getElementById('lvl-name').onchange = rebuildMock;
@@ -458,42 +550,160 @@ function setupEvents() {
             e.preventDefault();
             if (levelsData[currentLevelIdx].dialogues?.[`${p.x},${p.y}`]) {
                 switchTab('tab-dialogues');
-                const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
-                if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.borderColor = '#00ff9f'; setTimeout(() => card.style.borderColor = '#333', 2000); }
+                setTimeout(() => {
+                    const card = document.getElementById(`diag-card-${p.x}-${p.y}`);
+                    if (card) { 
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+                        card.style.borderColor = '#00ff9f'; 
+                        card.style.boxShadow = '0 0 15px rgba(0, 255, 159, 0.4)';
+                        setTimeout(() => { card.style.borderColor = '#333'; card.style.boxShadow = ''; }, 2000); 
+                    }
+                }, 100);
+                return;
+            }
+            if (levelsData[currentLevelIdx].zoneTriggers?.some(t => t.x === p.x && t.y === p.y)) {
+                switchTab('tab-triggers');
+                setTimeout(() => {
+                    const list = document.getElementById('trigger-manager-list');
+                    const cards = list.querySelectorAll('.trigger-card');
+                    for (const card of cards) {
+                        if (card.innerText.includes(`GATILHO [${p.x},${p.y}]`)) {
+                            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            card.style.borderColor = '#ffcc00';
+                            card.style.boxShadow = '0 0 15px rgba(255, 204, 0, 0.4)';
+                            setTimeout(() => { card.style.borderColor = '#333'; card.style.boxShadow = ''; }, 2000);
+                            break;
+                        }
+                    }
+                }, 100);
                 return;
             }
             // Rotation logic
             const map = activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap);
-            map[p.y][p.x] = getNextRotation(map[p.y][p.x]);
+            const char = map[p.y][p.x];
+            
+            if (['E', 'M', 'y', 'p'].includes(char)) {
+                const lvl = levelsData[currentLevelIdx];
+                if (!lvl.links) lvl.links = {};
+                const key = `${p.x},${p.y}_dir`;
+                lvl.links[key] = ((lvl.links[key] || 0) + 1) % 4;
+            } else {
+                map[p.y][p.x] = getNextRotation(char);
+            }
             saveHistory(); rebuildMock(); return;
         }
+        
         isDrawing = true; startX = p.x; startY = p.y;
-        if (currentTool === 'brush' || e.button === 2) {
+        
+        if (currentTool === 'select' || currentTool === 'rect' || currentTool === 'line') {
+            selectionStart = { ...p };
+            selectionEnd = { ...p };
+            if (currentTool === 'select') {
+                editTargets = [];
+                document.getElementById('floating-props').style.display = 'none';
+            }
+        } else if (currentTool === 'brush' || e.button === 2) {
             const char = (e.button === 2) ? ' ' : selectedTile;
             const map = activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap);
             map[p.y][p.x] = char;
-            if (activeLayer === 'events' && char === '💬') {
+            if (activeLayer === 'events') {
                 const lvl = levelsData[currentLevelIdx];
-                if (!lvl.dialogues) lvl.dialogues = {};
-                if (!lvl.dialogues[`${p.x},${p.y}`]) lvl.dialogues[`${p.x},${p.y}`] = { text: "Nova fala...", icon: "central", trigger: "walk" };
-                updateDialogueManager();
+                if (char === '💬') {
+                    if (!lvl.dialogues) lvl.dialogues = {};
+                    if (!lvl.dialogues[`${p.x},${p.y}`]) lvl.dialogues[`${p.x},${p.y}`] = { text: "Nova fala...", icon: "central", trigger: "walk" };
+                    updateDialogueManager();
+                } else if (char === '⚡') {
+                    if (!lvl.zoneTriggers) lvl.zoneTriggers = [];
+                    if (!lvl.zoneTriggers.some(t => t.x === p.x && t.y === p.y)) {
+                        lvl.zoneTriggers.push({ x: p.x, y: p.y, radius: 0, oneShot: true, events: [] });
+                    }
+                    updateTriggerManagerList();
+                }
             }
             rebuildMock();
         }
     };
     canvas.onmousemove = (e) => {
         const p = getGridPos(e); hoverPos = p;
-        if (isDrawing && (currentTool === 'brush' || e.buttons & 2)) {
+        if (!isDrawing) return;
+
+        if (currentTool === 'select' || currentTool === 'rect' || currentTool === 'line') {
+            selectionEnd = { ...p };
+        } else if (currentTool === 'brush' || e.buttons & 2) {
             const char = (e.buttons & 2) ? ' ' : selectedTile;
             const map = activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap);
             map[p.y][p.x] = char; rebuildMock();
         }
     };
-    canvas.onmouseup = () => { isDrawing = false; saveHistory(); };
+    canvas.onmouseup = () => {
+        if (!isDrawing) return;
+        isDrawing = false;
+
+        if (currentTool === 'select' && selectionStart && selectionEnd) {
+            const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
+            const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
+            editTargets = [];
+            for (let y = y1; y <= y2; y++) {
+                for (let x = x1; x <= x2; x++) {
+                    editTargets.push({ x, y });
+                }
+            }
+            if (editTargets.length > 0) {
+                const props = document.getElementById('floating-props');
+                props.style.display = 'block';
+                // Adjust position to viewport
+                const rect = canvas.getBoundingClientRect();
+                const x = (selectionEnd.x * 32) + rect.left + 40;
+                const y = (selectionEnd.y * 32) + rect.top;
+                props.style.left = `${Math.min(window.innerWidth - 300, x)}px`;
+                props.style.top = `${Math.min(window.innerHeight - 400, y)}px`;
+                updatePropertyPanel();
+            }
+        } else if ((currentTool === 'rect' || currentTool === 'line') && selectionStart && selectionEnd) {
+            const map = activeLayer === 'base' ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : currentBlocksMap);
+            if (currentTool === 'rect') {
+                const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
+                const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
+                for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) map[y][x] = selectedTile;
+            } else {
+                const points = getLinePoints(selectionStart.x, selectionStart.y, selectionEnd.x, selectionEnd.y);
+                points.forEach(pt => { if (map[pt.y]) map[pt.y][pt.x] = selectedTile; });
+            }
+            selectionStart = null; selectionEnd = null;
+            saveHistory(); rebuildMock();
+        } else {
+            saveHistory();
+        }
+    };
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'F3') {
+            e.preventDefault();
+            if (isTestMode) stopTest();
+            else startTest();
+            return;
+        }
+
         if (isTestMode) { handleTestInput(e); return; }
+
+        if (e.key === 'Escape') {
+            document.getElementById('floating-props').style.display = 'none';
+            editTargets = [];
+            // If in input, blur it
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+                document.activeElement.blur();
+            }
+            return;
+        }
+
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
         if (e.ctrlKey && e.key === 'z') undo();
+
+        const key = e.key.toLowerCase();
+        if (key === 'q') setLayer('base');
+        if (key === 'w') setLayer('overlays');
+        if (key === 'e') setLayer('blocks');
+        if (key === 'r') setLayer('events');
     });
 }
 
-Object.assign(window, { loadLevel, rebuildMock, saveHistory, undo, getGridPos, getNextRotation, drawChar, renderLoop, setupEvents });
+Object.assign(window, { loadLevel, rebuildMock, saveHistory, undo, getGridPos, getNextRotation, drawChar, renderLoop, setupEvents, getLinePoints });

@@ -347,22 +347,29 @@ Object.assign(window.AudioSys, {
     },
 
     playAlarm() {
+        if (typeof audioCtx === 'undefined') return;
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const now = audioCtx.currentTime;
-        // Dual-tone siren
-        const playSiren = (freq, delay) => {
+        
+        // Two-tone siren
+        [440, 554].forEach((freq, i) => {
             const osc = audioCtx.createOscillator();
             const g = audioCtx.createGain();
+            
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq, now + delay);
-            osc.frequency.linearRampToValueAtTime(freq * 1.2, now + delay + 0.2);
-            g.gain.setValueAtTime(0, now + delay);
-            g.gain.linearRampToValueAtTime(0.05, now + delay + 0.05);
-            g.gain.linearRampToValueAtTime(0, now + delay + 0.4);
-            osc.connect(g); g.connect(audioCtx.destination);
-            osc.start(now + delay); osc.stop(now + delay + 0.4);
-        };
-        playSiren(440, 0);
-        playSiren(330, 0.4);
+            osc.frequency.setValueAtTime(freq, now);
+            osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + 0.4);
+            
+            g.gain.setValueAtTime(0, now);
+            const delay = i * 0.4;
+            g.gain.linearRampToValueAtTime(0.2, now + delay + 0.05); // Louder (0.2)
+            g.gain.linearRampToValueAtTime(0, now + delay + 0.35);
+            
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            
+            osc.start(now + delay);
+            osc.stop(now + delay + 0.4);
+        });
     }
 });

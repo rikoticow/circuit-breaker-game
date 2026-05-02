@@ -1,7 +1,12 @@
 // Simple Web Audio API Synthesizer - Core Logic
 const audioCtx = window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+const musicGain = audioCtx.createGain();
+musicGain.gain.value = 0.5; // 50% Volume as requested
+musicGain.connect(audioCtx.destination);
+
 const AudioSys = window.AudioSys = {
+    musicGain: musicGain,
     playTone(freq, type, duration, vol=0.1, startTime=null) {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const now = startTime || audioCtx.currentTime;

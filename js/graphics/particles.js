@@ -1,5 +1,5 @@
 Object.assign(Graphics, {
-    spawnParticle(x, y, color, type = 'spark') {
+    spawnParticle(x, y, color, type = 'spark', hasLight = false) {
         const p = {
             x: x, y: y,
             vx: type === 'smoke' ? (Math.random() - 0.5) * 0.4 : (type === 'micro-spark' ? (Math.random() - 0.5) * 6 : (type === 'debris' ? (Math.random() - 0.5) * 8 : (Math.random() - 0.5) * 5)),
@@ -7,6 +7,7 @@ Object.assign(Graphics, {
             life: 1.0,
             color: color,
             type: type,
+            hasLight: hasLight,
             size: type === 'micro-spark' ? 1 + Math.random() : (type === 'smoke' ? 2 + Math.random() * 3 : 4)
         };
         this.particles.push(p);

@@ -9,7 +9,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.2);
         gain.gain.setValueAtTime(0.4, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.2);
     },
 
@@ -24,7 +24,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.15, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -34,7 +34,7 @@ Object.assign(window.AudioSys, {
         osc.type = 'square'; osc.frequency.value = 8000;
         gain.gain.setValueAtTime(0.02, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.03);
     },
 
@@ -45,7 +45,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.15);
         gain.gain.setValueAtTime(0.5, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -60,7 +60,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.2, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -83,7 +83,7 @@ Object.assign(window.AudioSys, {
         const fifth = audioCtx.createOscillator(); fifth.type = 'sawtooth'; fifth.frequency.value = freq * 1.5; fifth.detune.value = -5;
         gain.gain.setValueAtTime(0.08, time); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         [root, root2, fifth].forEach(o => { o.connect(shaper); o.start(time); o.stop(time + duration); });
-        shaper.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        shaper.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playMetalLead(freq, time) {
@@ -100,7 +100,7 @@ Object.assign(window.AudioSys, {
         filter.type = 'lowpass'; filter.frequency.setValueAtTime(4000, time);
         filter.frequency.exponentialRampToValueAtTime(1000, time + duration);
         osc1.connect(filter); osc2.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration);
     },
@@ -125,7 +125,7 @@ Object.assign(window.AudioSys, {
         const fifth = audioCtx.createOscillator(); fifth.type = 'sawtooth'; fifth.frequency.value = freq * 1.5;
         gain.gain.setValueAtTime(0.08, time); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         [root, root2, fifth].forEach(o => { o.connect(shaper); o.start(time); o.stop(time + duration); });
-        shaper.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        shaper.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playBladeRunnerPad(step, bar, time) {
@@ -139,7 +139,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(0.03, time + 1.0);
         gain.gain.linearRampToValueAtTime(0, time + 3.0);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 3.0);
     },
 
@@ -154,7 +154,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.06, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -180,7 +180,7 @@ Object.assign(window.AudioSys, {
             osc1.start(time); osc2.start(time);
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     play8BitBass(freq, time, isAggressive) {
@@ -190,7 +190,7 @@ Object.assign(window.AudioSys, {
         osc.type = 'square'; osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.08, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -217,7 +217,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.setValueAtTime(freq, time);
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 3000;
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -241,7 +241,7 @@ Object.assign(window.AudioSys, {
             osc.type = 'triangle'; osc.frequency.value = freq;
             osc.connect(filter); osc.start(time); osc.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playHydroBass(freq, time) {
@@ -255,7 +255,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(100, time + 0.1);
         gain.gain.setValueAtTime(0.3, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -275,7 +275,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(volume, time + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -288,7 +288,7 @@ Object.assign(window.AudioSys, {
             const noteTime = time + (index * 0.05);
             gain.gain.setValueAtTime(0.05, noteTime);
             gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.05);
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(this.musicGain);
             osc.start(noteTime); osc.stop(noteTime + 0.05);
         });
     },
@@ -300,7 +300,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(10, time + 0.15);
         gain.gain.setValueAtTime(0.6, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -316,7 +316,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(0.15, time + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -331,7 +331,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.05, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -354,7 +354,7 @@ Object.assign(window.AudioSys, {
             osc1.start(time); osc2.start(time);
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playSlapBass(freq, time, isPop = false) {
@@ -367,7 +367,7 @@ Object.assign(window.AudioSys, {
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.setValueAtTime(isPop ? 5000 : 2500, time);
         filter.frequency.exponentialRampToValueAtTime(100, time + duration);
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -378,7 +378,7 @@ Object.assign(window.AudioSys, {
         osc.type = 'sine'; osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.3, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -390,7 +390,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(isHigh ? 250 : 150, time + 0.1);
         gain.gain.setValueAtTime(0.2, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -409,7 +409,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 3500;
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); lfo.start(time);
         osc.stop(time + duration); lfo.stop(time + duration);
     },
@@ -426,7 +426,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.015, time);
         gain.gain.linearRampToValueAtTime(0.01, time + duration);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -449,7 +449,7 @@ Object.assign(window.AudioSys, {
             osc1.start(time); osc2.start(time);
             osc1.stop(time + duration + 1.0); osc2.stop(time + duration + 1.0);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playExhaustedDrone(freq, time) {
@@ -464,7 +464,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 150;
-        osc.connect(waveShaper); waveShaper.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(waveShaper); waveShaper.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -484,7 +484,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.setValueAtTime(freq, time);
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 800;
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); lfo.start(time);
         osc.stop(time + duration); lfo.stop(time + duration);
     },
@@ -499,7 +499,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(0.3, time + 0.1);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+        osc1.connect(gain); osc2.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration);
     },
@@ -516,7 +516,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 4000;
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -534,7 +534,7 @@ Object.assign(window.AudioSys, {
             osc.type = 'sawtooth'; osc.frequency.value = freq;
             osc.connect(filter); osc.start(time); osc.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playBusterBass(freq, time) {
@@ -548,7 +548,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(200, time + 0.08);
         gain.gain.setValueAtTime(0.3, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -559,7 +559,7 @@ Object.assign(window.AudioSys, {
         osc.type = 'square'; osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.04, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -580,7 +580,7 @@ Object.assign(window.AudioSys, {
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass'; filter.frequency.value = 5000;
         osc1.connect(filter); osc2.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); lfo.stop(time + duration);
     },
@@ -592,7 +592,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(20, time + 0.1);
         gain.gain.setValueAtTime(0.7, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -607,7 +607,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.25, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -622,7 +622,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.08, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -646,7 +646,7 @@ Object.assign(window.AudioSys, {
             osc1.start(time); osc2.start(time);
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playXBass(freq, time) {
@@ -663,7 +663,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0.4, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc1.connect(filter); osc2.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration);
     },
@@ -695,7 +695,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc1.connect(waveShaper); osc2.connect(waveShaper);
         waveShaper.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration);
     },
@@ -709,7 +709,7 @@ Object.assign(window.AudioSys, {
         filter.type = 'highpass'; filter.frequency.value = 2000;
         gain.gain.setValueAtTime(0.05, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -721,7 +721,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(20, time + 0.1);
         gain.gain.setValueAtTime(0.8, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -736,7 +736,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.3, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -751,7 +751,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.15, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -766,7 +766,7 @@ Object.assign(window.AudioSys, {
             this.createOrganPipe(freq * 2, time, duration, gain, 0.5);
             this.createOrganPipe(freq * 3, time, duration, gain, 0.3);
         });
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
     },
 
     createOrganPipe(freq, time, duration, outGain, vol) {
@@ -795,7 +795,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc.start(time);
         osc.stop(time + duration);
     },
@@ -814,7 +814,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc.start(time);
         osc.stop(time + duration);
     },
@@ -844,7 +844,7 @@ Object.assign(window.AudioSys, {
         osc1.connect(filter);
         osc2.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); lfo.stop(time + duration);
     },
@@ -862,7 +862,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.5, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -874,7 +874,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(20, time + 0.1);
         gain.gain.setValueAtTime(0.8, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -898,7 +898,7 @@ Object.assign(window.AudioSys, {
             osc1.start(time); osc2.start(time);
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
     },
 
     playHarpSweep(chordFreqs, time, isFast = false) {
@@ -912,7 +912,7 @@ Object.assign(window.AudioSys, {
             osc.type = 'sine'; osc.frequency.value = freq * 2;
             gain.gain.setValueAtTime(0.06, noteTime);
             gain.gain.exponentialRampToValueAtTime(0.001, noteTime + duration);
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(this.musicGain);
             osc.start(noteTime); osc.stop(noteTime + duration);
         });
     },
@@ -928,7 +928,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(100, time + 0.08);
         gain.gain.setValueAtTime(0.35, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + duration);
     },
 
@@ -955,7 +955,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(6000, time + 0.05);
         filter.frequency.exponentialRampToValueAtTime(1500, time + duration);
         osc1.connect(filter); osc2.connect(filter); osc3.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); osc3.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); osc3.stop(time + duration); lfo.stop(time + duration);
     },
@@ -967,7 +967,7 @@ Object.assign(window.AudioSys, {
         osc.frequency.exponentialRampToValueAtTime(20, time + 0.1);
         gain.gain.setValueAtTime(0.8, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(this.musicGain);
         osc.start(time); osc.stop(time + 0.15);
     },
 
@@ -982,7 +982,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.3, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -997,7 +997,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.08, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -1014,7 +1014,7 @@ Object.assign(window.AudioSys, {
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.25, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -1044,7 +1044,7 @@ Object.assign(window.AudioSys, {
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
     },
 
     playClockTick(time, isHigh) {
@@ -1062,7 +1062,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc.start(time);
         osc.stop(time + duration);
     },
@@ -1084,7 +1084,7 @@ Object.assign(window.AudioSys, {
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(0.15, time + duration/2);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration); 
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -1102,7 +1102,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc.start(time);
         osc.stop(time + duration);
     },
@@ -1136,7 +1136,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(3000, time + 0.05);
         filter.frequency.exponentialRampToValueAtTime(1000, time + duration);
         osc1.connect(filter); osc2.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); lfo.stop(time + duration);
     },
@@ -1167,7 +1167,7 @@ Object.assign(window.AudioSys, {
             osc1.stop(time + duration); osc2.stop(time + duration);
         });
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
     },
 
     playFlamencoPluck(freq, time) {
@@ -1185,7 +1185,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.musicGain);
         osc.start(time);
         osc.stop(time + duration);
     },
@@ -1206,7 +1206,7 @@ Object.assign(window.AudioSys, {
         gain.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
         gain.gain.linearRampToValueAtTime(0.2, time + 0.04);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
         noise.start(time);
     },
 
@@ -1240,7 +1240,7 @@ Object.assign(window.AudioSys, {
         filter.frequency.exponentialRampToValueAtTime(3000, time + 0.1); 
         filter.frequency.exponentialRampToValueAtTime(1000, time + duration);
         osc1.connect(filter); osc2.connect(filter);
-        filter.connect(gain); gain.connect(audioCtx.destination);
+        filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); lfo.stop(time + duration);
     }

@@ -24,6 +24,7 @@ class GameState {
         this.isSolarPhase = true;
         this.singularitySwitchers = [];
         this.screenShakeTimer = 0;
+        this.screenShakeForce = 0.8;
         this.gravitySlidingDir = null;
         this.lastGravityDir = 0;
         this.gravityAcceleration = 0;
@@ -36,6 +37,9 @@ class GameState {
         this.remoteSignals = new Set();
         this.isSecurityAlert = false;
         this.alertPulse = 0;
+        this.alarmTimer = 0;
+        this.activeSequences = [];
+        this.frame = 0;
 
 
         this.score = 0;
@@ -278,10 +282,27 @@ class GameState {
         this.totalScrap = 0;
         this.debris = []; // Initialize persistent debris
         this.chargingStations = []; 
-        this.zoneTriggers = levelData.zoneTriggers || [];
+        this.zoneTriggers = JSON.parse(JSON.stringify(levelData.zoneTriggers || []));
         this.isBlackoutActive = levelData.startWithBlackout || false;
         this.blackoutAlpha = this.isBlackoutActive ? 1 : 0;
         this.remoteSignals.clear();
+        this.remoteChannels = new Set();
+        if (levelData.zoneTriggers) {
+            for (const trigger of levelData.zoneTriggers) {
+                // Check new sequence-based triggers
+                if (trigger.events) {
+                    for (const event of trigger.events) {
+                        if (event.type === 'remote_signal' && event.channel !== undefined) {
+                            this.remoteChannels.add(Number(event.channel));
+                        }
+                    }
+                } 
+                // Check legacy single-event triggers
+                else if (trigger.type === 'remote_signal' && trigger.channel !== undefined) {
+                    this.remoteChannels.add(Number(trigger.channel));
+                }
+            }
+        }
         this.isSecurityAlert = false;
         this.alertPulse = 0;
 
@@ -633,9 +654,13 @@ class GameState {
         const chan = Number(c.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         const isRemoteActive = this.remoteSignals.has(chan);
-        // If there are NO buttons on this channel, it's ON.
-        // If there ARE buttons, it's ON if ALL are pressed OR if a remote signal is active.
-        return chanButtons.length === 0 || chanButtons.every(b => b.isPressed) || isRemoteActive;
+        const hasRemoteTrigger = this.remoteChannels && this.remoteChannels.has(chan);
+
+        // If there are NO physical buttons AND no possibility of remote control, it's ON by default.
+        if (chanButtons.length === 0 && !hasRemoteTrigger) return true;
+        
+        // Otherwise, it is ON only if ANY of its triggers (physical or remote) are active.
+        return (chanButtons.length > 0 && chanButtons.every(b => b.isPressed)) || isRemoteActive;
     }
 
     isEmitterActive(e) {
@@ -643,17 +668,27 @@ class GameState {
         const chan = Number(e.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
         const isRemoteActive = this.remoteSignals.has(chan);
+        const hasRemoteTrigger = this.remoteChannels && this.remoteChannels.has(chan);
         
-        // Default behavior: No buttons = ON, With buttons = OFF until ALL pressed OR remote active.
-        let active = chanButtons.length === 0 || chanButtons.every(b => b.isPressed) || isRemoteActive;
+        // Logic for Hazards (Normally ON):
+        // If NO buttons AND no remote trigger, it is ON by default.
+        // If it HAS buttons OR a remote trigger, it is OFF unless ANY of them are active.
+        let active;
+        if (chanButtons.length === 0 && !hasRemoteTrigger) {
+            active = true;
+        } else {
+            active = (chanButtons.length > 0 && chanButtons.every(b => b.isPressed)) || isRemoteActive;
+        }
         
-        // If inverted, flip the logic.
+        // If inverted, flip the final logic.
         if (e.inverted) active = !active;
         
         return active;
     }
 
     update() {
+        this.frame++;
+        this.updateSequences();
         if (this.player.isDead) this.player.deathTimer++;
 
         // Update Gravity Overlay Alpha
@@ -1276,8 +1311,10 @@ class GameState {
         // Update Quantum Floor States
         const toggledChannels = new Set();
         for (let qf of this.quantumFloors) {
-            const chanButtons = this.buttons.filter(b => b.channel === qf.channel);
-            const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
+            const qfChan = Number(qf.channel || 0);
+            const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === qfChan);
+            const isRemoteActive = this.remoteSignals.has(qfChan);
+            const allPressed = (chanButtons.length > 0 && chanButtons.every(b => b.isPressed)) || isRemoteActive;
             
             // Signal is now handled by the button's internal timer
             if (allPressed) {
@@ -1333,11 +1370,12 @@ class GameState {
 
         // Update Door States and Crunch Logic
         for (let door of this.doors) {
+            const dChan = Number(door.channel || 0);
             const isPowered = this.poweredDoors.has(`${door.x},${door.y}`);
             // Link door to button: ALL buttons on the same channel must be pressed
-            const chanButtons = this.buttons.filter(b => b.channel === door.channel);
+            const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === dChan);
             const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
-            const isRemoteActive = this.remoteSignals.has(door.channel);
+            const isRemoteActive = this.remoteSignals.has(dChan);
             
             const shouldBeOpen = (isPowered || allPressed || isRemoteActive);
             const wasOpen = door.state === 'OPEN' || door.state === 'BROKEN_OPEN';
@@ -1402,7 +1440,35 @@ class GameState {
         }
 
         // Update screen shake
-        if (this.screenShakeTimer > 0) this.screenShakeTimer--;
+        this.shakeOffset = { x: 0, y: 0 };
+        if (this.screenShakeTimer > 0) {
+            const intensity = this.screenShakeTimer * (this.screenShakeForce || 0.8); 
+            this.shakeOffset.x = (Math.random() - 0.5) * intensity;
+            this.shakeOffset.y = (Math.random() - 0.5) * intensity;
+            this.screenShakeTimer--;
+        }
+
+        // Update blackout alpha
+        if (this.isBlackoutActive) {
+            if (this.blackoutAlpha < 1) this.blackoutAlpha = Math.min(1, this.blackoutAlpha + 0.05);
+        } else {
+            if (this.blackoutAlpha > 0) this.blackoutAlpha = Math.max(0, this.blackoutAlpha - 0.05);
+        }
+
+        // Update alert pulse
+        if (this.isSecurityAlert) {
+            this.alertPulse += 0.1;
+            
+            // Loop Alarm Audio
+            if (!this.alarmTimer || this.alarmTimer <= 0) {
+                if (window.AudioSys && AudioSys.playAlarm) AudioSys.playAlarm();
+                this.alarmTimer = 48; // ~0.8 seconds at 60fps
+            }
+            this.alarmTimer--;
+        } else {
+            this.alarmTimer = 0;
+            this.alertPulse = 0;
+        }
 
         // Emitter states are now managed exclusively by updateEmitters()
         // which is called every frame to support inverted logic and path calculation.
@@ -1686,8 +1752,13 @@ class GameState {
             const trigger = this.zoneTriggers[i];
             let inside = false;
             const radius = trigger.radius || 0;
+            const offX = trigger.offX || 0;
+            const offY = trigger.offY || 0;
             
-            if (radius > 0) {
+            if (trigger.w !== undefined && trigger.h !== undefined) {
+                inside = (this.player.x >= trigger.x + offX && this.player.x < trigger.x + offX + trigger.w &&
+                          this.player.y >= trigger.y + offY && this.player.y < trigger.y + offY + trigger.h);
+            } else if (radius > 0) {
                 const dist = Math.sqrt(Math.pow(this.player.x - trigger.x, 2) + Math.pow(this.player.y - trigger.y, 2));
                 inside = (dist <= radius);
             } else {
@@ -1696,66 +1767,25 @@ class GameState {
 
             if (inside) {
                 let fired = false;
-                if (trigger.type === 'blackout') {
-                    if (trigger.action === 'activate' && !this.isBlackoutActive) {
-                        this.isBlackoutActive = true;
-                        if (window.AudioSys) AudioSys.playBlackoutStart();
-                        fired = true;
-                    } else if (trigger.action === 'deactivate' && this.isBlackoutActive) {
-                        this.isBlackoutActive = false;
-                        if (window.AudioSys) AudioSys.playBlackoutEnd();
-                        fired = true;
-                    } else if (trigger.action === 'toggle') {
-                        this.isBlackoutActive = !this.isBlackoutActive;
-                        if (this.isBlackoutActive) {
-                            if (window.AudioSys) AudioSys.playBlackoutStart();
-                        } else {
-                            if (window.AudioSys) AudioSys.playBlackoutEnd();
-                        }
+                
+                // --- NEW: Sequence-based triggers ---
+                if (trigger.events && trigger.events.length > 0) {
+                    this.activeSequences.push({
+                        events: JSON.parse(JSON.stringify(trigger.events)),
+                        index: 0,
+                        waitTimer: 0,
+                        origin: { x: trigger.x, y: trigger.y }
+                    });
                     fired = true;
-                    }
-                } else if (trigger.type === 'music_intensity') {
-                    const intensity = parseInt(trigger.action);
-                    if (!isNaN(intensity) && window.AudioSys) {
-                        AudioSys.setMusicIntensity(intensity);
-                        fired = true;
-                    }
-                } else if (trigger.type === 'remote_signal') {
-                    const chan = parseInt(trigger.channel || 0);
-                    if (trigger.action === 'activate') {
-                        this.remoteSignals.add(chan);
-                        fired = true;
-                    } else if (trigger.action === 'deactivate') {
-                        this.remoteSignals.delete(chan);
-                        fired = true;
-                    } else if (trigger.action === 'toggle') {
-                        if (this.remoteSignals.has(chan)) this.remoteSignals.delete(chan);
-                        else this.remoteSignals.add(chan);
-                        fired = true;
-                    }
-                } else if (trigger.type === 'dimension_shift') {
-                    this.isSolarPhase = (trigger.action === 'solar');
-                    if (window.AudioSys) AudioSys.playDimensionInversion();
-                    this.screenShakeTimer = 20;
-                    fired = true;
-                } else if (trigger.type === 'earthquake') {
-                    this.screenShakeTimer = parseInt(trigger.action || 30);
-                    if (window.AudioSys) AudioSys.playEarthquake && AudioSys.playEarthquake();
-                    fired = true;
-                } else if (trigger.type === 'gravity') {
-                    const dirMap = { 'up': DIRS.UP, 'down': DIRS.DOWN, 'left': DIRS.LEFT, 'right': DIRS.RIGHT };
-                    const gDir = dirMap[trigger.action] || DIRS.DOWN;
-                    this.triggerGravity(gDir);
-                    fired = true;
-                } else if (trigger.type === 'visual_sparks') {
-                    for (let j = 0; j < 15; j++) {
-                        Graphics.spawnParticle(trigger.x * 32 + 16, trigger.y * 32 + 16, '#ffcc00', 'spark');
-                    }
-                    if (window.AudioSys) AudioSys.playSpark && AudioSys.playSpark();
-                    fired = true;
-                } else if (trigger.type === 'security_alert') {
-                    this.isSecurityAlert = (trigger.action === 'activate');
-                    if (this.isSecurityAlert && window.AudioSys) AudioSys.playAlarm && AudioSys.playAlarm();
+                } else {
+                    // Legacy single-event trigger (for backward compatibility)
+                    this.executeEvent({
+                        type: trigger.type,
+                        action: trigger.action,
+                        channel: trigger.channel,
+                        x: trigger.x,
+                        y: trigger.y
+                    });
                     fired = true;
                 }
                 
@@ -1763,6 +1793,113 @@ class GameState {
                 if (fired && trigger.oneShot !== false) {
                     this.zoneTriggers.splice(i, 1);
                 }
+            }
+        }
+    }
+
+    executeEvent(event) {
+        switch (event.type) {
+            case 'blackout':
+                if (event.action === 'activate') {
+                    this.isBlackoutActive = true;
+                    if (window.AudioSys) AudioSys.playBlackoutStart();
+                } else if (event.action === 'deactivate') {
+                    this.isBlackoutActive = false;
+                    if (window.AudioSys) AudioSys.playBlackoutEnd();
+                } else if (event.action === 'toggle') {
+                    this.isBlackoutActive = !this.isBlackoutActive;
+                    if (window.AudioSys) {
+                        if (this.isBlackoutActive) AudioSys.playBlackoutStart();
+                        else AudioSys.playBlackoutEnd();
+                    }
+                }
+                break;
+            
+            case 'music_intensity':
+                const intensity = parseInt(event.action);
+                if (!isNaN(intensity) && window.AudioSys) {
+                    AudioSys.setMusicIntensity(intensity);
+                }
+                break;
+
+            case 'remote_signal':
+                const chan = parseInt(event.channel || 0);
+                if (event.action === 'activate') this.remoteSignals.add(chan);
+                else if (event.action === 'deactivate') this.remoteSignals.delete(chan);
+                else if (event.action === 'toggle') {
+                    if (this.remoteSignals.has(chan)) this.remoteSignals.delete(chan);
+                    else this.remoteSignals.add(chan);
+                }
+                break;
+
+            case 'dimension_shift':
+                if (event.action === 'toggle') this.isSolarPhase = !this.isSolarPhase;
+                else if (event.action === 'solar') this.isSolarPhase = true;
+                else if (event.action === 'lunar') this.isSolarPhase = false;
+                if (window.AudioSys) AudioSys.playDimensionInversion();
+                this.screenShakeTimer = 20;
+                break;
+
+            case 'earthquake':
+                this.screenShakeTimer = parseInt(event.action || 30);
+                this.screenShakeForce = parseFloat(event.force || 0.8);
+                if (window.AudioSys && AudioSys.playEarthquake) AudioSys.playEarthquake();
+                break;
+
+            case 'gravity':
+                const dirMap = { 'up': DIRS.UP, 'down': DIRS.DOWN, 'left': DIRS.LEFT, 'right': DIRS.RIGHT };
+                const gDir = dirMap[event.action] || DIRS.DOWN;
+                this.triggerGravity(gDir);
+                break;
+
+            case 'visual_sparks':
+                const sx = event.x !== undefined ? event.x : this.player.x;
+                const sy = event.y !== undefined ? event.y : this.player.y;
+                for (let j = 0; j < 15; j++) {
+                    if (window.Graphics) Graphics.spawnParticle(sx * 32 + 16, sy * 32 + 16, '#ffcc00', 'spark');
+                }
+                if (window.AudioSys && AudioSys.playSpark) AudioSys.playSpark();
+                break;
+
+            case 'security_alert':
+                console.log("EVENT: security_alert", event.action);
+                this.isSecurityAlert = (event.action === 'activate');
+                if (this.isSecurityAlert && window.AudioSys && AudioSys.playAlarm) AudioSys.playAlarm();
+                break;
+
+            case 'dialogue':
+                if (window.Dialogue && event.action) {
+                    this.triggerDialogue(event.action); // event.action would be the key "x,y"
+                }
+                break;
+        }
+    }
+
+    updateSequences() {
+        for (let i = this.activeSequences.length - 1; i >= 0; i--) {
+            const seq = this.activeSequences[i];
+            
+            if (seq.waitTimer > 0) {
+                seq.waitTimer--;
+                continue;
+            }
+
+            if (seq.index < seq.events.length) {
+                const event = seq.events[seq.index];
+                
+                // Auto-fill x/y from sequence origin if missing
+                if (event.x === undefined) event.x = seq.origin.x;
+                if (event.y === undefined) event.y = seq.origin.y;
+
+                if (event.type === 'wait') {
+                    seq.waitTimer = parseInt(event.action || 30);
+                    seq.index++; // Move past wait immediately
+                } else {
+                    this.executeEvent(event);
+                    seq.index++;
+                }
+            } else {
+                this.activeSequences.splice(i, 1);
             }
         }
     }

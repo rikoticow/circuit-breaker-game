@@ -50,12 +50,16 @@ Object.assign(window.AudioSys, {
     },
 
     setMusicIntensity(val) {
-        this.musicIntensity = Math.max(0, Math.min(2, val));
+        this.musicIntensity = Math.max(0, Math.min(3, parseInt(val)));
         const theme = this.THEMES[this.currentThemeKey];
         if (theme && theme.getBPM) {
             this.tempoBPM = theme.getBPM(this.musicIntensity);
         } else {
-            this.tempoBPM = (this.musicIntensity === 0) ? 100 : 140;
+            // Fallback BPM mapping
+            if (this.musicIntensity === 0) this.tempoBPM = 100;
+            else if (this.musicIntensity === 1) this.tempoBPM = 120;
+            else if (this.musicIntensity === 2) this.tempoBPM = 145;
+            else this.tempoBPM = 170;
         }
     },
 
@@ -144,7 +148,12 @@ Object.assign(window.AudioSys, {
 
     THEMES: {
         industrial: {
-            getBPM(intensity) { return intensity === 0 ? 100 : 140; },
+            getBPM(intensity) { 
+                if (intensity === 0) return 100;
+                if (intensity === 1) return 120;
+                if (intensity === 2) return 140;
+                return 160;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -156,11 +165,20 @@ Object.assign(window.AudioSys, {
                     if (localStep % 2 === 0 || localStep % 4 === 3) {
                         if (localStep !== 0) this.playVariedChug(bassRoot, time, 1200, true);
                     }
-                    this.playHiHat(time);
-                    if (localStep === 0 || localStep === 8 || localStep === 11) this.playKick(time);
-                    if (localStep === 4 || localStep === 12) this.playSnare(time);
-                    if (progBar === 0 && localStep === 0) this.playCinematicSnare(time);
-                    if (progBar === 3 && localStep >= 12 && localStep % 2 === 0) this.playSnare(time);
+                    
+                    // Drums only for Tense (2) and Climax (3)
+                    if (this.musicIntensity >= 2) {
+                        this.playHiHat(time);
+                        if (localStep === 0 || localStep === 8 || localStep === 11) this.playKick(time);
+                        if (localStep === 4 || localStep === 12) this.playSnare(time);
+                        if (progBar === 0 && localStep === 0) this.playCinematicSnare(time);
+                    }
+                    
+                    // Extra Percussion for Climax (3)
+                    if (this.musicIntensity >= 3) {
+                        if (localStep % 2 !== 0) this.playHiHat(time);
+                        if (progBar === 3 && localStep >= 12 && localStep % 2 === 0) this.playSnare(time);
+                    }
                 } else {
                     if (localStep === 0) this.playBladeRunnerPad(step, bar, time);
                     if (localStep % 2 === 0) this.playHiHat(time);
@@ -182,7 +200,12 @@ Object.assign(window.AudioSys, {
         },
 
         adventure: {
-            getBPM(intensity) { return intensity === 0 ? 100 : (intensity === 1 ? 130 : 160); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 100;
+                if (intensity === 1) return 125;
+                if (intensity === 2) return 145;
+                return 165;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -226,7 +249,12 @@ Object.assign(window.AudioSys, {
         },
 
         aero: {
-            getBPM(intensity) { return intensity === 0 ? 120 : (intensity === 1 ? 155 : 175); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 110;
+                if (intensity === 1) return 130;
+                if (intensity === 2) return 155;
+                return 180;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -248,17 +276,23 @@ Object.assign(window.AudioSys, {
                     if (localStep % 2 === 0) this.playHarpSweep(padChords[progBar], time, true);
                 }
                 if (this.musicIntensity > 0) {
-                    if (progBar !== 15 || localStep < 8) {
-                        if (localStep % 4 === 0 || localStep % 4 === 3) this.playAdventureBass(bassRoots[progBar], time);
+                    if (this.musicIntensity >= 2) {
+                        if (progBar !== 15 || localStep < 8) {
+                            if (localStep % 4 === 0 || localStep % 4 === 3) this.playAdventureBass(bassRoots[progBar], time);
+                        }
                     }
                     if (localStep === 0 && (progBar === 0 || progBar === 8)) this.playCrashCymbal(time);
-                    if (localStep === 14 && (progBar === 7 || progBar === 15)) this.playCrashCymbal(time);
-                    if ((progBar === 7 || progBar === 15) && localStep >= 8) {
-                        if (localStep % 2 === 0) this.playSNESSnare(time);
-                    } else {
-                        if (localStep % 4 === 0) this.playSNESKick(time);
-                        if (localStep === 4 || localStep === 12) this.playSNESSnare(time);
-                        this.playSNESHat(time);
+                    
+                    // Standard Percussion only for 2 and 3
+                    if (this.musicIntensity >= 2) {
+                        if (localStep === 14 && (progBar === 7 || progBar === 15)) this.playCrashCymbal(time);
+                        if ((progBar === 7 || progBar === 15) && localStep >= 8) {
+                            if (localStep % 2 === 0) this.playSNESSnare(time);
+                        } else {
+                            if (localStep % 4 === 0) this.playSNESKick(time);
+                            if (localStep === 4 || localStep === 12) this.playSNESSnare(time);
+                            this.playSNESHat(time);
+                        }
                     }
                 } else {
                     if (localStep === 0) this.playSNESKick(time);
@@ -290,7 +324,12 @@ Object.assign(window.AudioSys, {
         },
 
         aquatic: {
-            getBPM(intensity) { return intensity === 0 ? 90 : (intensity === 1 ? 120 : 145); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 85;
+                if (intensity === 1) return 105;
+                if (intensity === 2) return 130;
+                return 155;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -320,7 +359,12 @@ Object.assign(window.AudioSys, {
         },
 
         jungle: {
-            getBPM(intensity) { return intensity === 0 ? 105 : (intensity === 1 ? 125 : 150); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 100;
+                if (intensity === 1) return 120;
+                if (intensity === 2) return 145;
+                return 170;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -357,7 +401,12 @@ Object.assign(window.AudioSys, {
         },
 
         tragic: {
-            getBPM(intensity) { return intensity === 0 ? 70 : (intensity === 1 ? 65 : 55); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 75;
+                if (intensity === 1) return 70;
+                if (intensity === 2) return 60;
+                return 50; // Tragic actually slows down as it gets intense
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -465,7 +514,12 @@ Object.assign(window.AudioSys, {
         },
 
         epic: {
-            getBPM(intensity) { return intensity === 0 ? 100 : (intensity === 1 ? 145 : 175); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 95;
+                if (intensity === 1) return 125;
+                if (intensity === 2) return 155;
+                return 185;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -504,7 +558,12 @@ Object.assign(window.AudioSys, {
 
         // --- High Energy / Final Sector Themes ---
         climax: {
-            getBPM(intensity) { return intensity === 0 ? 110 : (intensity === 1 ? 145 : 170); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 110;
+                if (intensity === 1) return 135;
+                if (intensity === 2) return 155;
+                return 180;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;
@@ -528,7 +587,12 @@ Object.assign(window.AudioSys, {
         },
 
         gothic: {
-            getBPM(intensity) { return intensity === 0 ? 115 : (intensity === 1 ? 140 : 165); },
+            getBPM(intensity) { 
+                if (intensity === 0) return 110;
+                if (intensity === 1) return 135;
+                if (intensity === 2) return 160;
+                return 185;
+            },
             playStep(step, time) {
                 const bar = Math.floor(step / 16);
                 const localStep = step % 16;

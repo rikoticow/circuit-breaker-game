@@ -134,9 +134,11 @@ function testLoop(timestamp) {
     Graphics.clear();
     const ctx = Graphics.ctx;
     
-    // Center camera if map is larger than 640x480 (optional for editor test)
+    // Center camera and apply shake
     ctx.save();
-    ctx.translate(-Math.floor(testGame.camera.x), -Math.floor(testGame.camera.y));
+    const sx = testGame.shakeOffset ? testGame.shakeOffset.x : 0;
+    const sy = testGame.shakeOffset ? testGame.shakeOffset.y : 0;
+    ctx.translate(-Math.floor(testGame.camera.x) + sx, -Math.floor(testGame.camera.y) + sy);
 
     // Pass 1: Floor
     const h = testGame.map.length;
@@ -217,10 +219,6 @@ function testLoop(timestamp) {
         Graphics.drawBlock(b.visualX, b.visualY, b.visualAngle, power, dist, b.dir, b.type, b.fallTimer || 0, ph, testGame.isSolarPhase);
     }
 
-    // Pass 2.06: Draw Lasers (Above blocks)
-    for (const e of testGame.emitters) {
-        Graphics.drawLaser(e, testAnimFrame);
-    }
 
     // Pass 2.07: Draw Glass Walls (Above Lasers)
     for (let y = 0; y < h; y++) {
@@ -239,7 +237,6 @@ function testLoop(timestamp) {
     }
 
     for (const p of testGame.debris) Graphics.drawDebris(p);
-    Graphics.drawParticles();
     
     // Pass 3.0: High-Layer Solar Portals (Glow over everything)
     for (const p of testGame.portals) {
@@ -250,11 +247,22 @@ function testLoop(timestamp) {
         Graphics.drawCoreRequirement(t.x, t.y, t.required, d.charge);
     }
 
+    // Draw Lasers and Particles
+    for (const e of testGame.emitters) {
+        Graphics.drawLaser(e, testAnimFrame);
+    }
+    Graphics.drawParticles(testGame);
+    
+    // Draw Blackout (Fog of War) - Handled internally (Pass 1: World, Pass 2: Screen)
+    Graphics.drawBlackout(testGame);
+
     ctx.restore();
     
-    // Draw Blackout (Fog of War)
-    Graphics.drawBlackout(testGame);
-    
+    // --- DRAW SCREEN SPACE (HUD, UI) ---
+
+    // Draw HUD (including security alert pulse) - purely screen space
+    Graphics.drawHUD(testGame);
+
     // Draw HUD manually (editor doesn't use the HTML bars for test)
     updateTestUI();
 

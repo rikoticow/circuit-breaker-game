@@ -89,7 +89,7 @@ Object.assign(Graphics, {
                 else if (side === 'TOP') { sx = edgePos; sy = ts - 2; }
                 else if (side === 'BOTTOM') { sx = edgePos; sy = 2; }
                 else { sx = edgePos; sy = ts - 2; }
-                for(let i=0; i<2; i++) this.spawnParticle(px + ox + sx, py + oy + sy, '#ffcc00', 'spark');
+                for(let i=0; i<2; i++) this.spawnParticle(px + ox + sx, py + oy + sy, '#ffcc00', 'spark', true);
             }
         } else if (isError) {
             if (Math.floor(frame / 10) % 2 === 0) {

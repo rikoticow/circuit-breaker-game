@@ -27,7 +27,8 @@ Object.assign(window, {
     updateTriggerManagerList,
     updateTriggerProp,
     removeTrigger,
-    setupPropertyListeners
+    setupPropertyListeners,
+    updatePropertyPanel
 });
 
 function createTilePreview(char) {
@@ -416,9 +417,9 @@ function switchTab(tabId) {
     if (clickedTab) clickedTab.classList.add('active');
 
     // 2. Update Content Panes
-    document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     const target = document.getElementById(tabId);
-    if (target) target.style.display = tabId === 'tab-dialogues' ? 'flex' : 'block';
+    if (target) target.classList.add('active');
 
     if (tabId === 'tab-dialogues') {
         updateDialogueManager();
@@ -676,42 +677,159 @@ function updateTriggerManagerList() {
         return;
     }
     
-    lvl.zoneTriggers.forEach((trigger, idx) => {
+    lvl.zoneTriggers.forEach((trigger, tIdx) => {
+        // Migration: ensure trigger has events array
+        if (!trigger.events) {
+            trigger.events = [];
+            if (trigger.type) {
+                trigger.events.push({ type: trigger.type, action: trigger.action, channel: trigger.channel });
+                delete trigger.type; delete trigger.action; delete trigger.channel;
+            }
+        }
+
         const card = document.createElement('div');
-        card.style.cssText = 'background: #1a1a1a; border: 1px solid #333; padding: 10px; border-radius: 4px;';
+        card.className = 'trigger-card';
+        card.style.cssText = 'background: #1a1a1a; border: 1px solid #333; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #ffcc00;';
         
+        let eventsHtml = '';
+        trigger.events.forEach((event, eIdx) => {
+            eventsHtml += `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid #333; border-radius: 4px; padding: 8px; margin-top: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 9px; color: #888; letter-spacing: 1px;">AÇÃO #${eIdx + 1}</span>
+                    <div style="display: flex; gap: 2px;">
+                        <button onclick="moveTriggerEvent(${tIdx}, ${eIdx}, -1)" class="action-btn">▲</button>
+                        <button onclick="moveTriggerEvent(${tIdx}, ${eIdx}, 1)" class="action-btn">▼</button>
+                        <button onclick="removeTriggerEvent(${tIdx}, ${eIdx})" class="action-btn" style="color: #ff4444;">×</button>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'type', this.value)" style="width: 100%; background: #000; color: #ffcc00; border: 1px solid #444; font-size: 11px; padding: 3px; border-radius: 3px;">
+                        <option value="wait" ${event.type === 'wait' ? 'selected' : ''}>⏳ ESPERAR</option>
+                        <option value="music_intensity" ${event.type === 'music_intensity' ? 'selected' : ''}>🎵 MÚSICA</option>
+                        <option value="blackout" ${event.type === 'blackout' ? 'selected' : ''}>🌑 APAGÃO</option>
+                        <option value="earthquake" ${event.type === 'earthquake' ? 'selected' : ''}>📳 TREMOR</option>
+                        <option value="visual_sparks" ${event.type === 'visual_sparks' ? 'selected' : ''}>✨ FAÍSCAS</option>
+                        <option value="security_alert" ${event.type === 'security_alert' ? 'selected' : ''}>🚨 ALERTA</option>
+                        <option value="remote_signal" ${event.type === 'remote_signal' ? 'selected' : ''}>📡 SINAL</option>
+                        <option value="dimension_shift" ${event.type === 'dimension_shift' ? 'selected' : ''}>🌀 DIMENSÃO</option>
+                        <option value="gravity" ${event.type === 'gravity' ? 'selected' : ''}>⚛️ GRAVIDADE</option>
+                        <option value="dialogue" ${event.type === 'dialogue' ? 'selected' : ''}>💬 DIÁLOGO</option>
+                    </select>
+                    ${renderEventActionInput(tIdx, eIdx, event)}
+                </div>
+            </div>
+            `;
+        });
+
         card.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="color: #ffcc00; font-size: 11px; font-weight: bold;">GATILHO: ${trigger.x}, ${trigger.y}</span>
-                <button onclick="removeTrigger(${idx})" style="background: none; border: none; color: #ff0055; cursor: pointer; padding: 0; font-size: 14px;">✖</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="color: #ffcc00; font-size: 12px; font-weight: bold; letter-spacing: 1px;">⚡ GATILHO [${trigger.x},${trigger.y}]</span>
+                <button onclick="removeTrigger(${tIdx})" style="background: none; border: none; color: #ff4444; cursor: pointer; padding: 0; font-size: 16px;">✖</button>
             </div>
             
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; gap: 5px;">
-                    <select onchange="updateTriggerProp(${idx}, 'type', this.value)" style="flex: 1; background: #000; color: #ffcc00; border: 1px solid #444; font-size: 11px; padding: 2px;">
-                        <option value="blackout" ${trigger.type === 'blackout' ? 'selected' : ''}>APAGÃO (Blackout)</option>
-                    </select>
-                    <select onchange="updateTriggerProp(${idx}, 'action', this.value)" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;">
-                        <option value="activate" ${trigger.action === 'activate' ? 'selected' : ''}>ATIVAR</option>
-                        <option value="deactivate" ${trigger.action === 'deactivate' ? 'selected' : ''}>DESATIVAR</option>
-                        <option value="toggle" ${trigger.action === 'toggle' ? 'selected' : ''}>ALTERNAR</option>
-                    </select>
+            <div style="display: flex; gap: 12px; background: rgba(255,204,0,0.05); padding: 8px; border-radius: 4px; border: 1px solid rgba(255,204,0,0.1);">
+                <!-- Compact Directional Controls -->
+                <div style="display: grid; grid-template-columns: repeat(3, 22px); gap: 2px; align-items: center;">
+                    <div></div>
+                    <button onclick="growTrigger(${tIdx}, 'up', 1)" oncontextmenu="event.preventDefault(); growTrigger(${tIdx}, 'up', -1)" style="width:22px; height:22px; padding:0; font-size:10px; background:#333; color:#fff;" title="Esq: Expande / Dir: Recua">▲</button>
+                    <div></div>
+                    <button onclick="growTrigger(${tIdx}, 'left', 1)" oncontextmenu="event.preventDefault(); growTrigger(${tIdx}, 'left', -1)" style="width:22px; height:22px; padding:0; font-size:10px; background:#333; color:#fff;" title="Esq: Expande / Dir: Recua">◀</button>
+                    <div onclick="resetTriggerSize(${tIdx})" style="text-align:center; font-size:8px; color:#ffcc00; font-weight:bold; cursor:pointer;" title="Clique para Resetar (1x1)">ÁREA</div>
+                    <button onclick="growTrigger(${tIdx}, 'right', 1)" oncontextmenu="event.preventDefault(); growTrigger(${tIdx}, 'right', -1)" style="width:22px; height:22px; padding:0; font-size:10px; background:#333; color:#fff;" title="Esq: Expande / Dir: Recua">▶</button>
+                    <div></div>
+                    <button onclick="growTrigger(${tIdx}, 'down', 1)" oncontextmenu="event.preventDefault(); growTrigger(${tIdx}, 'down', -1)" style="width:22px; height:22px; padding:0; font-size:10px; background:#333; color:#fff;" title="Esq: Expande / Dir: Recua">▼</button>
+                    <div></div>
                 </div>
-                
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 10px; color: #aaa;">RAIO:</span>
-                    <input type="number" min="0" max="10" value="${trigger.radius || 0}" 
-                        style="width: 40px; background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px;"
-                        onchange="updateTriggerProp(${idx}, 'radius', parseInt(this.value))">
-                    
-                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 10px; color: #fff; margin-left: auto;">
-                        <input type="checkbox" ${trigger.oneShot !== false ? 'checked' : ''} onchange="updateTriggerProp(${idx}, 'oneShot', this.checked)"> Único
-                    </label>
+
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; justify-content: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 10px; color: #aaa;">TAMANHO:</span>
+                        <span style="font-size: 11px; color: #fff; font-family: monospace; font-weight: bold;">${trigger.w || 1}x${trigger.h || 1}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 10px; color: #aaa;">RAIO:</span>
+                        <input type="number" min="0" max="15" value="${trigger.radius || 0}" 
+                            style="width: 35px; background: #000; color: #fff; border: 1px solid #444; font-size: 10px; padding: 1px 3px;"
+                            onchange="updateTriggerProp(${tIdx}, 'radius', parseInt(this.value))">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
+                         <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 10px; color: #fff;">
+                            <input type="checkbox" ${trigger.oneShot !== false ? 'checked' : ''} onchange="updateTriggerProp(${tIdx}, 'oneShot', this.checked)"> ÚNICO
+                        </label>
+                        <button onclick="resetTriggerSize(${tIdx})" style="font-size: 8px; background: #333; color: #aaa; border: none; padding: 2px 4px; border-radius: 2px; cursor: pointer;">RESET</button>
+                    </div>
                 </div>
             </div>
+
+            <div class="trigger-events-container">
+                ${eventsHtml}
+            </div>
+
+            <button onclick="addTriggerEvent(${tIdx})" style="width: 100%; background: rgba(255, 204, 0, 0.1); color: #ffcc00; border: 1px dashed #ffcc00; padding: 6px; font-size: 10px; cursor: pointer; margin-top: 8px; border-radius: 4px; font-weight: bold;">
+                + ADICIONAR AÇÃO À SEQUÊNCIA
+            </button>
         `;
         list.appendChild(card);
     });
+}
+function updateTriggerEventProp(tIdx, eIdx, prop, value) {
+    const lvl = levelsData[currentLevelIdx];
+    const event = lvl.zoneTriggers[tIdx]?.events[eIdx];
+    if (event) {
+        event[prop] = value;
+        
+        // If type changed, reset action to a valid default for that type
+        if (prop === 'type') {
+            const defaults = {
+                'wait': '30',
+                'music_intensity': '1',
+                'blackout': 'activate',
+                'security_alert': 'activate',
+                'remote_signal': 'activate',
+                'dimension_shift': 'toggle',
+                'gravity': 'down',
+                'earthquake': '30',
+                'visual_sparks': '',
+                'dialogue': ''
+            };
+            event.action = defaults[value] || '';
+            if (value === 'remote_signal') event.channel = '0';
+            if (value === 'earthquake') event.force = '0.8';
+        }
+        
+        saveHistory();
+        updateTriggerManagerList();
+    }
+}
+
+function addTriggerEvent(tIdx) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.zoneTriggers[tIdx]) {
+        lvl.zoneTriggers[tIdx].events.push({ type: 'wait', action: '30' });
+        saveHistory();
+        updateTriggerManagerList();
+    }
+}
+
+function removeTriggerEvent(tIdx, eIdx) {
+    const lvl = levelsData[currentLevelIdx];
+    if (lvl.zoneTriggers[tIdx]?.events) {
+        lvl.zoneTriggers[tIdx].events.splice(eIdx, 1);
+        saveHistory();
+        updateTriggerManagerList();
+    }
+}
+
+function moveTriggerEvent(tIdx, eIdx, dir) {
+    const lvl = levelsData[currentLevelIdx];
+    const events = lvl.zoneTriggers[tIdx]?.events;
+    if (!events) return;
+    const newIdx = eIdx + dir;
+    if (newIdx < 0 || newIdx >= events.length) return;
+    [events[eIdx], events[newIdx]] = [events[newIdx], events[eIdx]];
+    saveHistory();
+    updateTriggerManagerList();
 }
 
 function updateTriggerProp(idx, prop, value) {
@@ -731,6 +849,50 @@ function removeTrigger(idx) {
         rebuildMock();
     }
 }
+function growTrigger(idx, dir, amount) {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.zoneTriggers || !lvl.zoneTriggers[idx]) return;
+    const t = lvl.zoneTriggers[idx];
+    if (t.w === undefined) t.w = 1;
+    if (t.h === undefined) t.h = 1;
+    if (t.offX === undefined) t.offX = 0;
+    if (t.offY === undefined) t.offY = 0;
+
+    if (dir === 'right') {
+        t.w = Math.max(1, t.w + amount);
+    } else if (dir === 'down') {
+        t.h = Math.max(1, t.h + amount);
+    } else if (dir === 'left') {
+        if (amount > 0) {
+            t.offX--; t.w++;
+        } else {
+            if (t.w > 1) { t.offX++; t.w--; }
+        }
+    } else if (dir === 'up') {
+        if (amount > 0) {
+            t.offY--; t.h++;
+        } else {
+            if (t.h > 1) { t.offY++; t.h--; }
+        }
+    }
+    
+    updateTriggerManagerList();
+    saveHistory();
+    rebuildMock();
+}
+
+function resetTriggerSize(idx) {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.zoneTriggers || !lvl.zoneTriggers[idx]) return;
+    const t = lvl.zoneTriggers[idx];
+    t.w = 1; t.h = 1;
+    t.offX = 0; t.offY = 0;
+    updateTriggerManagerList();
+    saveHistory();
+    rebuildMock();
+}
+
+Object.assign(window, { moveTriggerEvent, removeTriggerEvent, addTriggerEvent, updateTriggerEventProp, removeTrigger, updateTriggerProp, growTrigger, resetTriggerSize });
 
 function setupPropertyListeners() {
     // Dialogues
@@ -876,4 +1038,224 @@ function setupPropertyListeners() {
         }
         saveHistory(); rebuildMock();
     };
+
+    document.getElementById('btn-close-props').onclick = () => {
+        document.getElementById('floating-props').style.display = 'none';
+        editTargets = [];
+    };
+
+    document.getElementById('btn-copy-props').onclick = () => {
+        if (editTargets.length === 0) return;
+        const p = editTargets[0];
+        const lvl = levelsData[currentLevelIdx];
+        const key = `${p.x},${p.y}`;
+        clipboard = {
+            chan: lvl.links?.[key],
+            behavior: lvl.links?.[`${key}_behavior`],
+            init: lvl.links?.[`${key}_init`],
+            dir: lvl.links?.[`${key}_dir`],
+            color: lvl.links?.[`${key}_color`]
+        };
+    };
+
+    document.getElementById('btn-paste-props').onclick = () => {
+        if (editTargets.length === 0 || !clipboard) return;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}`;
+            if (clipboard.chan !== undefined) lvl.links[key] = clipboard.chan;
+            if (clipboard.behavior !== undefined) lvl.links[`${key}_behavior`] = clipboard.behavior;
+            if (clipboard.init !== undefined) lvl.links[`${key}_init`] = clipboard.init;
+            if (clipboard.dir !== undefined) lvl.links[`${key}_dir`] = clipboard.dir;
+            if (clipboard.color !== undefined) lvl.links[`${key}_color`] = clipboard.color;
+        }
+        saveHistory(); rebuildMock(); updatePropertyPanel();
+    };
 }
+function updatePropertyPanel() {
+    if (editTargets.length === 0) return;
+    const p = editTargets[0];
+    const lvl = levelsData[currentLevelIdx];
+    const char = [currentBlocksMap[p.y][p.x], currentOverlayMap[p.y][p.x], currentMap[p.y][p.x]].find(c => c !== ' ' && c !== undefined);
+    
+    document.getElementById('prop-type').innerText = `TIPO: ${char || 'Vazio'}`;
+    
+    const isAmps = char === 'T' || (char >= '1' && char <= '9');
+    document.getElementById('prop-amps').parentElement.style.display = isAmps ? 'flex' : 'none';
+    if (isAmps) document.getElementById('prop-amps').value = char === 'T' ? 1 : parseInt(char);
+
+    const hasChannel = ['D', '_', 'P', 'E', 'O', '?', '(', ')', '[', ']', 'M'].includes(char);
+    document.getElementById('prop-channel-container').style.display = hasChannel ? 'flex' : 'none';
+    if (hasChannel) {
+        const chan = lvl.links?.[`${p.x},${p.y}`] || 0;
+        document.getElementById('prop-channel').value = chan;
+        document.getElementById('prop-channel-val').innerText = chan;
+        updateChannelGrid();
+    }
+
+    const hasBehavior = ['_', 'P', '?', 'D'].includes(char);
+    const isSpecial = char === 'E' || char === 'M';
+    document.getElementById('prop-behavior-container').style.display = (hasBehavior || isSpecial) ? 'flex' : 'none';
+    
+    const behaviorSelect = document.getElementById('prop-behavior');
+    if (hasBehavior) {
+        behaviorSelect.innerHTML = `
+            <option value="TIMER">🟡 TIMER</option>
+            <option value="TOGGLE">🟢 TOGGLE</option>
+            <option value="PERMANENT">🔴 FIXO</option>
+            <option value="PRESSURE">🟣 PRESSÃO</option>
+        `;
+        behaviorSelect.value = lvl.links?.[`${p.x},${p.y}_behavior`] || (char === 'P' ? 'PRESSURE' : 'TIMER');
+    } else if (isSpecial) {
+        behaviorSelect.innerHTML = `
+            <option value="0">➡️ DIREITA</option>
+            <option value="1">⬇️ BAIXO</option>
+            <option value="2">⬅️ ESQUERDA</option>
+            <option value="3">⬆️ CIMA</option>
+        `;
+        behaviorSelect.value = lvl.links?.[`${p.x},${p.y}_dir`] || 0;
+    }
+
+    const hasToggle = ['D', 'E', '_', 'P'].includes(char);
+    document.getElementById('prop-toggle-container').style.display = hasToggle ? 'flex' : 'none';
+    if (hasToggle) {
+        document.getElementById('prop-toggle').checked = lvl.links?.[`${p.x},${p.y}_init`] === true;
+    }
+
+    const isPortal = char === 'O';
+    document.getElementById('prop-color-container').style.display = isPortal ? 'flex' : 'none';
+    if (isPortal) {
+        document.getElementById('prop-portal-color').value = lvl.links?.[`${p.x},${p.y}_color`] || '#ffd700';
+    }
+
+    const isDialogue = char === '💬';
+    document.getElementById('prop-dialogue-container').style.display = isDialogue ? 'flex' : 'none';
+    if (isDialogue) {
+        const d = lvl.dialogues?.[`${p.x},${p.y}`] || { text: "", icon: "central", trigger: "walk" };
+        document.getElementById('prop-dialogue-text').value = d.text || "";
+        document.getElementById('prop-dialogue-icon').value = d.icon || "central";
+        document.getElementById('prop-dialogue-trigger').value = d.trigger || "walk";
+    }
+}
+
+function updateChannelGrid() {
+    const grid = document.getElementById('channel-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const lvl = levelsData[currentLevelIdx];
+    const currentChan = parseInt(document.getElementById('prop-channel').value) || 0;
+    
+    const usedChannels = new Set();
+    if (lvl.links) {
+        for (const key in lvl.links) {
+            if (!key.endsWith('_behavior') && !key.endsWith('_init') && !key.endsWith('_dir') && !key.endsWith('_color')) {
+                usedChannels.add(parseInt(lvl.links[key]));
+            }
+        }
+    }
+
+    for (let i = 0; i < 30; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'chan-cell' + (i === currentChan ? ' active' : '') + (usedChannels.has(i) ? ' in-use' : '');
+        cell.innerText = i;
+        cell.onclick = () => {
+            document.getElementById('prop-channel').value = i;
+            document.getElementById('prop-channel').dispatchEvent(new Event('input'));
+            updatePropertyPanel();
+        };
+        grid.appendChild(cell);
+    }
+}
+function renderEventActionInput(tIdx, eIdx, event) {
+    const style = "background: #000; color: #fff; border: 1px solid #444; font-size: 11px; padding: 2px; width: 100%; border-radius: 3px;";
+    
+    switch (event.type) {
+        case 'blackout':
+        case 'security_alert':
+            return `
+                <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style}">
+                    <option value="activate" ${event.action === 'activate' ? 'selected' : ''}>LIGAR (On)</option>
+                    <option value="deactivate" ${event.action === 'deactivate' ? 'selected' : ''}>DESLIGAR (Off)</option>
+                    ${event.type === 'blackout' ? `<option value="toggle" ${event.action === 'toggle' ? 'selected' : ''}>ALTERNAR (Toggle)</option>` : ''}
+                </select>
+            `;
+        
+        case 'music_intensity':
+            return `
+                <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style}">
+                    <option value="0" ${event.action == '0' ? 'selected' : ''}>0 - Mudo</option>
+                    <option value="1" ${event.action == '1' ? 'selected' : ''}>1 - Calmo</option>
+                    <option value="2" ${event.action == '2' ? 'selected' : ''}>2 - Tenso</option>
+                    <option value="3" ${event.action == '3' ? 'selected' : ''}>3 - Clímax</option>
+                </select>
+            `;
+
+        case 'remote_signal':
+            return `
+                <div style="display: flex; gap: 4px;">
+                    <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style} flex: 1;">
+                        <option value="activate" ${event.action === 'activate' ? 'selected' : ''}>ATIVAR</option>
+                        <option value="deactivate" ${event.action === 'deactivate' ? 'selected' : ''}>DESATIVAR</option>
+                        <option value="toggle" ${event.action === 'toggle' ? 'selected' : ''}>ALTERNAR</option>
+                    </select>
+                    <input type="number" min="0" max="29" value="${event.channel || 0}" 
+                        style="${style} width: 40px;" 
+                        onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'channel', this.value)" placeholder="Ch">
+                </div>
+            `;
+
+        case 'dimension_shift':
+            return `
+                <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style}">
+                    <option value="toggle" ${event.action === 'toggle' ? 'selected' : ''}>ALTERNAR (Invert)</option>
+                    <option value="solar" ${event.action === 'solar' ? 'selected' : ''}>FORÇAR SOLAR</option>
+                    <option value="lunar" ${event.action === 'lunar' ? 'selected' : ''}>FORÇAR LUNAR</option>
+                </select>
+            `;
+
+        case 'gravity':
+            return `
+                <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style}">
+                    <option value="down" ${event.action === 'down' ? 'selected' : ''}>BAIXO (Normal)</option>
+                    <option value="up" ${event.action === 'up' ? 'selected' : ''}>CIMA</option>
+                    <option value="left" ${event.action === 'left' ? 'selected' : ''}>ESQUERDA</option>
+                    <option value="right" ${event.action === 'right' ? 'selected' : ''}>DIREITA</option>
+                </select>
+            `;
+
+        case 'wait':
+            return `
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <input type="number" min="0" step="100" value="${event.action || 1000}" 
+                        style="${style} flex: 1;" 
+                        onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)">
+                    <span style="font-size: 9px; color: #666;">ms</span>
+                </div>
+            `;
+
+        case 'earthquake':
+            return `
+                <div style="display: flex; gap: 4px;">
+                    <input type="number" min="0" value="${event.action || 30}" 
+                        style="${style} flex: 1;" 
+                        onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" placeholder="Tempo (frames)">
+                    <input type="number" min="0" step="0.1" value="${event.force || 0.8}" 
+                        style="${style} width: 50px;" 
+                        onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'force', this.value)" placeholder="Força">
+                </div>
+            `;
+
+        case 'dialogue':
+            return `
+                <input type="text" value="${event.action || ''}" 
+                    style="${style}" 
+                    onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" placeholder="Chave do Diálogo">
+            `;
+
+        default:
+            return `<div style="font-size: 9px; color: #444; padding: 4px;">Sem parâmetros</div>`;
+    }
+}
+
+Object.assign(window, { moveTriggerEvent, removeTriggerEvent, addTriggerEvent, updateTriggerEventProp, removeTrigger, updateTriggerProp, growTrigger, resetTriggerSize, renderEventActionInput });

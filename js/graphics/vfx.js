@@ -39,9 +39,9 @@ Object.assign(Graphics, {
         this.drawDoorHalf(ctx, lx, 0, w, h, true, status, prompt);
         this.drawDoorHalf(ctx, rx, 0, w, h, false, status, prompt);
         if (progress > 0.85) {
-            if (Math.random() > 0.4) this.spawnParticle(320, Math.random() * h, '#ffcc00', 'spark');
+            if (Math.random() > 0.4) this.spawnParticle(320, Math.random() * h, '#ffcc00', 'spark', true);
             if (Math.random() > 0.2) this.spawnParticle(320 + (Math.random()-0.5)*20, Math.random() * h, '#111', 'smoke');
-            if (Math.random() > 0.8) this.spawnParticle(320, Math.random() * h, '#00f0ff', 'spark');
+            if (Math.random() > 0.8) this.spawnParticle(320, Math.random() * h, '#00f0ff', 'spark', true);
         }
         ctx.restore();
     },

@@ -97,12 +97,12 @@
             gap: 10px;
         }
 
-        #level-list {
+        #level-list, #dialogue-manager-list, #trigger-manager-list {
             flex: 1;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 10px;
             padding-right: 5px;
         }
 
@@ -274,21 +274,21 @@
     <div id="sub-toolbar">
         <div class="toolbar-group">
             <span class="toolbar-label">Camadas</span>
-            <button id="layer-base" class="layer-btn active" style="min-width: 80px;">⚒️ BASE</button>
-            <button id="layer-overlays" class="layer-btn" style="min-width: 80px;">💨 OVERLAY</button>
-            <button id="layer-blocks" class="layer-btn" style="min-width: 80px;">📦 BLOCOS</button>
-            <button id="layer-events" class="layer-btn" style="min-width: 80px;">💬 EVENTOS</button>
+            <button id="layer-base" class="layer-btn active" onclick="setLayer('base')" style="min-width: 80px;">⚒️ BASE</button>
+            <button id="layer-overlays" class="layer-btn" onclick="setLayer('overlays')" style="min-width: 80px;">💨 OVERLAY</button>
+            <button id="layer-blocks" class="layer-btn" onclick="setLayer('blocks')" style="min-width: 80px;">📦 BLOCOS</button>
+            <button id="layer-events" class="layer-btn" onclick="setLayer('events')" style="min-width: 80px;">💬 EVENTOS</button>
         </div>
 
         <div style="width: 2px; height: 20px; background: #333;"></div>
 
         <div class="toolbar-group">
             <span class="toolbar-label">Ferramentas</span>
-            <button id="tool-brush" class="tool-btn active">🖌️ Pincel</button>
-            <button id="tool-eraser" class="tool-btn">🧽 Borracha</button>
-            <button id="tool-rect" class="tool-btn">🔲 Quadrado</button>
-            <button id="tool-line" class="tool-btn">📏 Linha</button>
-            <button id="tool-select" class="tool-btn">🔦 Seleção</button>
+            <button id="tool-brush" class="tool-btn active" onclick="setTool('brush')">🖌️ Pincel</button>
+            <button id="tool-eraser" class="tool-btn" onclick="setTool('eraser')">🧽 Borracha</button>
+            <button id="tool-rect" class="tool-btn" onclick="setTool('rect')">🔲 Quadrado</button>
+            <button id="tool-line" class="tool-btn" onclick="setTool('line')">📏 Linha</button>
+            <button id="tool-select" class="tool-btn" onclick="setTool('select')">🔦 Seleção</button>
         </div>
 
         <div style="margin-left: auto; color: #444; font-size: 14px;">
@@ -301,8 +301,16 @@
             <div style="color: #00ff9f; font-weight: bold; margin-bottom: 5px; font-size: 14px;">PALETA DE TILES</div>
             <div id="palette-container" style="flex: 1; overflow-y: auto; padding-right: 5px;"></div>
             
-            <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 160px;">
-                <div style="color: #00ff9f; font-weight: bold; font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Propriedades</div>
+            <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 180px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px;">
+                    <div style="color: #00ff9f; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Propriedades</div>
+                    <button id="btn-close-props" style="background: none; border: none; color: #ff0055; cursor: pointer; font-size: 16px; padding: 0;">✖</button>
+                </div>
+                
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <button id="btn-copy-props" style="flex: 1; font-size: 12px; background: #222; border-color: #444;">📋 COPIAR</button>
+                    <button id="btn-paste-props" style="flex: 1; font-size: 12px; background: #222; border-color: #444;">📥 COLAR</button>
+                </div>
                 <div id="prop-type" style="font-size: 13px; color: #aaa; margin-bottom: 10px;">Tipo: Núcleo Alvo</div>
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                     <span style="font-size: 14px; color: #fff; width: 40px;">Amps:</span>
@@ -464,27 +472,37 @@
                     color: #fff !important;
                     background: #222;
                 }
+                .tab-pane {
+                    display: none;
+                    flex: 1;
+                    flex-direction: column;
+                    overflow: hidden;
+                    height: 100%;
+                }
+                .tab-pane.active {
+                    display: flex;
+                }
             </style>
 
-            <div id="tab-structure" class="tab-pane">
+            <div id="tab-structure" class="tab-pane active">
                 <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">CAPÍTULOS</div>
                 <div id="chapter-list" style="max-height: 150px; overflow-y: auto; border-bottom: 2px solid #333; margin-bottom: 10px; padding-bottom: 10px; display: flex; flex-direction: column; gap: 5px;"></div>
                 <button id="btn-new-chapter" style="width: 100%; font-size: 12px; margin-bottom: 10px;">➕ NOVO CAPÍTULO</button>
 
                 <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px;">FASES DO CAPÍTULO</div>
-                <div id="level-list" style="flex: 1; overflow-y: auto;"></div>
+                <div id="level-list"></div>
             </div>
 
-            <div id="tab-dialogues" class="tab-pane" style="display: none; flex: 1; flex-direction: column;">
+            <div id="tab-dialogues" class="tab-pane">
                 <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px; margin-bottom: 10px;">GERENCIADOR DE DIÁLOGOS</div>
-                <div id="dialogue-manager-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px;">
+                <div id="dialogue-manager-list">
                     <!-- Diálogos aparecerão aqui -->
                     <div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum diálogo nesta fase.<br><br>Use a ferramenta de 💬 EVENTOS para adicionar.</div>
                 </div>
             </div>
-            <div id="tab-triggers" class="tab-pane" style="display: none; flex: 1; flex-direction: column;">
+            <div id="tab-triggers" class="tab-pane">
                 <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px; margin-bottom: 10px;">GERENCIADOR DE GATILHOS</div>
-                <div id="trigger-manager-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px;">
+                <div id="trigger-manager-list">
                     <div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum gatilho de zona nesta fase.<br><br>Use a ferramenta de ⚡ GATILHOS para adicionar.</div>
                 </div>
             </div>

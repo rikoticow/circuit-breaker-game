@@ -45,7 +45,7 @@ O "Cérebro" do jogo. Gerencia:
     *   **Soltura de Carga:** O robô solta automaticamente qualquer bloco que esteja segurando ao entrar em uma esteira (ou se o bloco entrar nela) **somente se a esteira estiver ligada (ON)**. Esteiras desligadas permitem que o robô mantenha a posse do objeto.
     *   **Feedback Sonoro Industrial:** Quando o robô ou um bloco está sobre uma esteira magnética, o sistema de áudio emite um som rítmico de engrenagens mecânicas e cliques metálicos (`playConveyorGear`), reforçando a percepção de maquinário industrial em operação contínua.
     *   **Símbolos:** `(` (Esq), `)` (Dir), `[` (Cima), `]` (Baixo).
-    *   **Sistema de Canais:** Suporta até 30 canais independentes (0-29). Se uma esteira tiver canal e não houver botões vinculados, ela permanece ON. Se houver botões, ela segue o estado lógico (`anyPressed`).
+    *   **Sistema de Canais:** Suporta até 30 canais independentes (0-29). Se uma esteira/emissor tiver canal e não houver botões vinculados, ela permanece ON por padrão (a menos que controlada por sequenciador). Se houver botões, ela segue o estado lógico (`anyPressed`). O Canal 0 agora é totalmente suportado para integração com o Sequenciador de Eventos.
 
 ### B. Modular Graphics Engine (js/graphics/)
 O sistema visual foi refatorado de um arquivo monolítico para uma arquitetura modular, facilitando a manutenção e expansão. O objeto global `Graphics` é inicializado no núcleo e estendido por módulos especializados:
@@ -144,6 +144,7 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
 *   **Falha Conclusiva (Perma-Death por Tentativa):** O sistema de reversão automática foi removido. Se o robô for destruído ou desativado, o jogador transiciona diretamente para a tela de falha.
     *   **Perigos Físicos (Esmagamento/Explosão):** Causam a perda de 1 Unidade/Vida. O sistema sinaliza a perda com uma **vinheta vermelha pulsante** na tela e o selo **"FALHA"** nos monitores de transição durante o respawn.
     *   **Falha de Sistema (Fim de Energia):** Não consome vidas, mas interrompe a operação instantaneamente.
+    *   **Alerta de Segurança (Security Alert):** Sistema de emergência visual e sonoro ativado via gatilhos. Consiste em uma sirene de dois tons e um pulso de luz vermelha em tela cheia (Screen Space) usando mistura aditiva `screen`. O sistema utiliza um `alarmTimer` de 0.8s sincronizado no GameState para garantir que áudio e vídeo operem em ciclos perfeitos.
     *   **Esteiras Dinâmicas:** Podem operar de forma contínua ou ser controladas por **Canais de Comunicação**. Esteiras ligadas a botões param de mover objetos e interrompem sua animação (neon apagado) quando o sinal do canal is interrompido, permitindo a criação de quebra-cabeças de temporização e fluxo.
 *   **Emissores (E - Emitters):** Canhões fixos industriais que disparam feixes de laser contínuos.
     *   **Imobilidade:** Ocupam um tile fixo e não podem ser movidos ou empurrados pelo jogador ou esteiras.
@@ -184,16 +185,22 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
             *   **Robô:** Círculo de luz constante (raio de 1.5 tiles) ao redor do jogador.
             *   **Rede Elétrica:** Elementos energizados emitem luz própria. Inclui Fios energizados (`OCEAN`/`CIANO`), Blocos ativos, Núcleos/Cores com carga e Catalisadores Quânticos.
         *   **Transição Atmosférica:** Implementa um fade-in suave de 1.5s a 2s (`blackoutAlpha`) ao entrar em blackout, simulando a falha progressiva dos sistemas de iluminação industrial.
-        *   **Gatilhos de Zona (ZoneTriggers):** Sistema de eventos espaciais que monitoram a posição do jogador. Suporta:
-            *   `blackout`: Ativa/desativa/alterna o estado de iluminação global.
-            *   `music_intensity`: Muda a camada dinâmica da música (0, 1, 2).
-            *   `remote_signal`: Ativa/desativa/alterna canais lógicos remotamente (abre portas, liga esteiras).
-            *   `gravity`: Dispara uma mudança de gravidade global (N, S, E, O).
-            *   `dimension_shift`: Força a troca entre as fases Solar e Lunar.
-            *   `earthquake`: Provoca tremores de terra (Screen Shake) com intensidade variável.
-            *   `visual_sparks`: Dispara partículas de faíscas em coordenadas específicas.
-            *   `security_alert`: Ativa um modo de alerta com sirene e overlay visual pulsante vermelho.
-            *   Configurações: Raio de detecção, `oneShot` (execução única) e persistência via `levels.js`.
+        *   **Fluxo de Energia Dinâmico (Gradients & Colors):**
+            *   **Espessura Aumentada:** Fios (10px) e Esteiras (18px) possuem linhas de luz mais grossas para garantir legibilidade técnica no escuro.
+            *   **Sistema de Duas Etapas (Two-Pass Light):** Implementa um pipeline onde a luz primeiro "fura" a escuridão (punch) e depois aplica um brilho colorido aditivo (`lighter`) na cena.
+            *   **Assinaturas de Cor:**
+                *   **Ciano (#00f0ff):** Eletricidade, fios, esteiras e núcleos padrão.
+                *   **Vermelho (#ff3300):** Fontes de energia vermelha (contaminação/perigo).
+                *   **Roxo (#bf00ff):** Feixes de Laser e Emissores.
+            *   **Flashes de Transição:** O flash do *Singularity Switcher* agora é sincronizado com a fase: Ouro (#ffcc00) para Solar e Roxo (#bf00ff) para Lunar, reforçando a mudança de estado dimensional.
+            *   **Gradientes de Movimento:** Utilizam offsets animados para simular pulsos elétricos e fluxo mecânico.
+        *   **Gatilhos de Zona & Sequenciador (Event Sequencer):** Sistema de eventos espaciais que monitoram a posição do jogador e permitem criar coreografias complexas.
+            *   **Empilhamento de Eventos (Stacked Events):** Um único gatilho (`⚡`) pode conter múltiplos eventos que ocorrem em sequência.
+            *   **Controle de Tempo (`wait`):** Evento especial que pausa a execução da sequência por um número determinado de frames, permitindo sincronia precisa.
+            *   **Ações Suportadas:** `blackout`, `music_intensity`, `remote_signal` (Manipulação de sinais lógicos), `gravity`, `dimension_shift`, `earthquake` (Camera Shake com Força/Tempo), `visual_sparks`, `security_alert`, `dialogue`.
+            *   **Lógica de Sinais (Hazards & Conveyors):** Elementos que são "Sempre Ligados" por padrão (como Lasers e Esteiras) agora detectam automaticamente se um canal está sendo controlado remotamente via Sequenciador. Se detectado, eles iniciam em estado "Aguardando Sinal" (OFF), permitindo ativação/desativação remota mesmo sem botões físicos presentes.
+            *   **Pipeline de Execução:** O `GameState` mantém uma lista de `activeSequences` que são processadas em paralelo com o loop de jogo, garantindo que efeitos visuais e sonoros não bloqueiem a movimentação.
+            *   **Configurações:** Raio de detecção, `oneShot` (execução única) e persistência total via `levels.js`.
         *   **Feedback Sonoro Industrial:** Utiliza sons de queda de disjuntores metálicos (`playBlackoutStart`) e reinicialização de reatores (`playBlackoutEnd`) para reforçar a imersão.
 
 
@@ -208,22 +215,32 @@ O editor de níveis foi refatorado para uma estrutura modular dividida em três 
 
 #### Funcionalidades e UX:
 *   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos, Eventos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
+*   **Gestão de Estado Unificada:** Todas as variáveis globais (`activeLayer`, `currentTool`, `currentMap`, etc.) são agora gerenciadas diretamente no objeto `window`. Isso garante sincronização perfeita entre o motor de renderização (`editor_main.js`) e a interface de usuário (`editor_ui.js`), eliminando atrasos ou estados inconsistentes durante a edição.
+*   **Atalhos de Produtividade (F3):** Tecla de atalho `F3` alterna instantaneamente entre o modo de edição e o modo de teste, agilizando o ciclo de iteração e validação de puzzles.
 *   **High-Fidelity Rendering:** Utiliza a mesma classe `GameState` e `Graphics` do jogo para mostrar o fluxo de energia real durante a edição.
+*   **Ferramentas Avançadas de Desenho:**
+    *   **Pincel & Borracha:** Desenho livre de tiles.
+    *   **Quadrado (`🔲`):** Preenchimento rápido de áreas retangulares.
+    *   **Linha (`📏`):** Desenho de linhas precisas em qualquer ângulo usando o algoritmo de Bresenham.
+    *   **Seleção (`🔦`):** Permite selecionar áreas para edição de propriedades em lote.
 *   **Gerenciador de Diálogos Centralizado (Nova Aba):** Uma interface robusta na barra lateral dedicada exclusivamente à gestão de falas. Permite visualizar todos os diálogos da fase em uma lista vertical, facilitando a edição de textos longos, troca de ícones e configuração de triggers (Start/Walk).
 *   **Controle de Comportamento Narrativo:** Cada diálogo possui flags individuais para `Travar Robô` e `Auto-Fechar`. Eventos de fala suportam múltiplas mensagens sequenciais.
 *   **Gatilhos Espaciais e Persistência:**
     *   `Raio (Radius)`: Permite definir uma área circular (distância Manhattan) ao redor do tile de origem para disparar o diálogo.
     *   `Disparo Único (One-Shot)`: Define se o evento ocorre apenas uma vez por nível ou se repete sempre que o jogador entra na área de gatilho.
 *   **Navegação Inteligente (Middle-Click):** Clicar com o botão do meio em um evento de fala ou em um gatilho (`⚡`) no mapa redireciona instantaneamente o usuário para a aba correspondente (Diálogos ou Gatilhos) e foca no card correspondente, facilitando a edição rápida.
-*   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio** em elementos interativos (Portas, Botões, Núcleos, Chão Quântico), o editor permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
+*   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área com a ferramenta de **Seleção**, um painel de propriedades flutuante aparece na posição do cursor, permitindo alterar canais, amperagem, comportamento ou cores de todos os itens selecionados simultaneamente.
+*   **Editor de Canais:** Seletor visual estilo Godot no painel de propriedades, com grid 6x5 (30 canais: 0-29) e sinalização de canais já utilizados no nível atual.
+*   **Editor de Gatilhos & Sequenciador (Aba "GATILHOS"):** Interface avançada para gerenciar sequências de eventos.
+    *   **Gerenciamento de Sequência:** Interface estilo "stack" que permite adicionar, remover e reordenar (`▲/▼`) ações dentro de um mesmo gatilho.
+    *   **Input Contextual:** O editor adapta automaticamente os campos de entrada (seletores, números, texto) com base no tipo de evento selecionado (ex: seletor de direção para gravidade, campo de canal para sinais remotos).
+    *   **Migração Transparente:** O editor detecta gatilhos de versões antigas e os converte automaticamente para o formato de sequência na primeira edição.
+    *   **Configuração de Fase:** Checkbox "🌑 APAGÃO INICIAL" no topo da interface para definir o estado de luz no começo do nível.
+    *   **Visualização Contextual:** Gatilhos são representados no editor pelo ícone `⚡` (amarelo neon) para fácil identificação sobre a camada de eventos.
 *   **Área de Transferência:** Suporte para copiar e colar áreas do mapa via `Ctrl+C` e `Ctrl+V`.
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
 *   **Sistema de Backup e Rotação:** Antes de cada salvamento, o servidor cria automaticamente uma cópia de segurança em `levels_backup/`. O sistema mantém apenas os últimos 15 backups, deletando os mais antigos automaticamente para otimizar o espaço.
 *   **Integração Nativa:** Salva diretamente no arquivo `js/levels.js` através de requisições POST para o servidor local.
-*   **Editor de Gatilhos de Zona (Nova Aba "GATILHOS"):** Sistema para gerenciar eventos espaciais como o Apagão Industrial.
-    *   **Configuração de Fase:** Checkbox "🌑 APAGÃO INICIAL" no topo da interface para definir o estado de luz no começo do nível.
-    *   **Propriedades de Gatilho:** Painel dedicado para configurar o tipo de evento (`blackout`), a ação desejada (`activate`, `deactivate`, `toggle`), o raio de influência e a propriedade **One-Shot** (disparo único).
-    *   **Visualização Contextual:** Gatilhos são representados no editor pelo ícone `⚡` (amarelo neon) para fácil identificação sobre a camada de eventos.
 
 ## 8. Level Selector (js/levelSelector.js)
 O Level Selector é uma tela de seleção de níveis no estilo retro CRT industrial, acessível durante o jogo via tecla `Escape`.
@@ -257,7 +274,9 @@ A Result Screen é uma tela de sumário exibida ao final de cada nível, renderi
 
 ### 5. Sistema de Áudio Dinâmico (AudioSys)
 
-O motor de áudio evoluiu de um sequenciador simples para um sistema narrativo complexo baseado em capítulos.
+O motor de áudio evoluiu para um sistema narrativo complexo baseado em capítulos, com controle de ganho centralizado.
+
+*   **Master Gain (Music):** Implementa um nó de ganho central (`musicGain`) configurado por padrão em **0.5 (50%)**. Todos os instrumentos musicais sintetizados são roteados através deste nó, permitindo o balanceamento global entre trilha sonora e efeitos sonoros/emergência.
 
 *   **Mapeamento por Capítulos (Sectors)**: Diferente da fase inicial onde a música mudava a cada nível, o `AudioSys` agora consulta a variável global `CHAPTERS` para manter a trilha sonora consistente durante todo um setor narrativo.
 *   **Sequenciamento Expandido**: Suporte a partituras de até **512 notas (32 compassos)**, permitindo progressões melódicas cinematográficas (ex: temas *Shadows of the Void* e *Singularity Paradox*).

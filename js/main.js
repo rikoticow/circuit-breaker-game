@@ -475,13 +475,10 @@ function gameLoop(timestamp) {
     const ctx = Graphics.ctx;
     ctx.save();
     
-    // Screen Shake
-    let sx = 0, sy = 0;
-    if (game.screenShakeTimer > 0) {
-        const intensity = game.screenShakeTimer * 0.5;
-        sx = (Math.random() - 0.5) * intensity;
-        sy = (Math.random() - 0.5) * intensity;
-    }
+    // Screen Shake applied via centralized game state
+    const sx = game.shakeOffset ? game.shakeOffset.x : 0;
+    const sy = game.shakeOffset ? game.shakeOffset.y : 0;
+
     // Safety: ensure camera is never NaN
     if (isNaN(game.camera.x)) game.camera.x = 0;
     if (isNaN(game.camera.y)) game.camera.y = 0;
@@ -629,10 +626,6 @@ function gameLoop(timestamp) {
         Graphics.drawDebris(p);
     }
 
-    // Pass 2.06: Draw Lasers (Above blocks and debris, below particles)
-    for (const e of game.emitters) {
-        Graphics.drawLaser(e, animFrame);
-    }
 
     // Pass 2.07: Draw Glass Walls (Drawn AFTER lasers to look translucent on top)
     for (let y = Math.max(0, startY); y < Math.min(mapH, endY); y++) {
@@ -644,8 +637,6 @@ function gameLoop(timestamp) {
         }
     }
 
-    // Pass 2.08: Draw Particles (Influenced by gravity and collide with walls)
-    Graphics.drawParticles(game);
     // Pass 3.0: Solar Portals (Top Layer)
     for (const p of game.portals) {
         Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
@@ -665,7 +656,6 @@ function gameLoop(timestamp) {
         Graphics.drawCoreRequirement(t.x, t.y, t.required, data.charge);
     }
 
-    ctx.restore();
     
     // Draw Gravity Overlay (Force field visual)
     if (game.gravityOverlayAlpha > 0) {
@@ -675,7 +665,15 @@ function gameLoop(timestamp) {
     // Draw Blackout (Fog of War)
     Graphics.drawBlackout(game);
 
-    // Draw Transition Door (Above Blackout)
+    // Draw Lasers and Particles ABOVE the blackout (Emissive light)
+    for (const e of game.emitters) {
+        Graphics.drawLaser(e, animFrame);
+    }
+    Graphics.drawParticles(game);
+
+    ctx.restore();
+
+    // Draw Transition Door (Above Everything)
     if (game.transitionState !== 'NONE') {
         Graphics.drawDoorTransition(game, game.transitionProgress);
     }
