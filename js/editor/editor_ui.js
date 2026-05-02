@@ -545,9 +545,21 @@ function updateDialogueManager() {
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
                     <input type="checkbox" ${eventConfig.lockPlayer !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'lockPlayer', this.checked, -1)"> Travar Robô
                 </label>
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff;">
-                    <input type="checkbox" ${eventConfig.autoDismiss !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'autoDismiss', this.checked, -1)"> Auto-Fechar
-                </label>
+                
+                <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,255,159,0.05); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(0,255,159,0.1);">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #fff; flex: 1;">
+                        <input type="checkbox" ${eventConfig.autoDismiss !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'autoDismiss', this.checked, -1); updateDialogueManager();"> Auto-Fechar
+                    </label>
+                    ${eventConfig.autoDismiss !== false ? `
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <input type="number" step="0.1" min="0.2" max="20" value="${(eventConfig.dismissDelay !== undefined ? eventConfig.dismissDelay : 1500) / 1000}" 
+                                style="width: 38px; background: #000; color: #00ff9f; border: 1px solid #444; font-size: 10px; padding: 1px; text-align: center;"
+                                onchange="updateDialogueProp('${key}', 'dismissDelay', Math.round(parseFloat(this.value) * 1000), -1)">
+                            <span style="font-size: 9px; color: #888;">s</span>
+                        </div>
+                    ` : ''}
+                </div>
+
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #00ff9f; grid-column: span 2; border-top: 1px solid #333; padding-top: 5px; margin-top: 2px;">
                     <input type="checkbox" ${eventConfig.oneShot !== false ? 'checked' : ''} onchange="updateDialogueProp('${key}', 'oneShot', this.checked, -1)"> Disparo Único (One-Shot)
                 </label>
@@ -933,7 +945,7 @@ function setupPropertyListeners() {
     document.getElementById('prop-dialogue-delay').oninput = (e) => {
         if (editTargets.length === 0) return;
         const lvl = levelsData[currentLevelIdx];
-        const val = parseInt(e.target.value) || 1500;
+        const val = Math.round(parseFloat(e.target.value) * 1000) || 1500;
         for (const target of editTargets) {
             const key = `${target.x},${target.y}`;
             if (lvl.dialogues && lvl.dialogues[key]) lvl.dialogues[key].dismissDelay = val;
@@ -1132,10 +1144,13 @@ function updatePropertyPanel() {
     const isDialogue = char === '💬';
     document.getElementById('prop-dialogue-container').style.display = isDialogue ? 'flex' : 'none';
     if (isDialogue) {
-        const d = lvl.dialogues?.[`${p.x},${p.y}`] || { text: "", icon: "central", trigger: "walk" };
+        const d = lvl.dialogues?.[`${p.x},${p.y}`] || { text: "", icon: "central", trigger: "walk", autoDismiss: true, lockPlayer: true, dismissDelay: 1500 };
         document.getElementById('prop-dialogue-text').value = d.text || "";
         document.getElementById('prop-dialogue-icon').value = d.icon || "central";
         document.getElementById('prop-dialogue-trigger').value = d.trigger || "walk";
+        document.getElementById('prop-dialogue-autodismiss').checked = d.autoDismiss !== false;
+        document.getElementById('prop-dialogue-delay').value = (d.dismissDelay !== undefined ? d.dismissDelay : 1500) / 1000;
+        document.getElementById('prop-dialogue-lockplayer').checked = d.lockPlayer !== false;
     }
 }
 

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRCUIT BREAKER - Laboratory of Effects</title>
+    <link rel="stylesheet" href="css/dialogue.css">
+    <style>
+        :root {
+            --bg-color: #0d0d12;
+            --panel-color: #1a1a24;
+            --accent-color: #00ffaa;
+            --text-color: #f0f0f5;
+            --border-color: rgba(0, 255, 170, 0.2);
+            --theme-color: #00ffaa; /* Fallback for highlight */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { max-width: 1200px; width: 100%; }
+
+        header { text-align: center; margin-bottom: 30px; }
+        h1 { color: var(--accent-color); text-transform: uppercase; letter-spacing: 6px; margin: 0; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-color);
+            padding: 10px 20px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            opacity: 1;
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background: rgba(0, 255, 170, 0.05);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Grid */
+        .lab-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .effect-card {
+            background: var(--panel-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .preview-box {
+            background: #000;
+            padding: 20px;
+            border-radius: 4px;
+            min-height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .preview-box span { display: inline-block; white-space: pre; }
+
+        /* Simulator Area */
+        .simulator-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            align-items: center;
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            background: #000;
+            color: var(--accent-color);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            border-radius: 8px;
+            font-size: 1rem;
+            resize: vertical;
+        }
+
+        .sim-btn {
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 12px 30px;
+            font-weight: 900;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        /* Replica do HUD do Jogo */
+        .game-hud-replica {
+            position: relative;
+            padding: 40px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--border-color);
+            min-width: 400px;
+            max-width: 600px;
+            min-height: 100px;
+            border-radius: 4px;
+            box-shadow: 0 0 30px rgba(0, 255, 170, 0.1);
+        }
+
+        .hud-content {
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .hud-typewriter-cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background: var(--accent-color);
+            margin-left: 2px;
+            vertical-align: middle;
+            animation: cursor-blink 0.8s infinite;
+        }
+
+        @keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        .tag-code {
+            font-family: monospace;
+            font-size: 0.8rem;
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tag-item { color: #888; margin-bottom: 5px; cursor: pointer; }
+        .tag-item:hover { color: var(--accent-color); }
+
+        /* Presets Library */
+        .presets-container {
+            margin-top: 30px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .preset-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-card:hover {
+            background: rgba(0, 255, 170, 0.1);
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+        }
+
+        .preset-title {
+            color: var(--accent-color);
+            font-weight: bold;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .preset-preview {
+            font-size: 0.8rem;
+            opacity: 0.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Rich Text Laboratory</h1>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="openTab('visual')">Efeitos Visuais</button>
+            <button class="tab-btn" onclick="openTab('control')">Tags de Controle & HUD</button>
+        </div>
+
+        <!-- ABA 1: EFEITOS VISUAIS -->
+        <div id="visual" class="tab-content active">
+            <div class="lab-grid" id="visualGrid"></div>
+        </div>
+
+        <!-- ABA 2: CONTROLES E HUD -->
+        <div id="control" class="tab-content">
+            <div class="simulator-layout">
+                <div style="width: 100%;">
+                    <p>Simulador de HUD (Digite ou escolha um preset abaixo):</p>
+                    <textarea id="simInput">[speed:30][color:#00ffaa]Iniciando sistema de diagnóstico...[pause:500]\n[speed:10]Pronto.[speed:30]\n[highlight:#ff0000]ERRO NO SETOR 4[highlight:off]</textarea>
+                    <div style="margin-top:10px; display: flex; gap: 10px;">
+                        <button class="sim-btn" onclick="runSimulation()">Executar no HUD</button>
+                        <button class="sim-btn" style="background: #333; color: #fff;" onclick="clearSimulation()">Limpar</button>
+                    </div>
+                </div>
+
+                <div class="game-hud-replica">
+                    <div id="hudOutput" class="hud-content">Aguardando execução...</div>
+                </div>
+
+                <div style="width:100%; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    <h3 style="color:var(--accent-color); text-transform:uppercase; font-size:0.9rem;">Biblioteca de Presets</h3>
+                    <div class="presets-container" id="presetsGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Variáveis Globais e Configurações
+        const visualEffects = [
+            { id: 'wave', name: 'Wave', default: 1, min: 0.1, max: 10, text: 'Ondulação' },
+            { id: 'shake', name: 'Shake', default: 1, min: 0.5, max: 20, text: 'Vibração' },
+            { id: 'pulse', name: 'Pulse', default: 1, min: 0.1, max: 8, text: 'Pulsação' },
+            { id: 'glitch', name: 'Glitch', default: 1, min: 0.5, max: 15, text: 'Erro de Sinal' },
+            { id: 'melt', name: 'Melt', default: 1, min: 0.5, max: 10, text: 'Derretendo...' },
+            { id: 'pixel', name: 'Pixel', default: 1, min: 0.2, max: 8, text: 'Definição' },
+            { id: 'sketch', name: 'Sketch', default: 1, min: 0.5, max: 10, text: 'Esboço' },
+            { id: 'reboot', name: 'Reboot', default: 1, min: 0.5, max: 10, text: 'Flicker' },
+            { id: 'arcane', name: 'Arcane', default: 1, min: 0.1, max: 10, text: 'Arcano' },
+            { id: 'crypt', name: 'Crypt', default: 1, min: 1, max: 5, text: 'Criptografia' }
+        ];
+
+        let intervals = {};
+        let simTimeout;
+
+        // 2. Funções de Auxiliares
+        function renderChars(id, text, intensity) {
+            return text.split('').map((c, i) => {
+                const style = `--${id}-intensity: ${intensity}; animation-delay: ${i*0.05}s`;
+                const className = id === 'crypt' ? 'crypt-span' : id;
+                return `<span class="${className}" data-char="${c}" style="${style}">${c===' '?'&nbsp;':c}</span>`;
+            }).join('');
+        }
+
+        function startCryptLoop(id, intensity) {
+            if (intervals[id]) clearInterval(intervals[id]);
+            const p = document.getElementById('prev-'+id);
+            if (!p) return;
+            const spans = p.querySelectorAll('span');
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
+            
+            intervals[id] = setInterval(() => {
+                spans.forEach(s => {
+                    if (Math.random() > 0.8) {
+                        s.innerText = chars[Math.floor(Math.random()*chars.length)];
+                        setTimeout(() => s.innerText = s.getAttribute('data-char'), 100/intensity);
+                    }
+                });
+            }, 200/intensity);
+        }
+
+        // 3. Funções de Interface
+        window.openTab = (tabId) => {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            // Highlight the active button
+            const btns = document.querySelectorAll('.tab-btn');
+            btns.forEach(btn => {
+                if (btn.innerText.toLowerCase().includes(tabId === 'visual' ? 'visuais' : 'controle')) {
+                    btn.classList.add('active');
+                }
+            });
+        };
+
+        window.updateVisual = (id, val) => {
+            document.getElementById(`val-${id}`).innerText = val;
+            const prev = document.getElementById(`prev-${id}`);
+            if (id === 'melt' || id === 'pixel' || id === 'crypt') {
+                prev.innerHTML = renderChars(id, visualEffects.find(e=>e.id===id).text, val);
+                if (id === 'crypt') startCryptLoop(id, val);
+            } else {
+                prev.querySelectorAll('span').forEach(s => s.style.setProperty(`--${id}-intensity`, val));
+            }
+        };
+
+        window.copyText = (txt) => {
+            navigator.clipboard.writeText(txt);
+            const btn = event.target;
+            const prevText = btn.innerText;
+            btn.innerText = 'OK!';
+            setTimeout(() => btn.innerText = prevText, 1000);
+        };
+
+        window.addTag = (tag) => {
+            const input = document.getElementById('simInput');
+            input.value += tag;
+            input.focus();
+        };
+
+        // 4. Simulador de Diálogo
+        window.runSimulation = async () => {
+            if (simTimeout) clearTimeout(simTimeout);
+            const input = document.getElementById('simInput').value;
+            const output = document.getElementById('hudOutput');
+            output.innerHTML = '';
+            
+            let i = 0;
+            let currentText = '';
+            let speed = 30;
+            let activeEffects = new Map();
+            let currentColor = '';
+            let currentSize = '';
+
+            const processNext = async () => {
+                if (i >= input.length) {
+                    const finalCursor = output.querySelector('.hud-typewriter-cursor');
+                    if (finalCursor) finalCursor.remove();
+                    return;
+                }
+
+                let char = input[i];
+
+                // Tag Parsing
+                if (char === '[') {
+                    const end = input.indexOf(']', i);
+                    if (end !== -1) {
+                        const content = input.substring(i + 1, end);
+
+                        // Support for closing tags like [/arcane]
+                        if (content.startsWith('/')) {
+                            const tagToClose = content.substring(1);
+                            if (tagToClose === 'arcane') {
+                                activeEffects.delete('arcane');
+                                activeEffects.delete('arcane-color-1');
+                                activeEffects.delete('arcane-color-2');
+                            } else if (tagToClose === 'crypt') {
+                                activeEffects.delete('crypt-mode');
+                            } else if (tagToClose === 'highlight') {
+                                activeEffects.delete('highlight');
+                                activeEffects.delete('highlight-color');
+                            } else {
+                                activeEffects.delete(tagToClose);
+                            }
+                            i = end + 1;
+                            processNext();
+                            return;
+                        }
+
+                        const firstColon = content.indexOf(':');
+                        if (firstColon === -1) { i = end + 1; return processNext(); }
+                        
+                        const tag = content.substring(0, firstColon);
+                        const val = content.substring(firstColon + 1);
+                        const intensity = parseFloat(val) || 1;
+
+                        if (tag === 'pause') await new Promise(r => setTimeout(r, parseInt(val)));
+                        else if (tag === 'speed') speed = parseInt(val);
+                        else if (tag === 'color') currentColor = val;
+                        else if (tag === 'size') currentSize = val;
+                        else if (tag === 'highlight') {
+                            if (val === 'off' || val === '/') activeEffects.delete('highlight');
+                            else { activeEffects.set('highlight', 1); if (val) activeEffects.set('highlight-color', val); }
+                        } else if (tag === 'arcane') {
+                            if (val === 'off' || val === '/') {
+                                activeEffects.delete('arcane');
+                                activeEffects.delete('arcane-color-1');
+                                activeEffects.delete('arcane-color-2');
+                            } else {
+                                const parts = val.split(':');
+                                if (parts.length === 3) {
+                                    activeEffects.set('arcane', parseFloat(parts[0]) || 1);
+                                    activeEffects.set('arcane-color-1', parts[1]);
+                                    activeEffects.set('arcane-color-2', parts[2]);
+                                } else if (parts.length === 2) {
+                                    if (parts[0].startsWith('#')) {
+                                        activeEffects.set('arcane', 1);
+                                        activeEffects.set('arcane-color-1', parts[0]);
+                                        activeEffects.set('arcane-color-2', parts[1]);
+                                    } else {
+                                        activeEffects.set('arcane', parseFloat(parts[0]) || 1);
+                                        activeEffects.set('arcane-color-1', parts[1]);
+                                        activeEffects.set('arcane-color-2', parts[1]);
+                                    }
+                                } else if (val.startsWith('#')) {
+                                    activeEffects.set('arcane', 1);
+                                    activeEffects.set('arcane-color-1', val);
+                                    activeEffects.set('arcane-color-2', val);
+                                } else {
+                                    activeEffects.set('arcane', parseFloat(val) || 1);
+                                    activeEffects.delete('arcane-color-1');
+                                    activeEffects.delete('arcane-color-2');
+                                }
+                            }
+                        } else if (['wave', 'shake', 'pulse', 'melt', 'pixel', 'sketch', 'reboot', 'glitch'].includes(tag)) {
+                            if (val === 'off' || val === '/') activeEffects.delete(tag);
+                            else activeEffects.set(tag, intensity);
+                        } else if (tag === 'crypt') {
+                            if (val === 'off' || val === '/') activeEffects.delete('crypt-mode');
+                            else activeEffects.set('crypt-mode', intensity);
+                        }
+                        
+                        i = end + 1;
+                        processNext();
+                        return;
+                    }
+                }
+
+                if (char === '\\' && input[i+1] === 'n') {
+                    const cursor = output.querySelector('.hud-typewriter-cursor');
+                    if (cursor) cursor.remove();
+                    output.insertAdjacentHTML('beforeend', '<br><span class="hud-typewriter-cursor"></span>');
+                    i += 2;
+                    processNext();
+                    return;
+                }
+
+                if (char === '\n') {
+                    const cursor = output.querySelector('.hud-typewriter-cursor');
+                    if (cursor) cursor.remove();
+                    output.insertAdjacentHTML('beforeend', '<br><span class="hud-typewriter-cursor"></span>');
+                    i += 1;
+                    processNext();
+                    return;
+                }
+
+                // Apply Effects and Styles
+                const vars = Array.from(activeEffects.entries())
+                    .map(([n,v]) => n.includes('color') ? `--${n}: ${v}` : `--${n}-intensity: ${v}`)
+                    .join(';');
+                const classes = Array.from(activeEffects.keys()).map(k => k === 'crypt-mode' ? 'crypt-span' : k).filter(k => !k.includes('color')).join(' ');
+                const finalDelay = (output.querySelectorAll('span').length) * -0.1;
+                const delayStyle = activeEffects.has('melt') 
+                    ? `animation-delay: ${0.1 + Math.random() * 0.3}s;` 
+                    : `animation-delay: ${finalDelay}s;`;
+                
+                // Priority: Effects that manage color override static color
+                const colorIsManaged = activeEffects.has('arcane') || activeEffects.has('highlight');
+                const inlineColor = (!colorIsManaged && currentColor) ? `color: ${currentColor};` : '';
+                
+                const styles = `${inlineColor}${currentSize ? 'font-size:'+currentSize+'px;' : ''}${vars}; ${delayStyle}`;
+                
+                // Crypt effect in simulator (Now just creates the spans, the loop handles the rest)
+                if (activeEffects.has('crypt-mode') && char !== ' ' && char !== '\n') {
+                    const cryptInt = activeEffects.get('crypt-mode') || 1;
+                    const finalSpan = `<span class="crypt-span" data-char="${char}" data-intensity="${cryptInt}" style="${styles}">${char}</span>`;
+                    const cursor = output.querySelector('.hud-typewriter-cursor');
+                    if (cursor) cursor.remove();
+                    output.insertAdjacentHTML('beforeend', finalSpan + '<span class="hud-typewriter-cursor"></span>');
+                    i++;
+                    simTimeout = setTimeout(processNext, speed);
+                    return;
+                }
+
+                const finalSpan = `<span class="${classes}" style="${styles}">${char === ' ' ? '&nbsp;' : char}</span>`;
+                const cursor = output.querySelector('.hud-typewriter-cursor');
+                if (cursor) cursor.remove();
+                output.insertAdjacentHTML('beforeend', finalSpan + '<span class="hud-typewriter-cursor"></span>');
+                
+                i++;
+                simTimeout = setTimeout(processNext, speed);
+            };
+
+            processNext();
+        };
+
+        window.clearSimulation = () => {
+            if (simTimeout) clearTimeout(simTimeout);
+            document.getElementById('hudOutput').innerHTML = 'Aguardando execução...';
+        };
+
+        // 5. Inicialização (DOM Content Loaded)
+        // Presets Library Data
+        const presets = [
+            { title: "Alerta de Sistema Crítico", text: "[speed:20][color:#ff3300][shake:3][highlight:#ffffff] ALERTA DE SEGURANÇA [highlight:off][shake:off][pause:800]\\n[speed:50][reboot:2]Setor 06 comprometido. [pause:300]\\n[glitch:5]Invasão detectada.[glitch:off]" },
+            { title: "Mensagem do Vazio (Mística)", text: "[speed:80][arcane:1.5:#bb00ff:#00ffff][wave:1.5]Eu vejo através dos seus circuitos...[pause:1000]\\nNão há escapatória para o que está por vir.[wave:off][arcane:off]" },
+            { title: "Dados Criptografados", text: "[speed:5][crypt:2]0x99F2A10B7C...[pause:500][crypt:off]\\n[speed:30][color:#00ffaa]DESCRIPTOGRAFIA COMPLETA:[pause:400]\\nLocalização encontrada: Setor 12." },
+            { title: "IA em Colapso", text: "[speed:40][glitch:2]O-o-olá... [pause:200]unidade [glitch:5]R-01[glitch:2]. [pause:500]\\n[melt:1]Minha memória está... se esvaindo...[pause:1500]\\nAdeus." },
+            { title: "Comando de Execução", text: "[speed:15]> sudo purge --force [pause:500]\\n[speed:5][color:#ffff00]....................[pause:200] 100%[color:off]\\n[speed:30][highlight:#00ffaa][color:#000000] SUCESSO [color:off][highlight:off]" },
+            { title: "Sussurros de Esboço", text: "[speed:60][sketch:2][size:16]Eles estão vindo... [pause:400]eles nunca param de olhar.[pause:600]\\n[size:22][shake:2]CORRA.[shake:off]" },
+            { title: "Relatório Tático", text: "[speed:25][color:#0088ff]Status da Missão:[pause:300]\\n- Bateria: 42%[pause:200]\\n- Setores Limpos: 3/10[pause:200]\\n[highlight:#ffff00]- Ameaças: Múltiplas[highlight:off]" },
+            { title: "Pulsação de Coração/Motor", text: "[speed:50][arcane:2:#ff0000:#330000]O núcleo está instável.[pause:600]\\n[pulse:3][size:22]Tire-nos daqui agora![size:18]" },
+            { title: "Pixel Art Text", text: "[pixel:2][color:#ffa500]MODO RETRO ATIVADO.[pixel:off][pause:400]\\n[speed:20]Processando dados em baixa resolução..." },
+            { title: "Fusão de Efeitos (Gótico)", text: "[speed:100][color:#ff0000][arcane:1][wave:3]SANGUE [pause:300]E [pause:300]FERRO.[wave:off][arcane:off]" }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const visualGrid = document.getElementById('visualGrid');
+            visualEffects.forEach(eff => {
+                const card = document.createElement('div');
+                card.className = 'effect-card';
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight:bold; color:var(--accent-color); font-size:0.7rem; text-transform:uppercase;">${eff.name}</span>
+                        <span id="val-${eff.id}" style="font-size:0.7rem; opacity:0.5;">${eff.default}</span>
+                    </div>
+                    <div class="preview-box" id="prev-${eff.id}">
+                        ${renderChars(eff.id, eff.text, eff.default)}
+                    </div>
+                    <input type="range" min="${eff.min}" max="${eff.max}" step="0.1" value="${eff.default}" oninput="updateVisual('${eff.id}', this.value)">
+                    <div style="background:#000; padding:8px; font-size:0.8rem; border-radius:4px; display:flex; justify-content:space-between; border: 1px solid rgba(255,255,255,0.05);">
+                        <code>[${eff.id}:${eff.default}]</code>
+                        <span style="cursor:pointer; color:var(--accent-color); font-weight:bold; font-size:0.7rem;" onclick="copyText('[${eff.id}:${eff.default}]')">COPIAR</span>
+                    </div>
+                `;
+                visualGrid.appendChild(card);
+                if (eff.id === 'crypt') startCryptLoop(eff.id, eff.default);
+            });
+
+            // Initialize Presets Grid
+            const presetsGrid = document.getElementById('presetsGrid');
+            presets.forEach(preset => {
+                const card = document.createElement('div');
+                card.className = 'preset-card';
+                card.innerHTML = `
+                    <span class="preset-title">${preset.title}</span>
+                    <div class="preset-preview">${preset.text.replace(/\[.*?\]/g, '')}</div>
+                `;
+                card.onclick = () => {
+                    document.getElementById('simInput').value = preset.text;
+                    runSimulation();
+                };
+                presetsGrid.appendChild(card);
+            });
+
+            // Set initial tab
+            openTab('visual');
+        });
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text);
+            alert('Copiado para o clipboard!');
+        }
+
+        // Persistent Crypt Loop for Simulator
+        setInterval(() => {
+            const cryptElements = document.querySelectorAll('.crypt-span');
+            const symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
+            cryptElements.forEach(el => {
+                const intensity = parseFloat(el.getAttribute('data-intensity')) || 1;
+                const targetChar = el.getAttribute('data-char');
+                
+                if (Math.random() < (0.3 * intensity)) {
+                    el.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                } else {
+                    el.innerText = targetChar;
+                }
+            });
+        }, 100);
+    </script>
+</body>
+</html>

@@ -691,6 +691,7 @@ class GameState {
     update() {
         this.frame++;
         this.updateSequences();
+        if (window.Dialogue) Dialogue.update();
         if (this.player.isDead) this.player.deathTimer++;
 
         // Update Gravity Overlay Alpha
@@ -3287,22 +3288,9 @@ class GameState {
                 // or if it was never triggered at all.
                 if (!isOneShot && this.triggeredDialogues.has(dialogueId)) continue;
 
-                const target = this.getDialogueTarget();
-                if (window.Dialogue) {
-                    this.triggeredDialogues.add(dialogueId);
-                    
-                    messages.forEach(msg => {
-                        Dialogue.show(target, {
-                            text: msg.text,
-                            icon: msg.icon || 'central',
-                            isAI: msg.icon !== 'human',
-                            position: config.position || 'center',
-                            autoDismiss: config.autoDismiss !== false,
-                            lockPlayer: config.lockPlayer !== false,
-                            dismissDelay: config.dismissDelay || 1500
-                        });
-                    });
-                }
+                this.triggeredDialogues.add(dialogueId);
+                this.triggerDialogue(coord);
+                
                 if (triggerType === 'walk' && radius === 0) break; 
             } else {
                 // If player is OUTSIDE and it's NOT a oneShot, reset the trigger so it can fire again upon re-entry
@@ -3313,14 +3301,54 @@ class GameState {
         }
     }
 
+    triggerDialogue(key) {
+        if (!this.levelData || !this.levelData.dialogues) return;
+        const data = this.levelData.dialogues[key];
+        if (!data) return;
+
+        let messages = [];
+        let config = {};
+
+        if (Array.isArray(data)) {
+            messages = data;
+            config = data[0] || {};
+        } else if (data.messages) {
+            messages = data.messages;
+            config = data;
+        } else {
+            messages = [data];
+            config = data;
+        }
+
+        if (messages.length === 0) return;
+
+        const target = this.getDialogueTarget();
+        if (window.Dialogue) {
+            messages.forEach(msg => {
+                Dialogue.show(target, {
+                    text: msg.text,
+                    icon: msg.icon || 'central',
+                    isAI: (msg.icon !== 'human' && msg.icon !== 'central_human'),
+                    speed: msg.speed || config.speed || undefined,
+                    position: msg.pos || msg.position || config.pos || config.position || 'center',
+                    autoDismiss: msg.autoDismiss !== undefined ? msg.autoDismiss : (config.autoDismiss !== false),
+                    lockPlayer: msg.lockPlayer !== undefined ? msg.lockPlayer : (config.lockPlayer !== false),
+                    dismissDelay: msg.dismissDelay !== undefined ? msg.dismissDelay : (config.dismissDelay !== undefined ? config.dismissDelay : 1500)
+                });
+            });
+        }
+    }
+
+
     getDialogueTarget() {
         const self = this;
+        const canvas = document.getElementById('gameCanvas') || 
+                       document.getElementById('test-canvas') || 
+                       document.getElementById('editor-canvas');
+        
         return {
             getBoundingClientRect: () => {
-                const canvas = document.getElementById('gameCanvas') || 
-                               document.getElementById('test-canvas') || 
-                               document.getElementById('editor-canvas');
-                if (!canvas) return { width: 0, height: 0, top: 0, left: 0, bottom: 0, right: 0 };
+                if (!canvas) return { width: 0, height: 0, top: 0, left: 0, bottom: 0, right: 0, x: 0, y: 0 };
                 
                 const rect = canvas.getBoundingClientRect();
                 const camX = self.camera ? self.camera.x : 0;

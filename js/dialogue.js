@@ -11,6 +11,8 @@ const Dialogue = {
     
     // Default typing speed (ms per char)
     defaultSpeed: 30, 
+    lastX: 0,
+    lastY: 0,
     
     handleInput(e) {
         if (!Dialogue.activeTippy) return;
@@ -131,8 +133,8 @@ const Dialogue = {
         }
 
         // Initialize Tippy
-        this.activeTippy = tippy(document.body, {
-            getReferenceClientRect: tippyTarget.getBoundingClientRect,
+        const instances = tippy(document.body, {
+            getReferenceClientRect: () => tippyTarget.getBoundingClientRect(),
             content: content,
             allowHTML: true,
             arrow: arrow,
@@ -150,6 +152,7 @@ const Dialogue = {
             }
         });
 
+        this.activeTippy = Array.isArray(instances) ? instances[0] : instances;
         this.activeTippy.show();
         this.tippyTarget = tippyTarget; // Store for update loop
 
@@ -159,10 +162,17 @@ const Dialogue = {
 
     update() {
         if (this.activeTippy && this.currentConfig && this.currentConfig.position === 'follow') {
-            // Tippy uses the getBoundingClientRect of the target, 
-            // but we need to tell popper to recalculate
-            if (this.activeTippy.popperInstance) {
-                this.activeTippy.popperInstance.update();
+            const instance = this.activeTippy;
+            if (!instance.popperInstance) return;
+
+            // PERFORMANCE OPTIMIZATION: Dirty Checking
+            // We only force an update if the target's position has actually changed in screen space
+            const rect = this.tippyTarget.getBoundingClientRect();
+            
+            if (Math.abs(rect.x - this.lastX) > 0.1 || Math.abs(rect.y - this.lastY) > 0.1) {
+                this.lastX = rect.x;
+                this.lastY = rect.y;
+                instance.popperInstance.forceUpdate();
             }
         }
     },
@@ -215,7 +225,16 @@ const Dialogue = {
         this.onCompleteCallback = onComplete;
         this.isDone = false;
         this.skipRequested = false;
+
+        let activeEffects = new Map(); // name -> intensity
+        let currentSize = '18px';
+        let currentColor = '';
         
+        const randomChar = () => {
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
+            return chars[Math.floor(Math.random() * chars.length)];
+        };
+
         while (i < fullText.length) {
             // "Turbo Mode" - if skip is requested, speed up significantly instead of instant jump
             let effectiveSpeed = this.skipRequested ? Math.min(speed, 5) : speed;
@@ -225,8 +244,36 @@ const Dialogue = {
             if (char === '[') {
                 const endTag = fullText.indexOf(']', i);
                 if (endTag !== -1) {
-                    const tagContent = fullText.substring(i + 1, endTag);
-                    const [tag, val] = tagContent.split(':');
+                    const content = fullText.substring(i + 1, endTag);
+                    
+                    // Support for closing tags like [/arcane]
+                    if (content.startsWith('/')) {
+                        const tagToClose = content.substring(1);
+                        if (tagToClose === 'arcane') {
+                            activeEffects.delete('arcane');
+                            activeEffects.delete('arcane-color-1');
+                            activeEffects.delete('arcane-color-2');
+                        } else if (tagToClose === 'crypt') {
+                            activeEffects.delete('crypt-mode');
+                        } else if (tagToClose === 'highlight') {
+                            activeEffects.delete('highlight');
+                            activeEffects.delete('highlight-color');
+                        } else if (tagToClose === 'sfx') {
+                            config.voice = 'ia';
+                            isAI = true;
+                        } else {
+                            activeEffects.delete(tagToClose);
+                        }
+                        i = endTag + 1;
+                        continue;
+                    }
+
+                    const firstColon = content.indexOf(':');
+                    if (firstColon === -1) { i = endTag + 1; continue; }
+                    
+                    const tag = content.substring(0, firstColon);
+                    const val = content.substring(firstColon + 1);
+                    const intensity = parseFloat(val) || 1;
                     
                     if (tag === 'pause') {
                         if (!this.skipRequested) {
@@ -235,9 +282,64 @@ const Dialogue = {
                     } else if (tag === 'speed') {
                         speed = parseInt(val);
                     } else if (tag === 'color') {
-                        currentText += `<span style="color:${val}">`;
+                        currentColor = val;
+                    } else if (tag === 'size') {
+                        currentSize = val.includes('px') ? val : val + 'px';
+                    } else if (tag === 'arcane') {
+                        if (val === 'off' || val === '/') {
+                            activeEffects.delete('arcane');
+                            activeEffects.delete('arcane-color-1');
+                            activeEffects.delete('arcane-color-2');
+                        } else {
+                            const parts = val.split(':');
+                            if (parts.length === 3) {
+                                activeEffects.set('arcane', parseFloat(parts[0]) || 1);
+                                activeEffects.set('arcane-color-1', parts[1]);
+                                activeEffects.set('arcane-color-2', parts[2]);
+                            } else if (parts.length === 2) {
+                                if (parts[0].startsWith('#')) {
+                                    activeEffects.set('arcane', 1);
+                                    activeEffects.set('arcane-color-1', parts[0]);
+                                    activeEffects.set('arcane-color-2', parts[1]);
+                                } else {
+                                    activeEffects.set('arcane', parseFloat(parts[0]) || 1);
+                                    activeEffects.set('arcane-color-1', parts[1]);
+                                    activeEffects.set('arcane-color-2', parts[1]);
+                                }
+                            } else if (val.startsWith('#')) {
+                                activeEffects.set('arcane', 1);
+                                activeEffects.set('arcane-color-1', val);
+                                activeEffects.set('arcane-color-2', val);
+                            } else {
+                                activeEffects.set('arcane', intensity);
+                                activeEffects.delete('arcane-color-1');
+                                activeEffects.delete('arcane-color-2');
+                            }
+                        }
+                    } else if (tag === 'highlight') {
+                        if (val === 'off' || val === '/') {
+                            activeEffects.delete('highlight');
+                            activeEffects.delete('highlight-color');
+                        } else {
+                            activeEffects.set('highlight', 1);
+                            if (val) activeEffects.set('highlight-color', val);
+                        }
+                    } else if (['shake', 'wave', 'pulse', 'melt', 'pixel', 'sketch', 'reboot'].includes(tag)) {
+                        if (val === 'off' || val === '/') activeEffects.delete(tag);
+                        else activeEffects.set(tag, intensity);
+                    } else if (tag === 'glitch') {
+                        if (val === 'off' || val === '/') activeEffects.delete('glitch');
+                        else {
+                            activeEffects.set('glitch', intensity);
+                            setTimeout(() => activeEffects.delete('glitch'), 500);
+                        }
+                    } else if (tag === 'crypt') {
+                        if (val === 'off' || val === '/') activeEffects.delete('crypt-mode');
+                        else activeEffects.set('crypt-mode', intensity);
                     } else if (tag === 'sfx') {
-                        isAI = (val === 'ia' || val === 'ai');
+                        if (val === 'off' || val === '/') config.voice = 'ia';
+                        else config.voice = val;
+                        isAI = (config.voice === 'ia' || config.voice === 'ai');
                     }
                     
                     i = endTag + 1;
@@ -256,8 +358,56 @@ const Dialogue = {
                 }
             }
 
-            currentText += char;
-            element.innerHTML = currentText + '<span class="hud-typewriter-cursor"></span>';
+            // Newline Handling
+            if (char === '\n' || (char === '\\' && fullText[i+1] === 'n')) {
+                const cursor = element.querySelector('.hud-typewriter-cursor');
+                if (cursor) cursor.remove();
+                element.insertAdjacentHTML('beforeend', '<br><span class="hud-typewriter-cursor"></span>');
+                i += (char === '\\' ? 2 : 1);
+                continue;
+            }
+
+            // Prepare CSS variables for effects
+            let vars = Array.from(activeEffects.entries())
+                .map(([name, val]) => {
+                    if (name.includes('color')) return `--${name}: ${val}`;
+                    return `--${name}-intensity: ${val}`;
+                })
+                .join('; ');
+
+            // [crypt] Effect Handling - Persistent encrypted look
+            if (activeEffects.has('crypt-mode') && char !== " " && char !== "\n") {
+                const cryptInt = activeEffects.get('crypt-mode') || 1;
+                const delay = (element.querySelectorAll('span').length) * -0.1;
+                const charSpan = `<span data-char="${char}" data-intensity="${cryptInt}" style="font-size: ${currentSize}; ${currentColor ? 'color:' + currentColor : ''}; ${vars}; animation-delay: ${delay}s" class="crypt-span"></span>`;
+                
+                const cursor = element.querySelector('.hud-typewriter-cursor');
+                if (cursor) cursor.remove();
+                element.insertAdjacentHTML('beforeend', charSpan + '<span class="hud-typewriter-cursor"></span>');
+                
+                i++;
+                if (effectiveSpeed > 0) await new Promise(r => setTimeout(r, effectiveSpeed));
+                continue;
+            }
+
+            // Character Construction with Effects
+            const charToRender = char; // \n handled above
+            const finalDelay = (element.querySelectorAll('span').length) * -0.1;
+            const delayStyle = activeEffects.has('melt') 
+                ? `animation-delay: ${0.1 + Math.random() * 0.3}s;` 
+                : `animation-delay: ${finalDelay}s;`;
+            
+            // Priority: Effects that manage color (arcane, highlight) override the static [color] tag
+            const colorIsManaged = activeEffects.has('arcane') || activeEffects.has('highlight');
+            const inlineColor = (!colorIsManaged && currentColor) ? `color: ${currentColor};` : '';
+            
+            let charSpan = `<span style="font-size: ${currentSize}; ${inlineColor} ${vars}; ${delayStyle}" class="${Array.from(activeEffects.keys()).map(k => k === 'crypt-mode' ? 'crypt-span' : k).filter(k => !k.includes('color')).join(' ')}">${charToRender === ' ' ? '&nbsp;' : charToRender}</span>`;
+            
+            // Remove cursor temporary if it exists to append correctly
+            const cursor = element.querySelector('.hud-typewriter-cursor');
+            if (cursor) cursor.remove();
+            
+            element.insertAdjacentHTML('beforeend', charSpan + '<span class="hud-typewriter-cursor"></span>');
             
             if (char !== " " && char !== "\n") {
                 const pitch = 0.8 + (Math.random() * 0.4);
@@ -274,7 +424,8 @@ const Dialogue = {
 
         this.isDone = true;
         this.isTyping = true; // Still "active" but done typing
-        element.innerHTML = currentText; // Remove cursor when done
+        const finalCursor = element.querySelector('.hud-typewriter-cursor');
+        if (finalCursor) finalCursor.remove();
 
         // Update indicator
         if (!config.autoDismiss) {
@@ -296,3 +447,21 @@ const Dialogue = {
 };
 
 window.Dialogue = Dialogue;
+
+// --- Persistent Effects Loop ---
+setInterval(() => {
+    const cryptElements = document.querySelectorAll('.crypt-span');
+    const symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
+    cryptElements.forEach(el => {
+        const intensity = parseFloat(el.getAttribute('data-intensity')) || 1;
+        const targetChar = el.getAttribute('data-char');
+        
+        // Probability of scrambling: higher intensity = more scrambling
+        // Example: if intensity is 1, 70% chance of random symbol
+        if (Math.random() < (0.3 * intensity)) {
+            el.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+        } else {
+            el.innerText = targetChar;
+        }
+    });
+}, 100);
