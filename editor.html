@@ -277,7 +277,7 @@
             <button id="layer-base" class="layer-btn active" style="min-width: 80px;">⚒️ BASE</button>
             <button id="layer-overlays" class="layer-btn" style="min-width: 80px;">💨 OVERLAY</button>
             <button id="layer-blocks" class="layer-btn" style="min-width: 80px;">📦 BLOCOS</button>
-            <button id="layer-events" class="layer-btn" style="min-width: 80px;">💬 FALAS</button>
+            <button id="layer-events" class="layer-btn" style="min-width: 80px;">💬 EVENTOS</button>
         </div>
 
         <div style="width: 2px; height: 20px; background: #333;"></div>
@@ -343,7 +343,7 @@
 
                 <!-- DIALOGUE PROPERTIES -->
                 <div id="prop-dialogue-container" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-                    <div style="font-size: 12px; color: #00ff9f;">CONFIGURAÇÃO DE FALA</div>
+                    <div style="font-size: 12px; color: #00ff9f;">CONFIGURAÇÃO DE EVENTO</div>
                     <textarea id="prop-dialogue-text" placeholder="Digite o diálogo aqui... [pause:500] Use tags!" style="width: 100%; height: 80px; background: #000; color: #00ff9f; border: 1px solid #444; font-family: 'VT323', monospace; font-size: 16px; padding: 5px; resize: vertical;"></textarea>
                     <div style="display: flex; gap: 5px;">
                         <select id="prop-dialogue-icon" style="flex: 1; font-size: 12px;">
@@ -479,7 +479,7 @@
                 <div style="color: #00ff9f; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; font-size: 14px; margin-bottom: 10px;">GERENCIADOR DE DIÁLOGOS</div>
                 <div id="dialogue-manager-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px;">
                     <!-- Diálogos aparecerão aqui -->
-                    <div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum diálogo nesta fase.<br><br>Use a ferramenta de 💬 FALAS para adicionar.</div>
+                    <div style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">Nenhum diálogo nesta fase.<br><br>Use a ferramenta de 💬 EVENTOS para adicionar.</div>
                 </div>
             </div>
             <div id="tab-triggers" class="tab-pane" style="display: none; flex: 1; flex-direction: column;">
@@ -527,7 +527,9 @@
     <script src="js/resultScreen.js"></script>
     <script src="js/game.js"></script>
     <script src="js/levels.js"></script>
-    <script src="js/editor.js"></script>
+    <script src="js/editor/editor_ui.js"></script>
+    <script src="js/editor/editor_test.js"></script>
+    <script src="js/editor/editor_main.js"></script>
 
 </body>
 </html>

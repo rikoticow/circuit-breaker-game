@@ -33,6 +33,9 @@ class GameState {
         this.isBlackoutActive = false;
         this.blackoutAlpha = 0;
         this.zoneTriggers = [];
+        this.remoteSignals = new Set();
+        this.isSecurityAlert = false;
+        this.alertPulse = 0;
 
 
         this.score = 0;
@@ -278,6 +281,9 @@ class GameState {
         this.zoneTriggers = levelData.zoneTriggers || [];
         this.isBlackoutActive = levelData.startWithBlackout || false;
         this.blackoutAlpha = this.isBlackoutActive ? 1 : 0;
+        this.remoteSignals.clear();
+        this.isSecurityAlert = false;
+        this.alertPulse = 0;
 
         const charMap = levelData.map;
         const blocksMap = levelData.blocks; 
@@ -626,18 +632,20 @@ class GameState {
         if (!c) return false;
         const chan = Number(c.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
+        const isRemoteActive = this.remoteSignals.has(chan);
         // If there are NO buttons on this channel, it's ON.
-        // If there ARE buttons, it's ON if ALL are pressed.
-        return chanButtons.length === 0 || chanButtons.every(b => b.isPressed);
+        // If there ARE buttons, it's ON if ALL are pressed OR if a remote signal is active.
+        return chanButtons.length === 0 || chanButtons.every(b => b.isPressed) || isRemoteActive;
     }
 
     isEmitterActive(e) {
         if (!e) return false;
         const chan = Number(e.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
+        const isRemoteActive = this.remoteSignals.has(chan);
         
-        // Default behavior: No buttons = ON, With buttons = OFF until ALL pressed.
-        let active = chanButtons.length === 0 || chanButtons.every(b => b.isPressed);
+        // Default behavior: No buttons = ON, With buttons = OFF until ALL pressed OR remote active.
+        let active = chanButtons.length === 0 || chanButtons.every(b => b.isPressed) || isRemoteActive;
         
         // If inverted, flip the logic.
         if (e.inverted) active = !active;
@@ -660,6 +668,13 @@ class GameState {
             this.blackoutAlpha = Math.min(1, this.blackoutAlpha + 0.015);
         } else {
             this.blackoutAlpha = Math.max(0, this.blackoutAlpha - 0.02);
+        }
+
+        // Security Alert Pulse (Rhythmic sine)
+        if (this.isSecurityAlert) {
+            this.alertPulse += 0.05;
+        } else {
+            this.alertPulse = 0;
         }
 
         // Smooth player interpolation (Juicy movement)
@@ -1322,8 +1337,9 @@ class GameState {
             // Link door to button: ALL buttons on the same channel must be pressed
             const chanButtons = this.buttons.filter(b => b.channel === door.channel);
             const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
+            const isRemoteActive = this.remoteSignals.has(door.channel);
             
-            const shouldBeOpen = (isPowered || allPressed);
+            const shouldBeOpen = (isPowered || allPressed || isRemoteActive);
             const wasOpen = door.state === 'OPEN' || door.state === 'BROKEN_OPEN';
 
             if (door.state === 'BROKEN_OPEN') continue; // Stay open forever
@@ -1696,8 +1712,51 @@ class GameState {
                         } else {
                             if (window.AudioSys) AudioSys.playBlackoutEnd();
                         }
+                    fired = true;
+                    }
+                } else if (trigger.type === 'music_intensity') {
+                    const intensity = parseInt(trigger.action);
+                    if (!isNaN(intensity) && window.AudioSys) {
+                        AudioSys.setMusicIntensity(intensity);
                         fired = true;
                     }
+                } else if (trigger.type === 'remote_signal') {
+                    const chan = parseInt(trigger.channel || 0);
+                    if (trigger.action === 'activate') {
+                        this.remoteSignals.add(chan);
+                        fired = true;
+                    } else if (trigger.action === 'deactivate') {
+                        this.remoteSignals.delete(chan);
+                        fired = true;
+                    } else if (trigger.action === 'toggle') {
+                        if (this.remoteSignals.has(chan)) this.remoteSignals.delete(chan);
+                        else this.remoteSignals.add(chan);
+                        fired = true;
+                    }
+                } else if (trigger.type === 'dimension_shift') {
+                    this.isSolarPhase = (trigger.action === 'solar');
+                    if (window.AudioSys) AudioSys.playDimensionInversion();
+                    this.screenShakeTimer = 20;
+                    fired = true;
+                } else if (trigger.type === 'earthquake') {
+                    this.screenShakeTimer = parseInt(trigger.action || 30);
+                    if (window.AudioSys) AudioSys.playEarthquake && AudioSys.playEarthquake();
+                    fired = true;
+                } else if (trigger.type === 'gravity') {
+                    const dirMap = { 'up': DIRS.UP, 'down': DIRS.DOWN, 'left': DIRS.LEFT, 'right': DIRS.RIGHT };
+                    const gDir = dirMap[trigger.action] || DIRS.DOWN;
+                    this.triggerGravity(gDir);
+                    fired = true;
+                } else if (trigger.type === 'visual_sparks') {
+                    for (let j = 0; j < 15; j++) {
+                        Graphics.spawnParticle(trigger.x * 32 + 16, trigger.y * 32 + 16, '#ffcc00', 'spark');
+                    }
+                    if (window.AudioSys) AudioSys.playSpark && AudioSys.playSpark();
+                    fired = true;
+                } else if (trigger.type === 'security_alert') {
+                    this.isSecurityAlert = (trigger.action === 'activate');
+                    if (this.isSecurityAlert && window.AudioSys) AudioSys.playAlarm && AudioSys.playAlarm();
+                    fired = true;
                 }
                 
                 // If it fired and is one-shot, remove it so it doesn't fire again

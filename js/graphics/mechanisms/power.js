@@ -8,7 +8,7 @@ Object.assign(Graphics, {
         const w = 12; // Thicker pipe inner
         const hw = w/2;
         
-        const isPowered = flowData !== null;
+        const isPowered = !!flowData;
         let color = '#ff6a00';
         let borderColor = '#883300';
         

@@ -120,8 +120,29 @@ const Graphics = {
     },
 
     drawHUD(game) {
+        // Draw Security Alert Pulse
+        if (game.isSecurityAlert) {
+            this._drawSecurityAlert(this.ctx, game);
+        }
+        
         // Draw Result Vignette (Red for death/gameOver, Green for win)
         this._drawResultVignette(this.ctx, game);
+    },
+
+    _drawSecurityAlert(ctx, game) {
+        const pulse = (Math.sin(game.alertPulse) + 1) / 2;
+        const intensity = 0.15 + pulse * 0.25;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        
+        const grad = ctx.createRadialGradient(320, 240, 100, 320, 240, 500);
+        grad.addColorStop(0, `rgba(255, 0, 0, 0)`);
+        grad.addColorStop(1, `rgba(255, 0, 0, ${intensity})`);
+        
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 640, 560);
+        ctx.restore();
     },
 
     _drawResultVignette(ctx, game) {

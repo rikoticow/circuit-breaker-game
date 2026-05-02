@@ -12,16 +12,16 @@ O jogo é construído em Vanilla JavaScript utilizando a API de Canvas 2D para r
 ### A. Os Três Contextos Independentes
 Existem três loops de renderização e instâncias de estado que operam de forma isolada:
 1.  **Motor Principal (`main.js`):** Executa o `gameLoop` oficial. Utiliza a instância global `game`.
-2.  **Editor - Modo de Edição (`editor.js` -> `renderLoop`):** Utiliza uma instância simplificada chamada `mockGame`. Este loop é responsável por desenhar o grid estático enquanto o usuário constrói a fase.
-3.  **Editor - Modo de Teste (`editor.js` -> `testLoop`):** Utiliza uma instância isolada chamada `testGame`. É um motor completo que roda dentro de um overlay para validar a jogabilidade sem sair do editor.
+2.  **Editor - Modo de Edição (`js/editor/editor_main.js` -> `renderLoop`):** Utiliza uma instância simplificada chamada `mockGame`. Este loop é responsável por desenhar o grid estático enquanto o usuário constrói a fase.
+3.  **Editor - Modo de Teste (`js/editor/editor_test.js` -> `testLoop`):** Utiliza uma instância isolada chamada `testGame`. É um motor completo que roda dentro de um overlay para validar a jogabilidade sem sair do editor.
 
 ### B. Checklist de Implementação de Novos Recursos
 Para que uma nova entidade funcione e seja visível em todo o ecossistema, os seguintes passos são obrigatórios:
 
 1.  **Lógica Central (`js/game.js`):** Adicionar propriedades ao `constructor`, lógica de carregamento em `loadLevel` e comportamento em `update()`.
 2.  **Visual e Renderização (`js/graphics/`):** Criar a função de desenho modular e garantir que a assinatura receba todos os dados de estado necessários.
-3.  **Sincronização de Loops (Desenho):** Adicionar a chamada de desenho tanto no `main.js` quanto no `testLoop` do `editor.js`.
-4.  **Integração com Ferramentas do Editor (`editor.js`):** Atualizar `PALETTE`, `createTilePreview`, `drawChar` e `rebuildMock`.
+3.  **Sincronização de Loops (Desenho):** Adicionar a chamada de desenho tanto no `main.js` quanto no `testLoop` do `editor_test.js`.
+4.  **Integração com Ferramentas do Editor (`js/editor/`):** Atualizar `PALETTE`, `createTilePreview`, `drawChar` e `rebuildMock` no `editor_main.js`.
 
 ## 3. Componentes da Engine
 
@@ -184,21 +184,37 @@ A interface utiliza barras segmentadas com proporção 1:1 para movimentos:
             *   **Robô:** Círculo de luz constante (raio de 1.5 tiles) ao redor do jogador.
             *   **Rede Elétrica:** Elementos energizados emitem luz própria. Inclui Fios energizados (`OCEAN`/`CIANO`), Blocos ativos, Núcleos/Cores com carga e Catalisadores Quânticos.
         *   **Transição Atmosférica:** Implementa um fade-in suave de 1.5s a 2s (`blackoutAlpha`) ao entrar em blackout, simulando a falha progressiva dos sistemas de iluminação industrial.
-        *   **Gatilhos de Zona (ZoneTriggers):** Array de objetos no nível que monitoram a posição do jogador para ativar ou desativar o estado global `isBlackoutActive`. Suporta coordenadas específicas `(x, y)` ou áreas retangulares `area: {x, y, w, h}`.
+        *   **Gatilhos de Zona (ZoneTriggers):** Sistema de eventos espaciais que monitoram a posição do jogador. Suporta:
+            *   `blackout`: Ativa/desativa/alterna o estado de iluminação global.
+            *   `music_intensity`: Muda a camada dinâmica da música (0, 1, 2).
+            *   `remote_signal`: Ativa/desativa/alterna canais lógicos remotamente (abre portas, liga esteiras).
+            *   `gravity`: Dispara uma mudança de gravidade global (N, S, E, O).
+            *   `dimension_shift`: Força a troca entre as fases Solar e Lunar.
+            *   `earthquake`: Provoca tremores de terra (Screen Shake) com intensidade variável.
+            *   `visual_sparks`: Dispara partículas de faíscas em coordenadas específicas.
+            *   `security_alert`: Ativa um modo de alerta com sirene e overlay visual pulsante vermelho.
+            *   Configurações: Raio de detecção, `oneShot` (execução única) e persistência via `levels.js`.
         *   **Feedback Sonoro Industrial:** Utiliza sons de queda de disjuntores metálicos (`playBlackoutStart`) e reinicialização de reatores (`playBlackoutEnd`) para reforçar a imersão.
 
 
 ## 7. Ferramentas de Desenvolvimento
-### Level Editor (editor.html)
-Uma ferramenta WYSIWYG (What You See Is What You Get) que permite a criação intuitiva de níveis.
-*   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
+
+### Level Editor (Arquitetura Modular)
+O editor de níveis foi refatorado para uma estrutura modular dividida em três arquivos especializados sob o diretório `js/editor/`:
+
+*   **Core & Drawing (`js/editor/editor_main.js`):** Gerencia o estado fundamental do mapa, paleta de tiles, loops de renderização do grid, histórico (Undo/Redo) e a lógica de reconstrução do motor (`rebuildMock`).
+*   **Interface & Gestão (`js/editor/editor_ui.js`):** Encapsula toda a lógica de UI, incluindo painéis laterais, diálogos de capítulos/fases, modais, gerenciador de diálogos narrativos e gatilhos de zona.
+*   **Motor de Teste (`js/editor/editor_test.js`):** Isolamento total da lógica do modo "Testar Fase". Gerencia o loop de simulação independente, entrada de teclado do teste e o HUD temporário.
+
+#### Funcionalidades e UX:
+*   **Interface Industrial Refatorada:** O editor agora utiliza um sistema de **barra de ferramentas dupla**. Abaixo do cabeçalho principal, uma linha horizontal (`sub-toolbar`) agrupa a seleção de **Camadas** (Base, Overlays, Blocos, Eventos) e **Ferramentas** (Pincel, Borracha, Quadrado, Linha e Seleção), maximizando o espaço vertical da sidebar para a paleta de tiles.
 *   **High-Fidelity Rendering:** Utiliza a mesma classe `GameState` e `Graphics` do jogo para mostrar o fluxo de energia real durante a edição.
 *   **Gerenciador de Diálogos Centralizado (Nova Aba):** Uma interface robusta na barra lateral dedicada exclusivamente à gestão de falas. Permite visualizar todos os diálogos da fase em uma lista vertical, facilitando a edição de textos longos, troca de ícones e configuração de triggers (Start/Walk).
 *   **Controle de Comportamento Narrativo:** Cada diálogo possui flags individuais para `Travar Robô` e `Auto-Fechar`. Eventos de fala suportam múltiplas mensagens sequenciais.
 *   **Gatilhos Espaciais e Persistência:**
     *   `Raio (Radius)`: Permite definir uma área circular (distância Manhattan) ao redor do tile de origem para disparar o diálogo.
     *   `Disparo Único (One-Shot)`: Define se o evento ocorre apenas uma vez por nível ou se repete sempre que o jogador entra na área de gatilho.
-*   **Navegação Inteligente (Middle-Click):** Clicar com o botão do meio em um evento de fala no mapa redireciona instantaneamente o usuário para a aba de Diálogos e foca no card correspondente.
+*   **Navegação Inteligente (Middle-Click):** Clicar com o botão do meio em um evento de fala ou em um gatilho (`⚡`) no mapa redireciona instantaneamente o usuário para a aba correspondente (Diálogos ou Gatilhos) e foca no card correspondente, facilitando a edição rápida.
 *   **Edição em Lote (Multi-Edit):** Suporte avançado para configuração de múltiplos objetos. Ao selecionar uma área e clicar com o **Botão do Meio** em elementos interativos (Portas, Botões, Núcleos, Chão Quântico), o editor permite alterar canais, amperagem ou comportamento de todos simultaneamente através de um painel de propriedades contextual.
 *   **Área de Transferência:** Suporte para copiar e colar áreas do mapa via `Ctrl+C` e `Ctrl+V`.
 *   **Sincronização Direta (Local Server):** O editor utiliza um servidor Node.js local para permitir o salvamento com apenas um clique (Auto-Save), eliminando a necessidade de janelas de diálogo do sistema operacional.
@@ -299,7 +315,7 @@ Sistema de comunicação narrativa utilizando a estética de HUD Industrial Mini
     *   **Screen-Fixed (Top, Bottom, Left, Right, Center):** Fixa a caixa em regiões específicas da tela, útil para anúncios do sistema ou mensagens globais.
 *   **Composição Aditiva (Add Mode):** As caixas de diálogo utilizam `mix-blend-mode: plus-lighter`, garantindo que se comportem como elementos holográficos que somam sua luminosidade às cores do cenário de fundo.
 *   **Voz Procedimental:** Diferencia vozes de IA (onda quadrada), Humanas (onda triangular) e Alertas (ruído/serra) com blips sonoros sincronizados à digitação.
-*   **Integração no Editor:** Aba dedicada ("FALAS") permite gerenciar sequências de mensagens, escolher ícones (central, alert, critical), configurar triggers espaciais (raio, one-shot) e definir o posicionamento na tela.
+*   **Integração no Editor:** Abaixo do cabeçalho principal, a camada **"EVENTOS"** permite gerenciar sequências de mensagens, escolher ícones (central, alert, critical), configurar triggers espaciais (raio, one-shot) e definir o posicionamento na tela.
 
 ## 10. Estabilidade e Robustez (Rendering Pipeline)
 > [!IMPORTANT]

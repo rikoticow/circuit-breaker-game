@@ -287,5 +287,82 @@ Object.assign(window.AudioSys, {
             osc.connect(g); g.connect(audioCtx.destination);
             osc.start(crackTime); osc.stop(crackTime + 0.05);
         }
+    },
+
+    playDimensionInversion() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const dur = 0.6;
+        
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + dur);
+        g.gain.setValueAtTime(0.1, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + dur);
+        
+        const osc2 = audioCtx.createOscillator();
+        osc2.type = 'sawtooth';
+        osc2.frequency.setValueAtTime(40, now);
+        osc2.frequency.exponentialRampToValueAtTime(120, now + dur);
+        const g2 = audioCtx.createGain();
+        g2.gain.setValueAtTime(0.05, now);
+        g2.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.value = 400;
+        osc2.connect(filter); filter.connect(g2); g2.connect(audioCtx.destination);
+        osc2.start(now); osc2.stop(now + dur);
+    },
+
+    playEarthquake() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const dur = 1.0;
+        
+        const bufferSize = audioCtx.sampleRate * dur;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.value = 60;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.2, now + dur * 0.8);
+        gain.gain.linearRampToValueAtTime(0.001, now + dur);
+        
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.start(now);
+    },
+
+    playSpark() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        this.playTone(2000 + Math.random() * 3000, 'square', 0.05, 0.02);
+    },
+
+    playAlarm() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        // Dual-tone siren
+        const playSiren = (freq, delay) => {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + delay);
+            osc.frequency.linearRampToValueAtTime(freq * 1.2, now + delay + 0.2);
+            g.gain.setValueAtTime(0, now + delay);
+            g.gain.linearRampToValueAtTime(0.05, now + delay + 0.05);
+            g.gain.linearRampToValueAtTime(0, now + delay + 0.4);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(now + delay); osc.stop(now + delay + 0.4);
+        };
+        playSiren(440, 0);
+        playSiren(330, 0.4);
     }
 });
