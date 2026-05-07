@@ -588,6 +588,11 @@ function renderGameVisuals() {
     }
 
 
+    // Pass 1.96: Draw Enemies
+    for (const enemy of game.enemies) {
+        enemy.draw(ctx);
+    }
+
     // Draw Player
     if (game.state !== 'GAMEOVER') {
         const visorColor = game.player.visorTimer > 0 ? game.player.visorColor : null;

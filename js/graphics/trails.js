@@ -29,7 +29,7 @@ Object.assign(Graphics, {
             angle: angle + jitter() * 0.2,
             size: 3 + Math.random() * 3, 
             length: 8 + Math.random() * 10,
-            baseAlpha: 0.2 + Math.random() * 0.5,
+            baseAlpha: 0.05 + Math.random() * 0.2,
             life: 1.0 
         });
     },

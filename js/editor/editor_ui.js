@@ -1248,9 +1248,98 @@ function setupPropertyListeners() {
         saveHistory(); rebuildMock();
     };
 
+    document.getElementById('prop-enemy-speed').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseFloat(e.target.value) || 2.0;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].speed = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-enemy-damage').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseInt(e.target.value) || 1;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].damage = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-enemy-peaceful').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = e.target.checked;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].isPeaceful = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-enemy-loop').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].loopType = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-enemy-move-style').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].moveStyle = val;
+        }
+        document.getElementById('prop-enemy-pause-container').style.display = (val === 'PAUSE') ? 'flex' : 'none';
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-enemy-pause').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseFloat(e.target.value) || 1.0;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_enemy`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].pauseDuration = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('btn-edit-path').onclick = () => {
+        if (editTargets.length === 0) return;
+        const target = editTargets[0];
+        // Toggle path edit mode in editor_main
+        if (window.togglePathEditMode) window.togglePathEditMode(target.x, target.y);
+    };
+
     document.getElementById('btn-close-props').onclick = () => {
         document.getElementById('floating-props').style.display = 'none';
         editTargets = [];
+        window.pathEditMode = false;
+        window.pathEditTarget = null;
+        rebuildMock();
     };
 
     document.getElementById('btn-copy-props').onclick = () => {
@@ -1295,6 +1384,63 @@ function setupPropertyListeners() {
         }
         saveHistory(); rebuildMock(); updatePropertyPanel();
     };
+
+    // Make floating windows draggable
+    const makeDraggable = (panel, header) => {
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return; // Don't drag if clicking buttons
+            isDragging = true;
+            panel.dataset.hasBeenDragged = "true";
+
+            // Neutralize flex centering if it exists
+            const rect = panel.getBoundingClientRect();
+            panel.style.position = 'fixed';
+            panel.style.left = rect.left + 'px';
+            panel.style.top = rect.top + 'px';
+            panel.style.margin = '0';
+            panel.style.bottom = 'auto';
+            panel.style.right = 'auto';
+
+            offsetX = e.clientX - panel.offsetLeft;
+            offsetY = e.clientY - panel.offsetTop;
+            header.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            let x = e.clientX - offsetX;
+            let y = e.clientY - offsetY;
+            
+            // Boundary checks
+            const padding = 10;
+            x = Math.max(padding, Math.min(window.innerWidth - panel.offsetWidth - padding, x));
+            y = Math.max(padding, Math.min(window.innerHeight - panel.offsetHeight - padding, y));
+
+            panel.style.left = x + 'px';
+            panel.style.top = y + 'px';
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            header.style.cursor = 'move';
+        });
+    };
+
+    const propPanel = document.getElementById('floating-props');
+    const propHeader = document.getElementById('prop-header');
+    if (propPanel && propHeader) makeDraggable(propPanel, propHeader);
+
+    const modalContent = document.getElementById('modal-content');
+    const modalHeader = document.getElementById('modal-header');
+    if (modalContent && modalHeader) makeDraggable(modalContent, modalHeader);
+
+    const spawnContent = document.getElementById('spawn-select-content');
+    const spawnHeader = document.getElementById('spawn-select-header');
+    if (spawnContent && spawnHeader) makeDraggable(spawnContent, spawnHeader);
 }
 function updatePropertyPanel() {
     if (editTargets.length === 0) return;
@@ -1441,6 +1587,34 @@ function updatePropertyPanel() {
     if (isLabel) {
         document.getElementById('prop-label-text').value = lvl.links?.[`${p.x},${p.y}_label`] || "";
         document.getElementById('prop-label-color').value = lvl.links?.[`${p.x},${p.y}_labelColor`] || "#00f0ff";
+    }
+
+    const isEnemy = char === '∞';
+    document.getElementById('prop-enemy-container').style.display = isEnemy ? 'flex' : 'none';
+    if (isEnemy) {
+        const config = lvl.links?.[`${p.x},${p.y}_enemy`] || {};
+        document.getElementById('prop-enemy-speed').value = config.speed || 2.0;
+        document.getElementById('prop-enemy-damage').value = config.damage || 1;
+        document.getElementById('prop-enemy-peaceful').checked = config.isPeaceful === true;
+        document.getElementById('prop-enemy-loop').value = config.loopType || 'LOOP';
+        document.getElementById('prop-enemy-move-style').value = config.moveStyle || 'CONTINUOUS';
+        document.getElementById('prop-enemy-pause').value = config.pauseDuration || 1.0;
+        document.getElementById('prop-enemy-pause-container').style.display = (config.moveStyle === 'PAUSE') ? 'flex' : 'none';
+
+        // Update button state
+        const btn = document.getElementById('btn-edit-path');
+        const isEditing = window.pathEditMode && window.pathEditTarget && window.pathEditTarget.x === p.x && window.pathEditTarget.y === p.y;
+        if (isEditing) {
+            btn.innerText = "💾 FINALIZAR ROTA";
+            btn.style.background = "#00ff9f";
+            btn.style.color = "#000";
+            btn.style.boxShadow = "0 4px 0 #008855";
+        } else {
+            btn.innerText = "🗺️ EDITAR ROTA (MB3)";
+            btn.style.background = "#ff0055";
+            btn.style.color = "#fff";
+            btn.style.boxShadow = "0 4px 0 #900";
+        }
     }
 }
 

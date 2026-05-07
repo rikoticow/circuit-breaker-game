@@ -30,7 +30,7 @@ const PALETTE = [
     { title: "Setor: Compilador", tiles: [{c: 'z', n: 'Chão Compilador'}, {c: 'q', n: 'Parede Compilador'}, {c: 'x', n: 'Teto Compilador'}] },
     { title: "Setor: Processamento", tiles: [{c: 'Σ', n: 'Parede Ind. Sólida'}, {c: 'σ', n: 'Piso Perfurado Log.'}, {c: 'ρ', n: 'Piso Tátil Rosa'}, {c: 'π', n: 'Parede Servidor'}, {c: 'Ω', n: 'Teto Modular (Proc)'}] },
     { title: "Setor: Quântico", tiles: [{c: '.', n: 'Abismo de Vácuo'}, {c: "'", n: 'Chão Quântico (Rúnico)'}, {c: '"', n: 'Parede Quântica (Circuito)'}, {c: '|', n: 'Teto Quântico (Mandala)'}] },
-    { title: "Estrutura (Overlay)", tiles: [{c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}, {c: 'D', n: 'Porta'}, {c: 'U', n: 'Porta de Saída'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}, {c: 'R', n: 'Lançador Modular'}, {c: '$', n: 'Loja'}, {c: '%', n: 'Botão Singularidade'}] },
+    { title: "Estrutura (Overlay)", tiles: [{c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}, {c: 'D', n: 'Porta'}, {c: 'U', n: 'Porta de Saída'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}, {c: 'R', n: 'Lançador Modular'}, {c: '$', n: 'Loja'}, {c: '%', n: 'Botão Singularidade'}, {c: '∞', n: 'LogisticBot'}] },
     { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}] },
     { title: "Gravidade", tiles: [{c: 'n', n: 'Gravidade N'}, {c: 's', n: 'Gravidade S'}, {c: 'e', n: 'Gravidade L'}, {c: 'w', n: 'Gravidade O'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
@@ -76,6 +76,23 @@ window.ctx = null;
 window.mockGame = null;
 window.animFrame = 0;
 window.hoveredChannel = null;
+window.pathEditMode = false;
+window.pathEditTarget = null; // {x, y}
+
+window.togglePathEditMode = (x, y) => {
+    if (window.pathEditMode && window.pathEditTarget && window.pathEditTarget.x === x && window.pathEditTarget.y === y) {
+        window.pathEditMode = false;
+        window.pathEditTarget = null;
+    } else {
+        window.pathEditMode = true;
+        window.pathEditTarget = { x, y };
+        // Ensure properties panel is open for this target
+        window.editTargets = [{ x, y }];
+        document.getElementById('floating-props').style.display = 'block';
+        updatePropertyPanel();
+    }
+    rebuildMock();
+};
 
 window.onload = () => {
     levelsData = JSON.parse(JSON.stringify(LEVELS));
@@ -248,6 +265,22 @@ function rebuildMock() {
             } else if (oc === '?') {
                 const chan = (lvl.links && lvl.links[`${x},${y}`]) || 0;
                 mockGame.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, entrySide: null, whiteGlow: 0 });
+            } else if (oc === '∞' || c === '∞') {
+                if (window.EnemySystem) {
+                    const enemyConfig = (lvl.links && lvl.links[`${x},${y}_enemy`]) || {};
+                    const path = (lvl.links && lvl.links[`${x},${y}_path`]) || [];
+                    const enemy = EnemySystem.EnemyFactory.create(x, y, 'logistic', { 
+                        path: path,
+                        speed: enemyConfig.speed || 2.0,
+                        damage: enemyConfig.damage || 1,
+                        loopType: enemyConfig.loopType || 'LOOP',
+                        moveStyle: enemyConfig.moveStyle || 'CONTINUOUS'
+                    });
+                    if (enemy) {
+                        if (!mockGame.enemies) mockGame.enemies = [];
+                        mockGame.enemies.push(enemy);
+                    }
+                }
             } else if (oc === '_' || oc === 'P') {
                 const chan = (lvl.links && lvl.links[`${x},${y}`]) || 0;
                 const behavior = (lvl.links && lvl.links[`${x},${y}_behavior`]) || (oc === 'P' ? 'PRESSURE' : 'TIMER');
@@ -366,8 +399,13 @@ function rebuildMock() {
 function saveHistory() {
     const lvl = levelsData[currentLevelIdx];
     historyStack.push(JSON.parse(JSON.stringify({
-        map: currentMap, blocks: currentBlocksMap, overlays: currentOverlayMap, wireMap: currentWiresMap,
-        dialogues: lvl.dialogues || {}, zoneTriggers: lvl.zoneTriggers || []
+        map: currentMap, 
+        blocks: currentBlocksMap, 
+        overlays: currentOverlayMap, 
+        wireMap: currentWiresMap,
+        links: lvl.links || {},
+        dialogues: lvl.dialogues || {}, 
+        zoneTriggers: lvl.zoneTriggers || []
     })));
     if (historyStack.length > 50) historyStack.shift();
 }
@@ -376,11 +414,19 @@ function undo() {
     if (historyStack.length > 1) {
         historyStack.pop();
         const state = JSON.parse(JSON.stringify(historyStack[historyStack.length - 1]));
-        currentMap = state.map; currentBlocksMap = state.blocks; currentOverlayMap = state.overlays; currentWiresMap = state.wireMap || Array(currentMap.length).fill(0).map(() => Array(currentMap[0].length).fill(' '));
+        currentMap = state.map; 
+        currentBlocksMap = state.blocks; 
+        currentOverlayMap = state.overlays; 
+        currentWiresMap = state.wireMap || Array(currentMap.length).fill(0).map(() => Array(currentMap[0].length).fill(' '));
+        
+        levelsData[currentLevelIdx].links = state.links;
         levelsData[currentLevelIdx].dialogues = state.dialogues;
         levelsData[currentLevelIdx].zoneTriggers = state.zoneTriggers;
-        updateDialogueManager(); updateTriggerManagerList();
+        
+        updateDialogueManager(); 
+        updateTriggerManagerList();
         rebuildMock();
+        updatePropertyPanel();
     }
 }
 
@@ -588,17 +634,105 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const labelColor = (lvl.links && lvl.links[`${x},${y}_labelColor`]) || "#00f0ff";
         Graphics.drawWorldLabel(x, y, labelText, labelColor, 1.0, 0.3);
     }
-    else if (c === '$') Graphics.drawShopTerminal(x, y, animFrame);
-    else if (c === '%') {
+    else if (c === '∞') {
+        if (window.EnemySystem) {
+            const config = (levelsData[currentLevelIdx].links?.[`${x},${y}_enemy`]) || {};
+            const enemy = EnemySystem.EnemyFactory.create(x, y, 'logistic', { ...config, isStatic: true });
+            if (enemy) enemy.draw(ctx);
+        } else {
+            ctx.fillStyle = '#00f0ff';
+            ctx.font = '24px VT323';
+            ctx.textAlign = 'center';
+            ctx.fillText('∞', x * 32 + 16, y * 32 + 24);
+        }
+    }
+    else if (c === '$') {
+        Graphics.drawShopTerminal(x, y, animFrame);
+    } else if (c === '%') {
         const sw = mockGame.singularitySwitchers.find(s => s.x === x && s.y === y);
         Graphics.drawSingularitySwitcher(x, y, mockGame.isSolarPhase, animFrame, sw?.lightningTimer || 0);
-    }
-    else if (['n', 's', 'e', 'w'].includes(c)) {
+    } else if (['n', 's', 'e', 'w'].includes(c)) {
         let d = DIRS.UP; if (c === 's') d = DIRS.DOWN; if (c === 'e') d = DIRS.RIGHT; if (c === 'w') d = DIRS.LEFT;
         Graphics.drawGravityButton(x, y, d, animFrame, 0, false);
-    } else if (c === '💬') { ctx.fillStyle = '#00ff9f'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('💬', x*32+16, y*32+24); }
-    else if (c === '⚡') { ctx.fillStyle = '#ffcc00'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('⚡', x*32+16, y*32+24); }
+    } else if (c === '💬') { 
+        ctx.fillStyle = '#00ff9f'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('💬', x*32+16, y*32+24); 
+    } else if (c === '⚡') { 
+        ctx.fillStyle = '#ffcc00'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('⚡', x*32+16, y*32+24); 
+    }
+    
     ctx.restore();
+}
+
+function renderPaths() {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl.links) return;
+
+    for (const key in lvl.links) {
+        if (key.endsWith('_path')) {
+            const coords = key.replace('_path', '').split(',').map(Number);
+            const x = coords[0], y = coords[1];
+            const path = lvl.links[key];
+            if (!path || path.length === 0) continue;
+
+            const isTarget = editTargets.some(t => t.x === x && t.y === y);
+            const isEditingThis = pathEditMode && pathEditTarget && pathEditTarget.x === x && pathEditTarget.y === y;
+            const isHighlighted = isEditingThis || isTarget;
+
+            ctx.save();
+            
+            // Highlight the source robot if editing
+            if (isEditingThis) {
+                ctx.strokeStyle = '#ff0055';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x * 32 - 2, y * 32 - 2, 36, 36);
+                
+                const pulse = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
+                ctx.globalAlpha = pulse;
+                ctx.fillStyle = '#ff0055';
+                ctx.font = 'bold 12px VT323';
+                ctx.textAlign = 'center';
+                ctx.fillText('EDITANDO ROTA', x * 32 + 16, y * 32 - 10);
+                ctx.globalAlpha = 1.0;
+            }
+
+            ctx.strokeStyle = isHighlighted ? '#ff0055' : 'rgba(255, 0, 85, 0.2)';
+            ctx.lineWidth = isHighlighted ? 1.5 : 0.8;
+            ctx.setLineDash(isHighlighted ? [6, 3] : [2, 4]);
+            
+            // 1. Draw Lines pass
+            ctx.beginPath();
+            ctx.moveTo(x * 32 + 16, y * 32 + 16);
+            path.forEach(wp => {
+                ctx.lineTo(wp.x * 32 + 16, wp.y * 32 + 16);
+            });
+            
+            const enemyConfig = lvl.links[`${x},${y}_enemy`] || {};
+            if (enemyConfig.loopType === 'LOOP') {
+                ctx.lineTo(x * 32 + 16, y * 32 + 16);
+            }
+            ctx.stroke();
+
+            // 2. Draw Waypoints pass (on top of lines)
+            path.forEach((wp, idx) => {
+                ctx.save();
+                ctx.setLineDash([]); 
+                ctx.fillStyle = isHighlighted ? '#ff0055' : 'rgba(255, 0, 85, 0.15)';
+                ctx.beginPath();
+                ctx.arc(wp.x * 32 + 16, wp.y * 32 + 16, isHighlighted ? 5 : 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                if (isHighlighted) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(idx + 1, wp.x * 32 + 16, wp.y * 32 + 19);
+                }
+                ctx.restore();
+            });
+            
+            ctx.restore();
+        }
+    }
 }
 
 function renderLoop() {
@@ -668,8 +802,28 @@ function renderLoop() {
             ctx.restore();
         });
     }
+
+    // Final Pass: Paths (Ensures they are on top of all tiles and triggers)
+    renderPaths();
     for (const gb of ghostBlocks) drawChar(gb.x, gb.y, gb.c, 0.4, true);
-    if (!isDrawing && currentTool !== 'select') drawChar(hoverPos.x, hoverPos.y, currentTool === 'eraser' ? ' ' : selectedTile, 0.5);
+    if (pathEditMode) {
+        ctx.save();
+        ctx.strokeStyle = '#ff0055';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(hoverPos.x * 32, hoverPos.y * 32, 32, 32);
+        
+        // Draw index of next waypoint
+        const pathKey = `${pathEditTarget.x},${pathEditTarget.y}_path`;
+        const path = (lvl.links && lvl.links[pathKey]) || [];
+        ctx.fillStyle = '#ff0055';
+        ctx.font = '12px VT323';
+        ctx.textAlign = 'right';
+        ctx.fillText(`+${path.length + 1}`, hoverPos.x * 32 + 30, hoverPos.y * 32 + 30);
+        ctx.restore();
+    } else if (!isDrawing && currentTool !== 'select') {
+        drawChar(hoverPos.x, hoverPos.y, currentTool === 'eraser' ? ' ' : selectedTile, 0.5);
+    }
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.lineWidth = 1;
     for(let x=0; x<=w*32; x+=32) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h*32); ctx.stroke(); }
     for(let y=0; y<=h*32; y+=32) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w*32,y); ctx.stroke(); }
@@ -801,6 +955,29 @@ function setupEvents() {
     };
     canvas.onmousedown = (e) => {
         const p = getGridPos(e);
+
+        if (window.pathEditMode && e.button !== 1) { // Left or Right click in path edit mode
+            const lvl = levelsData[currentLevelIdx];
+            if (!lvl.links) lvl.links = {};
+            const key = `${window.pathEditTarget.x},${window.pathEditTarget.y}_path`;
+            if (!lvl.links[key]) lvl.links[key] = [];
+            
+            if (e.button === 0) { // Add waypoint
+                const existingIdx = lvl.links[key].findIndex(wp => wp.x === p.x && wp.y === p.y);
+                if (existingIdx === -1) {
+                    lvl.links[key].push({x: p.x, y: p.y});
+                }
+            } else if (e.button === 2) { // Remove waypoint
+                const existingIdx = lvl.links[key].findIndex(wp => wp.x === p.x && wp.y === p.y);
+                if (existingIdx !== -1) {
+                    lvl.links[key].splice(existingIdx, 1);
+                }
+            }
+            saveHistory();
+            rebuildMock();
+            return;
+        }
+
         if (e.button === 1) { // Middle Click
             e.preventDefault();
             if (levelsData[currentLevelIdx].dialogues?.[`${p.x},${p.y}`]) {
@@ -831,6 +1008,11 @@ function setupEvents() {
                         }
                     }
                 }, 100);
+                return;
+            }
+            const overlayChar = currentOverlayMap[p.y][p.x];
+            if (overlayChar === '∞') {
+                togglePathEditMode(p.x, p.y);
                 return;
             }
             // Rotation logic
@@ -919,12 +1101,14 @@ function setupEvents() {
             if (editTargets.length > 0) {
                 const props = document.getElementById('floating-props');
                 props.style.display = 'block';
-                // Adjust position to viewport
-                const rect = canvas.getBoundingClientRect();
-                const x = (selectionEnd.x * 32) + rect.left + 40;
-                const y = (selectionEnd.y * 32) + rect.top;
-                props.style.left = `${Math.min(window.innerWidth - 300, x)}px`;
-                props.style.top = `${Math.min(window.innerHeight - 400, y)}px`;
+                // Adjust position to viewport ONLY if it hasn't been dragged yet
+                if (props.dataset.hasBeenDragged !== "true") {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = (selectionEnd.x * 32) + rect.left + 40;
+                    const y = (selectionEnd.y * 32) + rect.top;
+                    props.style.left = `${Math.min(window.innerWidth - 300, x)}px`;
+                    props.style.top = `${Math.min(window.innerHeight - 400, y)}px`;
+                }
                 updatePropertyPanel();
             }
         } else if ((currentTool === 'rect' || currentTool === 'line') && selectionStart && selectionEnd) {

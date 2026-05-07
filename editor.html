@@ -359,7 +359,7 @@
             </div> 
             
             <div id="floating-props" style="display: none; position: absolute; background: rgba(20, 20, 20, 0.95); border: 2px solid #00ff9f; padding: 12px; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 159, 0.3); z-index: 1000; backdrop-filter: blur(5px); min-width: 180px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px;">
+                <div id="prop-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px; cursor: move; user-select: none;">
                     <div style="color: #00ff9f; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Propriedades</div>
                     <button id="btn-close-props" style="background: none; border: none; color: #ff0055; cursor: pointer; font-size: 16px; padding: 0;">✖</button>
                 </div>
@@ -498,6 +498,51 @@
                     <datalist id="level-search-list"></datalist>
                     <div id="prop-exit-spawn-info" style="font-size: 11px; color: #00ff9f; display: none;">Spawn: <span id="prop-exit-spawn-coords">Auto</span></div>
                     <div style="font-size: 11px; color: #666; font-style: italic;">Indique o nome da fase ou o índice para onde esta porta leva.</div>
+                </div>
+
+                <div id="prop-enemy-container" style="display: none; flex-direction: column; gap: 8px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    <div style="font-size: 12px; color: #ff0055; font-weight: bold;">LOGISTIC BOT (∞)</div>
+                    
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 255, 159, 0.1); padding: 5px; border-radius: 4px; border: 1px solid rgba(0, 255, 159, 0.3); margin-bottom: 4px;">
+                        <span style="font-size: 13px; color: #00ff9f; font-weight: bold;">MODO PACÍFICO:</span>
+                        <input type="checkbox" id="prop-enemy-peaceful" style="width: 18px; height: 18px; accent-color: #00ff9f;">
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #fff;">Velocidade:</span>
+                        <input type="number" id="prop-enemy-speed" value="2.0" step="0.1" min="0.5" max="8.0" style="width: 50px; background: #000; color: #fff; border: 1px solid #444; text-align: center;">
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #fff;">Dano:</span>
+                        <input type="number" id="prop-enemy-damage" value="1" min="0" max="10" style="width: 50px; background: #000; color: #fff; border: 1px solid #444; text-align: center;">
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #fff;">Loop:</span>
+                        <select id="prop-enemy-loop" style="background: #000; color: #00ff9f; border: 1px solid #444; font-family: 'VT323', monospace; font-size: 14px; padding: 2px;">
+                            <option value="LOOP">🔄 LOOP (Circular)</option>
+                            <option value="PING_PONG">↔️ PING-PONG</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #fff;">Movimento:</span>
+                        <select id="prop-enemy-move-style" style="background: #000; color: #00ff9f; border: 1px solid #444; font-family: 'VT323', monospace; font-size: 14px; padding: 2px;">
+                            <option value="CONTINUOUS">🏃 CONTÍNUO</option>
+                            <option value="PAUSE">🛑 COM PAUSAS</option>
+                        </select>
+                    </div>
+                    
+                    <div id="prop-enemy-pause-container" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #fff;">Pausa (s):</span>
+                        <input type="number" id="prop-enemy-pause" value="1.0" step="0.1" min="0.1" max="10.0" style="width: 50px; background: #000; color: #fff; border: 1px solid #444; text-align: center;">
+                    </div>
+
+                    <button id="btn-edit-path" style="width: 100%; padding: 8px; background: #ff0055; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 5px; box-shadow: 0 4px 0 #900;">
+                        🗺️ EDITAR ROTA (MB3)
+                    </button>
+                    <div style="font-size: 10px; color: #666; text-align: center;">Clique com o botão do meio no robô ou use o botão acima para editar os pontos da rota.</div>
                 </div>
 
                 <!-- DIALOGUE PROPERTIES -->
@@ -781,8 +826,8 @@
 
     <!-- SPAWN SELECTION OVERLAY -->
     <div id="spawn-select-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(8px); font-family: 'Inter', sans-serif;">
-        <div style="background: #111; border: 2px solid #00ff9f; padding: 20px; border-radius: 8px; width: 90%; max-width: 1000px; max-height: 85vh; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 0 60px rgba(0,255,159,0.3); overflow: hidden;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; flex-shrink: 0;">
+        <div id="spawn-select-content" style="background: #111; border: 2px solid #00ff9f; padding: 20px; border-radius: 8px; width: 90%; max-width: 1000px; max-height: 85vh; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 0 60px rgba(0,255,159,0.3); overflow: hidden; position: relative;">
+            <div id="spawn-select-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; flex-shrink: 0; cursor: move; user-select: none;">
                 <div style="color: #00ff9f; font-size: 20px; font-weight: bold; letter-spacing: 2px; font-family: 'VT323';">📍 SELECIONAR POSIÇÃO DE SPAWN</div>
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <div id="spawn-dest-name" style="color: #aaa; font-size: 14px; font-weight: bold; text-transform: uppercase;">DESTINO: <span style="color: #fff;">---</span></div>
@@ -819,11 +864,16 @@
 
     <!-- Custom Modal -->
     <div id="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-        <div id="modal-content" style="background: #111; border: 2px solid #00ff9f; padding: 20px; border-radius: 4px; box-shadow: 0 0 30px rgba(0,255,159,0.2); min-width: 300px; max-width: 450px; text-align: center;">
-            <div id="modal-msg" style="color: #fff; font-size: 18px; margin-bottom: 20px; line-height: 1.4;">Mensagem aqui?</div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="modal-btn-confirm" style="background: #00ff9f; color: #000; border: none; font-weight: bold; min-width: 80px;">OK</button>
-                <button id="modal-btn-cancel" style="background: #444; color: #fff; border: none; min-width: 80px;">CANCELAR</button>
+        <div id="modal-content" style="background: #111; border: 2px solid #00ff9f; border-radius: 4px; box-shadow: 0 0 30px rgba(0,255,159,0.2); min-width: 300px; max-width: 450px; text-align: center; position: relative; overflow: hidden;">
+            <div id="modal-header" style="background: #1a1a1a; padding: 8px; border-bottom: 1px solid #333; cursor: move; user-select: none; display: flex; justify-content: space-between; align-items: center;">
+                <div style="color: #00ff9f; font-size: 12px; font-weight: bold; text-transform: uppercase;">Aviso do Sistema</div>
+            </div>
+            <div style="padding: 20px;">
+                <div id="modal-msg" style="color: #fff; font-size: 18px; margin-bottom: 20px; line-height: 1.4;">Mensagem aqui?</div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="modal-btn-confirm" style="background: #00ff9f; color: #000; border: none; font-weight: bold; min-width: 80px;">OK</button>
+                    <button id="modal-btn-cancel" style="background: #444; color: #fff; border: none; min-width: 80px;">CANCELAR</button>
+                </div>
             </div>
         </div>
     </div>
@@ -859,6 +909,7 @@
     <script src="js/graphics/vfx.js"></script>
     <script src="js/resultScreen.js"></script>
     <script src="js/entities/launchers.js"></script>
+    <script src="js/entities/enemies.js"></script>
     <script src="js/game.js"></script>
     <script src="js/levels.js"></script>
     <script src="js/editor/editor_ui.js"></script>

@@ -15,7 +15,8 @@ class GameState {
             invulnerable: false,
             flashTimer: 0,
             knockbackDelay: 0,
-            knockbackTarget: null
+            knockbackTarget: null,
+            detachTimer: 0
         };
         this.blocks = [];
         this.targets = [];
@@ -65,6 +66,8 @@ class GameState {
 
         this.undoStack = [];
         this.state = 'PLAYING'; // PLAYING, WINNING, GAMEOVER, VICTORY, LEVEL_COMPLETE, RESULT
+        this.shopTerminals = [];
+        this.enemies = [];
         this.victoryTimer = 0;
         this.poweredWires = new Map(); // stores {dirs, color}
         this.poweredBlocks = new Map(); // stores {dir, color, active, invalid}
@@ -203,7 +206,12 @@ class GameState {
             }),
             conveyors: this.conveyors.map(c => ({ ...c })),
             singularitySwitchers: this.singularitySwitchers.map(s => ({ ...s })),
-            gravityButtons: this.gravityButtons.map(g => ({ ...g })),
+            gravityButtons: this.gravityButtons.map(gb => ({...gb})),
+            enemies: this.enemies.map(e => ({
+                x: e.x, y: e.y, visualX: e.visualX, visualY: e.visualY,
+                health: e._health, state: e._fsm.state, timer: e._fsm.timer,
+                dead: e._dead, pathIndex: e._pathIndex, pathDir: e._pathDir
+            })),
             isSolarPhase: this.isSolarPhase,
             isSecurityAlert: this.isSecurityAlert,
             zoneTriggers: this.zoneTriggers.map(t => ({ ...t })),
@@ -316,6 +324,22 @@ class GameState {
         
         this.singularitySwitchers = (state.singularitySwitchers || []).map(s => ({ ...s }));
         
+        this.gravityButtons.forEach((gb, i) => {
+            Object.assign(gb, state.gravityButtons[i]);
+        });
+
+        // Restore Enemies
+        if (state.enemies) {
+            this.enemies.forEach((e, i) => {
+                const s = state.enemies[i];
+                if (s) {
+                    e._x = s.x; e._y = s.y; e._visualX = s.visualX; e._visualY = s.visualY;
+                    e._health = s.health; e._fsm.state = s.state; e._fsm.timer = s.timer;
+                    e._dead = s.dead; e._pathIndex = s.pathIndex; e._pathDir = s.pathDir;
+                }
+            });
+        }
+        
         this.doors = (state.doors || []).map(d => {
             const nd = { ...d };
             const oldD = this.doors.find(od => od.x === d.x && od.y === d.y);
@@ -327,7 +351,6 @@ class GameState {
 
         this.emitters = (state.emitters || []).map(e => ({ ...e }));
         this.catalysts = (state.catalysts || []).map(c => ({ ...c }));
-        this.gravityButtons = (state.gravityButtons || []).map(g => ({ ...g }));
         this.isSolarPhase = state.isSolarPhase !== undefined ? state.isSolarPhase : true;
         this.isSecurityAlert = state.isSecurityAlert || false;
 
@@ -341,7 +364,8 @@ class GameState {
             doors: this.doors.map(d => ({ x: d.x, y: d.y, state: d.state, visualOpen: d.visualOpen })),
             blocks: this.blocks.map(b => ({ x: b.x, y: b.y, visualX: b.visualX, visualY: b.visualY, dir: b.dir })),
             scrap: Array.from(this.scrapPositions),
-            dialogues: Array.from(this.triggeredDialogues)
+            dialogues: Array.from(this.triggeredDialogues),
+            enemies: this.enemies.map(e => ({ x: e.x, y: e.y, health: e._health, dead: e._dead, pathIndex: e._pathIndex }))
         };
     }
 
@@ -381,6 +405,17 @@ class GameState {
         }
         if (state.dialogues) {
             this.triggeredDialogues = new Set(state.dialogues);
+        }
+        if (state.enemies && state.enemies.length === this.enemies.length) {
+            state.enemies.forEach((se, i) => {
+                this.enemies[i]._x = se.x;
+                this.enemies[i]._y = se.y;
+                this.enemies[i]._visualX = se.x;
+                this.enemies[i]._visualY = se.y;
+                this.enemies[i]._health = se.health;
+                this.enemies[i]._dead = se.dead;
+                this.enemies[i]._pathIndex = se.pathIndex;
+            });
         }
         
         this.updateEnergy();
@@ -512,6 +547,10 @@ class GameState {
         this.worldLabels = [...(levelData.worldLabels || [])];
         const charMap = rawMap;
 
+        this.emitters = [];
+        this.enemies = [];
+        
+        const h = this.map.length;
         for (let y = 0; y < mapH; y++) {
             let row = [];
             for (let x = 0; x < mapW; x++) {
@@ -817,6 +856,36 @@ class GameState {
                         if (!this.singularitySwitchers.some(s => s.x === x && s.y === y)) {
                             this.singularitySwitchers.push({ x, y, wasSteppedOn: false, lightningTimer: 0 });
                         }
+                    } else if (oc === '∞') {
+                        const links = this.levelData.links || {};
+                        const pathData = links[`${x},${y}_path`];
+                        let path = [{x, y}];
+                        
+                        if (pathData) {
+                            if (Array.isArray(pathData)) {
+                                path = pathData;
+                            } else if (typeof pathData === 'string') {
+                                try {
+                                    const parsed = JSON.parse(pathData);
+                                    if (Array.isArray(parsed)) path = parsed;
+                                } catch(e) { console.warn("Invalid path data for enemy at", x, y); }
+                            }
+                        }
+
+                        // Data-driven enemy configuration
+                        const enemyData = links[`${x},${y}_enemy`] || {};
+                        const enemyConfig = {
+                            path,
+                            speed: enemyData.speed !== undefined ? parseFloat(enemyData.speed) : 1.5,
+                            damage: enemyData.damage !== undefined ? parseInt(enemyData.damage) : 1,
+                            isPeaceful: enemyData.isPeaceful === true,
+                            loopType: enemyData.loopType || 'LOOP',
+                            moveStyle: enemyData.moveStyle || 'CONTINUOUS',
+                            pauseDuration: enemyData.pauseDuration !== undefined ? Math.round(parseFloat(enemyData.pauseDuration) * 60) : 60
+                        };
+
+                        const enemy = EnemySystem.EnemyFactory.create(x, y, 'logistic', enemyConfig);
+                        if (enemy) this.enemies.push(enemy);
                     }
                 }
             }
@@ -977,6 +1046,7 @@ class GameState {
         this.updateSequences();
         if (window.Dialogue) Dialogue.update();
         if (this.player.isDead) this.player.deathTimer++;
+        if (this.player.detachTimer > 0) this.player.detachTimer--;
         
         // --- RANDOM ROBOT SPEECH ---
         if (this.state === 'PLAYING' && !this.player.isDead && Math.random() < 0.0005) {
@@ -1091,7 +1161,7 @@ class GameState {
             for (let i = 0; i < numSegments; i++) {
                 this.player.lastTX += (dx / distMoved) * step;
                 this.player.lastTY += (dy / distMoved) * step;
-                if (!onConveyor && !this.player.isTeleporting) {
+                if (!onConveyor && !this.player.isTeleporting && !this.player.carrier) {
                     Graphics.spawnTrailSegment(this.player.lastTX, this.player.lastTY, this.player.visualAngle);
                 }
             }
@@ -1231,7 +1301,12 @@ class GameState {
             b.visualAngle += angleDiff * 0.35;
         }
 
-        // --- SMOOTH DOOR ANIMATION ---
+        // Update Enemies
+        for (const enemy of this.enemies) {
+            enemy.update(this);
+        }
+
+        // --- PHASE STATE TRANSITIONS ---
         for (let door of this.doors) {
             if (door.visualOpen === undefined) door.visualOpen = (door.state === 'OPEN' || door.state === 'BROKEN_OPEN') ? 1 : 0;
             
@@ -1975,6 +2050,9 @@ class GameState {
     movePlayer(dx, dy) {
         if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead || this.player.invulnerable || this.gravitySlidingDir !== null) return;
 
+        // If carried, movement keys are ignored (must use Space/Interact to dismount)
+        if (this.player.carrier) return;
+
         const pDist = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
         let threshold = 0.6;
         if (this.isShiftHeld && window.GameProgress && GameProgress.hasAbility('run')) {
@@ -2515,6 +2593,17 @@ class GameState {
 
     interact() {
         if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead) return;
+
+        // If riding a bot, interaction detaches you
+        if (this.player.carrier) {
+            // --- VOZ DO INIMIGO (DESCER) ---
+            if (typeof RobotVoice !== 'undefined') RobotVoice.speakLogistic('dismount');
+            
+            this.player.carrier = null;
+            this.player.detachTimer = 40; 
+            if (window.AudioSys) AudioSys.buttonClick();
+            return;
+        }
         
         // Find adjacent tile in player direction
         let tx = this.player.x, ty = this.player.y;
@@ -3766,7 +3855,8 @@ class GameState {
             PORTAL_COLLAPSE: 6, 
             ENERGY_HIT: 4, 
             MECHANICAL_HIT: 2, 
-            VOID_HIT: 12 
+            VOID_HIT: 12,
+            ENEMY_TOUCH: 4
         };
         const dmg = damageTable[type] || 4;
         const died = HPSystem.takeDamage(dmg);
@@ -3835,8 +3925,8 @@ class GameState {
         this.player.deathDir = { x: 0, y: 0 };
         const dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
         for (const d of dirs) {
-            const tx = this.player.x + d.x;
-            const ty = this.player.y + d.y;
+            const tx = Math.floor(this.player.x + d.x);
+            const ty = Math.floor(this.player.y + d.y);
             if (tx >= 0 && tx < this.map[0].length && ty >= 0 && ty < this.map.length) {
                 const tile = this.map[ty][tx];
                 const isDoor = this.doors.some(dr => dr.x === tx && dr.y === ty);

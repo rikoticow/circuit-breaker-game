@@ -243,6 +243,21 @@ class ProjectileBase {
         if (Math.sqrt(pdx*pdx + pdy*pdy) < 16 + this.radius) {
             this.onHit(game, 'PLAYER');
             this.dead = true;
+            return;
+        }
+
+        // Enemy collision
+        if (game.enemies) {
+            for (const e of game.enemies) {
+                if (e._dead) continue;
+                const edx = this.x - (e._visualX * 32 + 16);
+                const edy = this.y - (e._visualY * 32 + 16);
+                if (Math.sqrt(edx*edx + edy*edy) < 16 + this.radius) {
+                    this.onHit(game, 'ENEMY', e);
+                    this.dead = true;
+                    return;
+                }
+            }
         }
     }
 
@@ -253,9 +268,11 @@ class ProjectileBase {
         this.onDraw(ctx);
     }
 
-    onHit(game, target) {
+    onHit(game, target, entity) {
         if (target === 'PLAYER') {
             game.takeDamage('PROJECTILE');
+        } else if (target === 'ENEMY' && entity) {
+            entity.takeDamage(1, game);
         }
         // VFX
         for (let i = 0; i < 5; i++) {
