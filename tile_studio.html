@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRCUIT BREAKER - Advanced Vector Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050a05;
+            --panel-color: #0a1a0a;
+            --accent-color: #00f0ff;
+            --secondary-color: #00ff9f;
+            --danger-color: #ff003c;
+            --text-color: #e0f0e0;
+            --border-color: rgba(0, 240, 255, 0.2);
+            --tool-bg: #1a1a1a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 15px 30px;
+            background: linear-gradient(to right, #0a1a0a, #050a05);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        h1 { margin: 0; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 3px; color: var(--accent-color); }
+
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+
+        /* --- Toolbar --- */
+        .toolbar {
+            width: 80px;
+            background: var(--panel-color);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            gap: 12px;
+        }
+
+        .tool-btn {
+            width: 50px;
+            height: 50px;
+            background: var(--tool-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            color: #888;
+            font-size: 1.2rem;
+            position: relative;
+        }
+
+        .tool-btn:hover { border-color: var(--accent-color); color: var(--accent-color); }
+        .tool-btn.active { background: rgba(0, 240, 255, 0.2); border-color: var(--accent-color); color: var(--accent-color); }
+        
+        .tool-btn::after {
+            content: attr(data-key);
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 0.6rem;
+            opacity: 0.5;
+        }
+
+        /* --- Workspace --- */
+        .workspace {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #0a1a0a 0%, #050a05 100%);
+            position: relative;
+            overflow: auto;
+        }
+
+        .canvas-container {
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border: 2px solid var(--border-color);
+            background: #000;
+        }
+
+        canvas { display: block; image-rendering: auto; }
+
+        /* --- Right Panel --- */
+        .inspector {
+            width: 320px;
+            background: var(--panel-color);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--secondary-color);
+            margin-bottom: 8px;
+            font-weight: 900;
+        }
+
+        .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .color-swatch { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 2px solid rgba(255,255,255,0.1); }
+        .color-swatch.active { border-color: var(--accent-color); box-shadow: 0 0 10px var(--accent-color); }
+        .custom-color { width: 100%; height: 35px; background: transparent; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+
+        .property-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .property-row label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.7; flex: 1; }
+        .toggle-switch {
+            width: 40px;
+            height: 20px;
+            background: #222;
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .toggle-switch.on { background: var(--secondary-color); }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: left 0.3s;
+        }
+        .toggle-switch.on::after { left: 22px; }
+
+        .object-list { flex: 1; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(0,0,0,0.2); overflow-y: auto; }
+        .object-item { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 10px; font-size: 0.75rem; cursor: pointer; }
+        .object-item:hover { background: rgba(255,255,255,0.05); }
+        .object-item.selected { background: rgba(0, 240, 255, 0.1); border-left: 3px solid var(--accent-color); }
+
+        .btn { padding: 10px; border-radius: 4px; border: none; cursor: pointer; font-weight: 900; text-transform: uppercase; font-family: 'Inter', sans-serif; transition: all 0.2s; font-size: 0.8rem; }
+        .btn-primary { background: var(--accent-color); color: #000; }
+        .btn-primary:hover { background: #fff; box-shadow: 0 0 15px var(--accent-color); }
+        .btn-secondary { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); }
+        .btn-danger { background: var(--danger-color); color: white; }
+
+        /* --- Modals --- */
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 100; padding: 50px; }
+        .modal { background: var(--panel-color); border: 1px solid var(--accent-color); width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; }
+        .modal-body { padding: 20px; overflow-y: auto; }
+        pre { background: #000; padding: 15px; border-radius: 4px; color: var(--secondary-color); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; margin: 0; overflow: auto; }
+
+        #notification { position: fixed; bottom: 20px; right: 20px; background: var(--secondary-color); color: #000; padding: 10px 20px; border-radius: 4px; font-weight: bold; opacity: 0; transform: translateY(20px); transition: all 0.3s; pointer-events: none; z-index: 200; }
+        #notification.show { opacity: 1; transform: translateY(0); }
+
+        .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+        .preset-card { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; text-align: center; }
+        .preset-card:hover { background: rgba(0,240,255,0.1); border-color: var(--accent-color); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <div style="width: 32px; height: 32px; background: var(--accent-color); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 900; font-size: 18px;">CB</div>
+        <h1>Studio Pro <span style="opacity: 0.5; font-size: 0.8rem;">VECTOR EDITOR</span></h1>
+    </div>
+    <div style="font-family: 'VT323', monospace; color: var(--secondary-color); font-size: 1.1rem; display: flex; gap: 20px;">
+        <span>GRID: 32x32</span>
+        <span id="historyInfo">UNDO: 0</span>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="toolbar">
+        <div class="tool-btn active" id="tool-select" onclick="setTool('select')" data-key="V" title="Selecionar (V)">🖱️</div>
+        <div class="tool-btn" id="tool-rect" onclick="setTool('rect')" data-key="R" title="Retângulo (R)">⬜</div>
+        <div class="tool-btn" id="tool-ellipse" onclick="setTool('ellipse')" data-key="O" title="Elipse (O)">⭕</div>
+        <div class="tool-btn" id="tool-line" onclick="setTool('line')" data-key="L" title="Linha (L)">📏</div>
+        
+        <div style="margin-top: auto; border-top: 1px solid var(--border-color); padding-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="tool-btn" onclick="undo()" data-key="^Z" title="Desfazer (Ctrl+Z)">↩️</div>
+            <div class="tool-btn" onclick="copySelected()" data-key="^C" title="Copiar (Ctrl+C)">📑</div>
+            <div class="tool-btn" onclick="pasteSelected()" data-key="^V" title="Colar (Ctrl+V)">📋</div>
+            <div class="tool-btn" onclick="openPresets()" title="Presets">📦</div>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="mainCanvas" width="512" height="512"></canvas>
+            <canvas id="gridCanvas" width="512" height="512" style="position: absolute; top:0; left:0; pointer-events:none; opacity: 0.3;"></canvas>
+        </div>
+    </div>
+
+    <div class="inspector">
+        <div class="section-title">Propriedades</div>
+        <div class="property-row">
+            <label>Preenchimento</label>
+            <div id="fillToggle" class="toggle-switch on" onclick="toggleProperty('fill')"></div>
+        </div>
+        <div class="property-row">
+            <label>Borda (Outline)</label>
+            <div id="strokeToggle" class="toggle-switch" onclick="toggleProperty('stroke')"></div>
+        </div>
+        <div class="property-row">
+            <label>Espessura</label>
+            <input type="range" id="thicknessRange" min="1" max="10" value="2" style="width: 100px;" oninput="updateThickness(this.value)">
+            <span id="thicknessValue" style="font-size: 0.7rem; color: var(--accent-color);">2px</span>
+        </div>
+
+        <div class="section-title">Cores</div>
+        <div class="color-grid" id="paletteGrid"></div>
+        <input type="color" id="customColor" class="custom-color" value="#00f0ff" oninput="selectColor(this.value, 'custom')">
+
+        <div class="section-title" style="margin-top:10px;">Objetos</div>
+        <div class="object-list" id="objectList"></div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="generateCode()">Gerar Código</button>
+            <button class="btn btn-danger" onclick="clearCanvas()">Apagar Tudo</button>
+            <button class="btn btn-secondary" onclick="toggleGrid()">Grade ON/OFF</button>
+        </div>
+    </div>
+</div>
+
+<div id="codeOverlay" class="overlay">
+    <div class="modal">
+        <div style="padding: 15px 25px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0; color:var(--accent-color);">Exportar Código</h3>
+            <button class="btn btn-secondary" style="padding: 5px 10px;" onclick="closeModal('codeOverlay')">X</button>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="funcNameInput" value="drawCustomTile" style="width:100%; background: #000; border: 1px solid var(--border-color); color: var(--accent-color); padding: 8px; margin-bottom: 10px; font-family: 'JetBrains Mono', monospace; border-radius: 4px;" oninput="updateExportedCode()">
+            <pre id="codeOutput"></pre>
+        </div>
+        <div style="padding: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px;">
+            <button class="btn btn-primary" style="flex:1;" onclick="copyCode()">Copiar Código</button>
+        </div>
+    </div>
+</div>
+
+<div id="presetsOverlay" class="overlay">
+    <div class="modal" style="max-width: 450px;">
+        <div style="padding: 15px 25px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0; color:var(--secondary-color);">Presets do Jogo</h3>
+            <button class="btn btn-secondary" style="padding: 5px 10px;" onclick="closeModal('presetsOverlay')">X</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size: 0.8rem; opacity: 0.7;">Selecione um base para começar:</p>
+            <div class="preset-grid">
+                <div class="preset-card" onclick="loadPreset('floor')">🏗️<br>Chão Industrial</div>
+                <div class="preset-card" onclick="loadPreset('wall')">🧱<br>Parede Metal</div>
+                <div class="preset-card" onclick="loadPreset('ceiling')">🛸<br>Teto / Estrutura</div>
+                <div class="preset-card" onclick="loadPreset('glass')">💎<br>Painel Vidro</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="notification">Copiado!</div>
+
+<script>
+    const COLORS = {
+        bg: '#050a05', wall: '#223322', wallEdge: '#446644', robotBody: '#ff8800',
+        robotEye: '#00f0ff', block: '#444455', blockEdge: '#888899', wire: '#113322',
+        coreBlue: '#00f0ff', coreTargetPowered: '#00ff9f', danger: '#ff003c',
+        copper: '#b87333', steel: '#71706e', darkSteel: '#1c1c24'
+    };
+
+    const TILE_SIZE = 32;
+    const SCALE = 16;
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const gCanvas = document.getElementById('gridCanvas');
+    const gCtx = gCanvas.getContext('2d');
+
+    let objects = [];
+    let undoStack = [];
+    let clipboard = null;
+    let selectedId = null;
+    let currentTool = 'rect';
+    let currentColor = '#223322';
+    let currentProps = { fill: true, stroke: false, thickness: 2 };
+    
+    let isDragging = false;
+    let isResizing = false;
+    let activeHandle = null;
+    let dragStart = { x: 0, y: 0 };
+    let tempObj = null;
+    let showGrid = true;
+
+    function init() {
+        const palette = document.getElementById('paletteGrid');
+        Object.entries(COLORS).forEach(([name, hex]) => {
+            const div = document.createElement('div');
+            div.className = 'color-swatch';
+            div.style.backgroundColor = hex;
+            div.onclick = () => selectColor(hex);
+            palette.appendChild(div);
+        });
+
+        drawGrid();
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Delete') deleteSelected();
+            if (e.key === 'z' && e.ctrlKey) { e.preventDefault(); undo(); }
+            if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); copySelected(); }
+            if (e.key === 'v' && e.ctrlKey) { e.preventDefault(); pasteSelected(); }
+            if (e.key === 'r') setTool('rect');
+            if (e.key === 'o') setTool('ellipse');
+            if (e.key === 'l') setTool('line');
+            if (e.key === 'v') setTool('select');
+        });
+
+        saveState(); // Save empty initial state
+        render();
+    }
+
+    function saveState() {
+        undoStack.push(JSON.stringify(objects));
+        if (undoStack.length > 50) undoStack.shift();
+        document.getElementById('historyInfo').innerText = `UNDO: ${undoStack.length - 1}`;
+    }
+
+    function undo() {
+        if (undoStack.length > 1) {
+            undoStack.pop(); // Remove current state
+            objects = JSON.parse(undoStack[undoStack.length - 1]);
+            selectedId = null;
+            render();
+            updateObjectList();
+            showNotification('Undo!');
+        }
+    }
+
+    function setTool(tool) {
+        currentTool = tool;
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tool-' + tool).classList.add('active');
+        if (tool !== 'select') selectedId = null;
+        render();
+    }
+
+    function toggleProperty(prop) {
+        currentProps[prop] = !currentProps[prop];
+        document.getElementById(prop + 'Toggle').classList.toggle('on', currentProps[prop]);
+        if (selectedId !== null) {
+            objects[selectedId][prop] = currentProps[prop];
+            render();
+        }
+    }
+
+    function selectColor(hex) {
+        currentColor = hex;
+        document.getElementById('customColor').value = hex;
+        if (selectedId !== null) {
+            objects[selectedId].color = hex;
+            render();
+        }
+    }
+
+    function updateThickness(val) {
+        currentProps.thickness = parseInt(val);
+        document.getElementById('thicknessValue').innerText = val + 'px';
+        if (selectedId !== null) {
+            objects[selectedId].thickness = currentProps.thickness;
+            render();
+        }
+    }
+
+    function getHandleAt(x, y, o) {
+        const s = SCALE;
+        const margin = 0.5; // Snap margin
+        const handles = [
+            { x: o.x, y: o.y, type: 'nw' },
+            { x: o.x + o.w/2, y: o.y, type: 'n' },
+            { x: o.x + o.w, y: o.y, type: 'ne' },
+            { x: o.x + o.w, y: o.y + o.h/2, type: 'e' },
+            { x: o.x + o.w, y: o.y + o.h, type: 'se' },
+            { x: o.x + o.w/2, y: o.y + o.h, type: 's' },
+            { x: o.x, y: o.y + o.h, type: 'sw' },
+            { x: o.x, y: o.y + o.h/2, type: 'w' }
+        ];
+        return handles.find(h => Math.abs(x - h.x) < margin && Math.abs(y - h.y) < margin);
+    }
+
+    function onMouseDown(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / SCALE);
+        const y = Math.floor((e.clientY - rect.top) / SCALE);
+        dragStart = { x, y };
+        isDragging = true;
+
+        if (currentTool === 'select') {
+            if (selectedId !== null) {
+                const handle = getHandleAt((e.clientX - rect.left) / SCALE, (e.clientY - rect.top) / SCALE, objects[selectedId]);
+                if (handle) {
+                    isResizing = true;
+                    activeHandle = handle.type;
+                    saveState();
+                    return;
+                }
+            }
+
+            // Click object
+            let foundId = null;
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const o = objects[i];
+                if (o.type === 'line') {
+                    // Line selection is tricky, simplified here
+                    if (Math.abs(x - o.x) < 2 && Math.abs(y - o.y) < 2) { foundId = i; break; }
+                } else if (x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h) {
+                    foundId = i; break;
+                }
+            }
+            if (foundId !== null) {
+                selectedId = foundId;
+                const o = objects[foundId];
+                currentColor = o.color;
+                currentProps.fill = !!o.fill;
+                currentProps.stroke = !!o.stroke;
+                currentProps.thickness = o.thickness || 2;
+                document.getElementById('fillToggle').classList.toggle('on', currentProps.fill);
+                document.getElementById('strokeToggle').classList.toggle('on', currentProps.stroke);
+                document.getElementById('thicknessRange').value = currentProps.thickness;
+                document.getElementById('thicknessValue').innerText = currentProps.thickness + 'px';
+            } else {
+                selectedId = null;
+            }
+            if (selectedId !== null) saveState();
+            updateObjectList();
+        } else {
+            saveState();
+            tempObj = { 
+                type: currentTool, x, y, w: 1, h: 1, 
+                color: currentColor, fill: currentProps.fill, stroke: currentProps.stroke,
+                thickness: currentProps.thickness
+            };
+        }
+        render();
+    }
+
+    function onMouseMove(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / SCALE);
+        const y = Math.floor((e.clientY - rect.top) / SCALE);
+
+        if (isDragging) {
+            if (currentTool === 'select' && selectedId !== null) {
+                const o = objects[selectedId];
+                if (isResizing) {
+                    if (activeHandle.includes('e')) o.w = Math.max(1, x - o.x + 1);
+                    if (activeHandle.includes('w')) { const oldX = o.x; o.x = x; o.w = Math.max(1, o.w + (oldX - x)); }
+                    if (activeHandle.includes('s')) o.h = Math.max(1, y - o.y + 1);
+                    if (activeHandle.includes('n')) { const oldY = o.y; o.y = y; o.h = Math.max(1, o.h + (oldY - y)); }
+                } else {
+                    const dx = x - dragStart.x;
+                    const dy = y - dragStart.y;
+                    if (dx !== 0 || dy !== 0) {
+                        o.x += dx; o.y += dy;
+                        if (o.type === 'line') { o.x2 += dx; o.y2 += dy; }
+                        dragStart = { x, y };
+                    }
+                }
+            } else if (tempObj) {
+                if (tempObj.type === 'line') {
+                    tempObj.x2 = x; tempObj.y2 = y;
+                } else {
+                    const curW = x - tempObj.x;
+                    const curH = y - tempObj.y;
+                    tempObj.w = curW >= 0 ? curW + 1 : curW - 1;
+                    tempObj.h = curH >= 0 ? curH + 1 : curH - 1;
+                }
+            }
+            render();
+        }
+    }
+
+    function onMouseUp() {
+        if (isDragging && tempObj) {
+            if (tempObj.type !== 'line') {
+                if (tempObj.w < 0) { tempObj.x += tempObj.w + 1; tempObj.w = Math.abs(tempObj.w); }
+                if (tempObj.h < 0) { tempObj.y += tempObj.h + 1; tempObj.h = Math.abs(tempObj.h); }
+            } else {
+                // Line has x,y,x2,y2
+                tempObj.w = Math.abs(tempObj.x2 - tempObj.x) || 1;
+                tempObj.h = Math.abs(tempObj.y2 - tempObj.y) || 1;
+            }
+            objects.push(tempObj);
+            selectedId = objects.length - 1;
+            tempObj = null;
+            updateObjectList();
+        }
+        isDragging = false;
+        isResizing = false;
+        activeHandle = null;
+        render();
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        objects.forEach((o, i) => {
+            drawObject(ctx, o, SCALE);
+            if (i === selectedId) drawTransformBox(o);
+        });
+        if (tempObj) {
+            ctx.globalAlpha = 0.5;
+            drawObject(ctx, tempObj, SCALE);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    function drawObject(targetCtx, o, s) {
+        targetCtx.fillStyle = o.color;
+        targetCtx.strokeStyle = o.color;
+        targetCtx.lineWidth = o.thickness || 2;
+
+        if (o.type === 'rect') {
+            if (o.fill) targetCtx.fillRect(o.x * s, o.y * s, o.w * s, o.h * s);
+            if (o.stroke) {
+                const lw = (o.thickness || 2);
+                targetCtx.lineWidth = lw;
+                targetCtx.strokeRect(o.x * s + lw/2, o.y * s + lw/2, o.w * s - lw, o.h * s - lw);
+            }
+        } else if (o.type === 'ellipse') {
+            targetCtx.beginPath();
+            targetCtx.ellipse((o.x + o.w/2) * s, (o.y + o.h/2) * s, Math.abs(o.w/2) * s, Math.abs(o.h/2) * s, 0, 0, Math.PI * 2);
+            if (o.fill) targetCtx.fill();
+            if (o.stroke) targetCtx.stroke();
+        } else if (o.type === 'line') {
+            targetCtx.beginPath();
+            targetCtx.moveTo(o.x * s, o.y * s);
+            targetCtx.lineTo(o.x2 * s, o.y2 * s);
+            targetCtx.stroke();
+        }
+    }
+
+    function drawTransformBox(o) {
+        const s = SCALE;
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(o.x * s, o.y * s, o.w * s, o.h * s);
+        ctx.setLineDash([]);
+        
+        // Handles
+        ctx.fillStyle = '#fff';
+        const hs = 6;
+        const pts = [
+            [o.x, o.y], [o.x+o.w/2, o.y], [o.x+o.w, o.y],
+            [o.x+o.w, o.y+o.h/2], [o.x+o.w, o.y+o.h], [o.x+o.w/2, o.y+o.h],
+            [o.x, o.y+o.h], [o.x, o.y+o.h/2]
+        ];
+        pts.forEach(p => ctx.fillRect(p[0]*s - hs/2, p[1]*s - hs/2, hs, hs));
+    }
+
+    function updateObjectList() {
+        const list = document.getElementById('objectList');
+        list.innerHTML = '';
+        objects.forEach((o, i) => {
+            const div = document.createElement('div');
+            div.className = 'object-item' + (i === selectedId ? ' selected' : '');
+            div.innerHTML = `<div style="width:12px;height:12px;background:${o.color};"></div> <span>${o.type.toUpperCase()} #${i}</span>`;
+            div.onclick = () => { selectedId = i; render(); updateObjectList(); };
+            list.prepend(div);
+        });
+    }
+
+    function deleteSelected() { if (selectedId !== null) { saveState(); objects.splice(selectedId, 1); selectedId = null; render(); updateObjectList(); } }
+
+    function copySelected() { if (selectedId !== null) { clipboard = JSON.stringify(objects[selectedId]); showNotification('Copiado!'); } }
+    function pasteSelected() {
+        if (clipboard) {
+            saveState();
+            const obj = JSON.parse(clipboard);
+            obj.x += 2; obj.y += 2;
+            if (obj.x2) { obj.x2 += 2; obj.y2 += 2; }
+            objects.push(obj);
+            selectedId = objects.length - 1;
+            render(); updateObjectList();
+            showNotification('Colado!');
+        }
+    }
+
+    function openPresets() { document.getElementById('presetsOverlay').style.display = 'flex'; }
+    function loadPreset(type) {
+        saveState();
+        objects = [];
+        if (type === 'floor') {
+            // Game Floor: Copper tones with bevel and 4 rivets
+            const copperBase = '#2d2621'; 
+            const copperHighlight = '#423830'; 
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 32, color: copperBase, fill: true });
+            // Bevel (Inner stroke effect)
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 1, color: copperHighlight, fill: true }); // Top
+            objects.push({ type: 'rect', x: 0, y: 0, w: 1, h: 32, color: copperHighlight, fill: true }); // Left
+            // 4 Rivets
+            const rivetColor = '#1a1613';
+            objects.push({ type: 'rect', x: 4, y: 4, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 26, y: 4, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 4, y: 26, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 26, y: 26, w: 2, h: 2, color: rivetColor, fill: true });
+        } else if (type === 'wall') {
+            // Game Wall Face (Variant 0)
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 32, color: '#1c1c24', fill: true });
+            objects.push({ type: 'rect', x: 1, y: 1, w: 30, h: 30, color: '#2d2d3b', fill: true });
+            // 4 Rivets
+            const rivetColor = '#3a3a4a';
+            objects.push({ type: 'rect', x: 4, y: 4, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 26, y: 4, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 4, y: 26, w: 2, h: 2, color: rivetColor, fill: true });
+            objects.push({ type: 'rect', x: 26, y: 26, w: 2, h: 2, color: rivetColor, fill: true });
+            // Bottom shadow (2px)
+            objects.push({ type: 'rect', x: 0, y: 30, w: 32, h: 2, color: '#11111a', fill: true });
+        } else if (type === 'ceiling') {
+            // Game Ceiling
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 32, color: '#20202b', fill: true });
+            // Bevel (Top/Left highlight - 2px)
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 2, color: '#252531', fill: true });
+            objects.push({ type: 'rect', x: 0, y: 0, w: 2, h: 32, color: '#252531', fill: true });
+            // Shadows (Bottom/Right - 2px)
+            objects.push({ type: 'rect', x: 0, y: 30, w: 32, h: 2, color: '#0f0f14', fill: true });
+            objects.push({ type: 'rect', x: 30, y: 0, w: 2, h: 32, color: '#0f0f14', fill: true });
+            // Center rivet
+            objects.push({ type: 'rect', x: 14, y: 14, w: 4, h: 4, color: '#050505', fill: true });
+        } else if (type === 'glass') {
+            // Glass Wall
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 32, color: 'rgba(0,150,255,0.1)', fill: true });
+            objects.push({ type: 'rect', x: 0, y: 0, w: 32, h: 32, color: 'rgba(0,0,0,0.2)', fill: false, stroke: true });
+            // Static Reflection lines
+            objects.push({ type: 'rect', x: 10, y: 10, w: 2, h: 12, color: 'rgba(255,255,255,0.3)', fill: true });
+            objects.push({ type: 'rect', x: 20, y: 4, w: 1, h: 6, color: 'rgba(255,255,255,0.2)', fill: true });
+        }
+        closeModal('presetsOverlay');
+        render(); updateObjectList();
+    }
+
+    function generateCode() { updateExportedCode(); document.getElementById('codeOverlay').style.display = 'flex'; }
+    function updateExportedCode() {
+        const funcName = document.getElementById('funcNameInput').value || "drawCustomTile";
+        let innerCode = "// Advanced Vector Tile\n";
+        objects.forEach(o => {
+            let colorVal = o.color;
+            for(const [name, hex] of Object.entries(COLORS)) if (hex.toLowerCase() === o.color.toLowerCase()) colorVal = `COLORS.${name}`;
+            innerCode += `this.ctx.fillStyle = this.ctx.strokeStyle = ${colorVal.startsWith('COLORS') ? colorVal : "'" + colorVal + "'"};\nthis.ctx.lineWidth = ${o.thickness || 2};\n`;
+            if (o.type === 'rect') {
+                if (o.fill) innerCode += `this.ctx.fillRect(px + ${o.x}, py + ${o.y}, ${o.w}, ${o.h});\n`;
+                if (o.stroke) innerCode += `this.ctx.strokeRect(px + ${o.x}, py + ${o.y}, ${o.w}, ${o.h});\n`;
+            } else if (o.type === 'ellipse') {
+                innerCode += `this.ctx.beginPath(); this.ctx.ellipse(px + ${o.x + o.w/2}, py + ${o.y + o.h/2}, ${Math.abs(o.w/2)}, ${Math.abs(o.h/2)}, 0, 0, Math.PI * 2);\n`;
+                if (o.fill) innerCode += `this.ctx.fill();\n`;
+                if (o.stroke) innerCode += `this.ctx.stroke();\n`;
+            } else if (o.type === 'line') {
+                innerCode += `this.ctx.beginPath(); this.ctx.moveTo(px + ${o.x}, py + ${o.y}); this.ctx.lineTo(px + ${o.x2}, py + ${o.y2}); this.ctx.stroke();\n`;
+            }
+            innerCode += "\n";
+        });
+        document.getElementById('codeOutput').innerText = `${funcName}(x, y) {\n    const px = x * this.tileSize; const py = y * this.tileSize;\n    ${innerCode.split('\n').join('\n    ')}\n}`;
+    }
+
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function copyCode() { navigator.clipboard.writeText(document.getElementById('codeOutput').innerText); showNotification('Copiado!'); }
+    function showNotification(msg) { const n = document.getElementById('notification'); n.innerText = msg; n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 2000); }
+    function toggleGrid() { showGrid = !showGrid; drawGrid(); }
+    function drawGrid() { gCtx.clearRect(0,0,512,512); if(!showGrid) return; gCtx.strokeStyle='rgba(255,255,255,0.1)'; for(let i=0;i<=32;i++){ gCtx.beginPath();gCtx.moveTo(i*16,0);gCtx.lineTo(i*16,512);gCtx.stroke(); gCtx.beginPath();gCtx.moveTo(0,i*16);gCtx.lineTo(512,i*16);gCtx.stroke(); } }
+
+    init();
+</script>
+
+</body>
+</html>

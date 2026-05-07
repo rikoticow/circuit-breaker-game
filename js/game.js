@@ -3,7 +3,20 @@ class GameState {
         this.isEditor = isEditor;
         this.levelIndex = 0;
         this.map = [];
-        this.player = { x: 0, y: 0, visualX: 0, visualY: 0, dir: DIRS.DOWN, visorTimer: 0, visorColor: '#00ff41', grabbedBlock: null, isGrabbing: false };
+        this.player = { 
+            x: 0, y: 0, 
+            prevX: 0, prevY: 0,
+            visualX: 0, visualY: 0, 
+            dir: DIRS.DOWN, 
+            visorTimer: 0, 
+            visorColor: '#00f0ff', 
+            grabbedBlock: null, 
+            isGrabbing: false,
+            invulnerable: false,
+            flashTimer: 0,
+            knockbackDelay: 0,
+            knockbackTarget: null
+        };
         this.blocks = [];
         this.targets = [];
         this.forbiddens = [];
@@ -41,12 +54,14 @@ class GameState {
         this.activeSequences = [];
         this.frame = 0;
         this.lasersNeedUpdate = true; // Initial calculation required
+        this.launchers = [];
+        this.projectiles = [];
 
 
         this.score = 0;
-        this.lives = 3;
         this.time = 0;
         this.moveCount = 0;
+        HPSystem.init();
 
         this.undoStack = [];
         this.state = 'PLAYING'; // PLAYING, WINNING, GAMEOVER, VICTORY, LEVEL_COMPLETE, RESULT
@@ -68,9 +83,12 @@ class GameState {
         this.resultTimer = 0;
         this.hitStopTimer = 0;
         this.scrapCollected = 0;
+        this.shopTerminals = [];
+        this.scrapTotal = GameProgress ? GameProgress.scrapTotal : 0;
         this.totalScrap = 0;
         this.scrapPositions = new Set();
         this.triggeredDialogues = new Set();
+        this.lastStationKey = null; // Track current station for entry effects
 
         // Transition system
         this.transitionState = 'WAITING'; // Start closed
@@ -85,11 +103,47 @@ class GameState {
             bias: { x: 0, y: 0 },
             lerp: 0.1
         };
+        this.discovered = new Set();
+        this.fogOfWar = false;
+        this.discoveryRadius = 5;
+        this.rooms = [];
 
         if (levelData) {
             this.loadLevel(levelData);
         } else {
             this.loadLevel(0);
+        }
+    }
+
+    updateDiscovery() {
+        if (!this.fogOfWar) return;
+        const px = Math.floor(this.player.x);
+        const py = Math.floor(this.player.y);
+        
+        // 1. Room Discovery (Instant reveal of entire room)
+        if (this.rooms && this.rooms.length > 0) {
+            for (const r of this.rooms) {
+                // Check if player is inside room bounds
+                if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) {
+                    for (let ry = r.y; ry < r.y + r.h; ry++) {
+                        for (let rx = r.x; rx < r.x + r.w; rx++) {
+                            this.discovered.add(`${rx},${ry}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Proximity Discovery (Small radius for corridors)
+        const r = 2; // Fixed small radius for corridors
+        for (let y = py - r; y <= py + r; y++) {
+            for (let x = px - r; x <= px + r; x++) {
+                const dx = x - px;
+                const dy = y - py;
+                if (dx * dx + dy * dy <= r * r) {
+                    this.discovered.add(`${x},${y}`);
+                }
+            }
         }
     }
 
@@ -116,12 +170,20 @@ class GameState {
         this.transitionStayClosed = stayClosed;
     }
 
+    get isExitOpen() {
+        return this.doors.some(d => d.isExit && (d.state === 'OPEN' || d.state === 'BROKEN_OPEN'));
+    }
+
     cloneState() {
         return {
-            player: { ...this.player, grabbedBlock: this.player.grabbedBlock ? this.blocks.indexOf(this.player.grabbedBlock) : null },
+            player: { 
+                ...this.player, 
+                grabbedBlock: this.player.grabbedBlock ? this.blocks.indexOf(this.player.grabbedBlock) : null 
+            },
             blocks: this.blocks.map(b => ({ ...b })),
             moves: this.moves,
             time: this.time,
+            hp: window.HPSystem ? HPSystem.currentQuarters : 12,
             scrapCollected: this.scrapCollected,
             scrapPositions: new Set(this.scrapPositions),
             camera: { x: this.camera.x, y: this.camera.y },
@@ -131,8 +193,21 @@ class GameState {
             doors: this.doors.map(d => ({ ...d })),
             emitters: this.emitters.map(e => ({ ...e })),
             catalysts: this.catalysts.map(c => ({ ...c })),
+            portals: this.portals.map(p => {
+                const np = { ...p };
+                if (p.slot) {
+                    // Deep clone the slot and its content if it's a block
+                    np.slot = { content: p.slot.content ? { ...p.slot.content } : null };
+                }
+                return np;
+            }),
+            conveyors: this.conveyors.map(c => ({ ...c })),
+            singularitySwitchers: this.singularitySwitchers.map(s => ({ ...s })),
             gravityButtons: this.gravityButtons.map(g => ({ ...g })),
-            isSolarPhase: this.isSolarPhase
+            isSolarPhase: this.isSolarPhase,
+            isSecurityAlert: this.isSecurityAlert,
+            zoneTriggers: this.zoneTriggers.map(t => ({ ...t })),
+            remoteSignals: new Set(this.remoteSignals)
         };
     }
 
@@ -151,90 +226,196 @@ class GameState {
     }
 
     applyState(state, snapVisuals = false) {
-        if (snapVisuals) {
-            this.player = { ...state.player };
-            if (state.player.grabbedBlock !== null && state.player.grabbedBlock !== undefined) {
-                this.player.grabbedBlock = this.blocks[state.player.grabbedBlock];
-            } else {
-                this.player.grabbedBlock = null;
-            }
-            this.player.visualX = state.player.x;
-            this.player.visualY = state.player.y;
-            this.player.visualAngle = state.player.dir * (Math.PI / 2);
+        if (!state) return;
+
+        // Restore triggers and signals
+        if (state.zoneTriggers) this.zoneTriggers = state.zoneTriggers.map(t => ({ ...t }));
+        if (state.remoteSignals) this.remoteSignals = new Set(state.remoteSignals);
+        this.activeSequences = []; // Clear running sequences on state restore
+        this.isSecurityAlert = state.isSecurityAlert || false;
+
+        // 1. Restore blocks first
+        this.blocks = (state.blocks || []).map((b) => {
+            const nb = { ...b };
+            // Ensure physics flags are clean unless specifically restored
+            nb.isFalling = b.isFalling || false;
+            nb.fallTimer = b.fallTimer || 0;
             
-            this.blocks = state.blocks.map(b => ({ 
-                ...b, 
-                visualX: b.x, 
-                visualY: b.y,
-                visualAngle: b.visualAngle !== undefined ? b.visualAngle : b.dir * (Math.PI/2)
-            }));
-        } else {
-            const vx = this.player.visualX !== undefined ? this.player.visualX : state.player.x;
-            const vy = this.player.visualY !== undefined ? this.player.visualY : state.player.y;
-            this.player = { ...state.player };
-            if (state.player.grabbedBlock !== null && state.player.grabbedBlock !== undefined) {
-                this.player.grabbedBlock = this.blocks[state.player.grabbedBlock];
+            // Reset velocities to prevent NaN propagation or visual jumping
+            nb.vx = 0;
+            nb.vy = 0;
+
+            if (snapVisuals) {
+                nb.visualX = b.x;
+                nb.visualY = b.y;
+                nb.visualAngle = b.dir * (Math.PI / 2);
             } else {
-                this.player.grabbedBlock = null;
-            }
-            this.player.visualX = vx;
-            this.player.visualY = vy;
-            
-            // Preserve block visual states
-            this.blocks = state.blocks.map((b, i) => {
-                const oldB = this.blocks[i];
-                const nb = { ...b };
-                if (oldB) {
-                    nb.visualX = oldB.visualX !== undefined ? oldB.visualX : b.x;
-                    nb.visualY = oldB.visualY !== undefined ? oldB.visualY : b.y;
-                    nb.vx = oldB.vx || 0;
-                    nb.vy = oldB.vy || 0;
+                const oldB = this.blocks ? this.blocks.find(ob => ob.origX === nb.origX && ob.origY === nb.origY) : null;
+                if (oldB && (oldB.type === nb.type || (!oldB.type && !nb.type))) {
+                    nb.visualX = oldB.visualX;
+                    nb.visualY = oldB.visualY;
+                    nb.visualAngle = oldB.visualAngle;
+                    nb.isHit = b.isHit;
+                } else {
+                    nb.visualX = b.x;
+                    nb.visualY = b.y;
+                    nb.visualAngle = b.dir * (Math.PI / 2);
                 }
-                return nb;
-            });
-        }
+            }
+            return nb;
+        });
+
+        // 2. Restore Player
+        const vx = snapVisuals ? state.player.x : (this.player.visualX !== undefined ? this.player.visualX : state.player.x);
+        const vy = snapVisuals ? state.player.y : (this.player.visualY !== undefined ? this.player.visualY : state.player.y);
         
+        this.player = { ...state.player };
+        if (state.player.grabbedBlock !== null && state.player.grabbedBlock !== undefined && state.player.grabbedBlock >= 0) {
+            this.player.grabbedBlock = this.blocks[state.player.grabbedBlock];
+        } else {
+            this.player.grabbedBlock = null;
+        }
+        this.player.visualX = vx;
+        this.player.visualY = vy;
+        this.player.vx = 0;
+        this.player.vy = 0;
+        if (snapVisuals) this.player.visualAngle = state.player.dir * (Math.PI / 2);
+
+        // 3. Restore HP
+        if (state.hp !== undefined && window.HPSystem) {
+            HPSystem.currentQuarters = state.hp;
+        }
+
+        // 4. Restore everything else
         this.moves = state.moves;
         this.scrapCollected = state.scrapCollected;
         this.scrapPositions = new Set(state.scrapPositions);
         this.time = state.time;
+        this.camera.x = state.camera.x;
+        this.camera.y = state.camera.y;
+
+        this.buttons = (state.buttons || []).map(b => ({ ...b }));
+        this.purpleButtons = (state.purpleButtons || []).map(b => ({ ...b }));
+        this.quantumFloors = (state.quantumFloors || []).map(q => ({ ...q }));
+        this.conveyors = (state.conveyors || []).map(c => ({ ...c }));
         
-        if (state.camera) {
-            this.camera.x = state.camera.x;
-            this.camera.y = state.camera.y;
-        }
+        // Portals need to preserve the shared slot reference but restore its content
+        this.portals.forEach(p => {
+            const savedPortal = (state.portals || []).find(sp => sp.x === p.x && sp.y === p.y);
+            if (savedPortal && savedPortal.slot && p.slot) {
+                if (savedPortal.slot.content) {
+                    p.slot.content = { ...savedPortal.slot.content };
+                    // Ensure visuals for blocks inside slots are also correctly placed
+                    p.slot.content.visualX = p.x;
+                    p.slot.content.visualY = p.y;
+                } else {
+                    p.slot.content = null;
+                }
+            }
+        });
+        
+        this.singularitySwitchers = (state.singularitySwitchers || []).map(s => ({ ...s }));
+        
+        this.doors = (state.doors || []).map(d => {
+            const nd = { ...d };
+            const oldD = this.doors.find(od => od.x === d.x && od.y === d.y);
+            if (oldD) {
+                nd.visualOpen = snapVisuals ? d.visualOpen : oldD.visualOpen;
+            }
+            return nd;
+        });
+
+        this.emitters = (state.emitters || []).map(e => ({ ...e }));
+        this.catalysts = (state.catalysts || []).map(c => ({ ...c }));
+        this.gravityButtons = (state.gravityButtons || []).map(g => ({ ...g }));
+        this.isSolarPhase = state.isSolarPhase !== undefined ? state.isSolarPhase : true;
+        this.isSecurityAlert = state.isSecurityAlert || false;
+
+        this.updateEnergy();
+    }
+
+    captureLevelState() {
+        return {
+            buttons: this.buttons.map(b => ({ x: b.x, y: b.y, isPressed: b.isPressed, energy: b.energy })),
+            purpleButtons: this.purpleButtons.map(b => ({ x: b.x, y: b.y, isPressed: b.isPressed, energy: b.energy })),
+            doors: this.doors.map(d => ({ x: d.x, y: d.y, state: d.state, visualOpen: d.visualOpen })),
+            blocks: this.blocks.map(b => ({ x: b.x, y: b.y, visualX: b.visualX, visualY: b.visualY, dir: b.dir })),
+            scrap: Array.from(this.scrapPositions),
+            dialogues: Array.from(this.triggeredDialogues)
+        };
+    }
+
+    applyLevelState(state) {
+        if (!state) return;
+        
         if (state.buttons) {
-            this.buttons = state.buttons.map(b => ({ ...b }));
+            state.buttons.forEach(sb => {
+                const b = this.buttons.find(btn => btn.x === sb.x && btn.y === sb.y);
+                if (b) { b.isPressed = sb.isPressed; b.energy = sb.energy; }
+            });
         }
         if (state.purpleButtons) {
-            this.purpleButtons = state.purpleButtons.map(b => ({ ...b }));
-        }
-        if (state.quantumFloors) {
-            this.quantumFloors = state.quantumFloors.map(q => ({ ...q }));
+            state.purpleButtons.forEach(sb => {
+                const b = this.purpleButtons.find(btn => btn.x === sb.x && btn.y === sb.y);
+                if (b) { b.isPressed = sb.isPressed; b.energy = sb.energy; }
+            });
         }
         if (state.doors) {
-            this.doors = state.doors.map(d => ({ ...d }));
+            state.doors.forEach(sd => {
+                const d = this.doors.find(door => door.x === sd.x && door.y === sd.y);
+                if (d) { d.state = sd.state; d.visualOpen = sd.visualOpen; }
+            });
         }
-        if (state.emitters) {
-            this.emitters = state.emitters.map(e => ({ ...e }));
+        if (state.blocks && state.blocks.length === this.blocks.length) {
+            state.blocks.forEach((sb, i) => {
+                this.blocks[i].x = sb.x;
+                this.blocks[i].y = sb.y;
+                this.blocks[i].visualX = sb.visualX;
+                this.blocks[i].visualY = sb.visualY;
+                this.blocks[i].dir = sb.dir;
+            });
         }
-        if (state.catalysts) {
-            this.catalysts = state.catalysts.map(c => ({ ...c }));
+        if (state.scrap) {
+            this.scrapPositions = new Set(state.scrap);
+            this.scrapCollected = Math.max(0, this.totalScrap - this.scrapPositions.size);
         }
-        if (state.gravityButtons) {
-            this.gravityButtons = state.gravityButtons.map(g => ({ ...g }));
+        if (state.dialogues) {
+            this.triggeredDialogues = new Set(state.dialogues);
         }
-        this.isSolarPhase = state.isSolarPhase !== undefined ? state.isSolarPhase : true;
         
         this.updateEnergy();
     }
 
-    loadLevel(indexOrData, keepLives = false) {
+
+    loadLevel(indexOrData, keepLives = false, customSpawn = null) {
+        // Resolve index if it's a string name
+        let targetIndex = indexOrData;
+        if (typeof indexOrData === 'string') {
+            targetIndex = LEVELS.findIndex(l => l.name === indexOrData);
+        }
+
+        // Save previous level state ONLY if we are moving to a DIFFERENT level
+        // (Resets/Deaths shouldn't overwrite the persistent 'good' state)
+        if (this.levelData && this.levelIndex !== undefined && this.levelIndex !== -1 && this.levelIndex !== targetIndex) {
+            if (window.GameProgress) {
+                GameProgress.saveLevelState(this.levelIndex, this.captureLevelState());
+            }
+        }
         let levelData;
         if (typeof indexOrData === 'object') {
             levelData = indexOrData;
             this.levelIndex = -1; // Test Mode indicator
         } else {
+            if (typeof indexOrData === 'string') {
+                const idx = LEVELS.findIndex(l => l.name === indexOrData);
+                if (idx !== -1) indexOrData = idx;
+                else {
+                    console.error(`Level not found: ${indexOrData}`);
+                    // Fallback to level 0 or current if string search fails
+                    indexOrData = 0; 
+                }
+            }
+
             if (indexOrData >= LEVELS.length) {
                 this.state = 'VICTORY';
                 return;
@@ -244,18 +425,18 @@ class GameState {
         }
         
         this.levelData = levelData;
-        this.time = levelData.timer || 60; // seconds countdown from level data
-        this.moves = levelData.time; // Movements allowed (battery)
+        this.time = -1; // Reset timer before loading new data
+        this.time = (levelData.timer && levelData.timer > 0) ? levelData.timer : -1; 
+        this.moves = 999; 
         this.moveCount = 0;
-        if (!keepLives) this.lives = 3; // Restore lives only if not a respawn
+        this.isSolarPhase = true; 
+        if (!keepLives) HPSystem.fullHeal(); 
         this.state = 'PLAYING';
         this.warmupFrames = 60; // 1 second of particle suppression after opening
         this.undoStack = [];
+        this.lastCheckpointIndex = 0;
+        this.visitedStations = new Set();
         this.glassWallsHit = new Set();
-        if (window.Graphics) {
-            Graphics.clearParticles();
-            Graphics.clearTrails();
-        }
 
         this.map = [];
         this.blocks = [];
@@ -277,20 +458,34 @@ class GameState {
         this.glassWallsHit = new Set();
         this.poweredDoors = new Set();
         this.singularitySwitchers = [];
+        this.zoneTriggers = [];
+        this.activeSequences = [];
+        this.alarmTimer = 0;
+        this.launchers = [];
+        this.projectiles = [];
 
         this.scrapPositions.clear();
         this.triggeredDialogues.clear();
+        this.worldLabels = levelData.worldLabels || [];
         this.scrapCollected = 0;
         this.totalScrap = 0;
         this.debris = []; // Initialize persistent debris
         this.chargingStations = []; 
-        this.zoneTriggers = JSON.parse(JSON.stringify(levelData.zoneTriggers || []));
+        this.shopTerminals = [];
         this.isBlackoutActive = levelData.startWithBlackout || false;
         this.blackoutAlpha = this.isBlackoutActive ? 1 : 0;
+        this.fogOfWar = levelData.fogOfWar || false;
+        this.rooms = levelData.rooms || [];
+        this.discovered.clear();
+        if (this.fogOfWar) {
+            this.discoveryRadius = levelData.discoveryRadius || 5;
+            this.updateDiscovery();
+        }
         this.remoteSignals.clear();
         this.remoteChannels = new Set();
         if (levelData.zoneTriggers) {
-            for (const trigger of levelData.zoneTriggers) {
+            this.zoneTriggers = JSON.parse(JSON.stringify(levelData.zoneTriggers));
+            for (const trigger of this.zoneTriggers) {
                 // Check new sequence-based triggers
                 if (trigger.events) {
                     for (const event of trigger.events) {
@@ -308,83 +503,150 @@ class GameState {
         this.isSecurityAlert = false;
         this.alertPulse = 0;
 
-        const charMap = levelData.map;
+        const rawMap = levelData.map;
         const blocksMap = levelData.blocks; 
 
-        const mapH = charMap.length;
-        const mapW = charMap[0].length;
+        const mapH = rawMap.length;
+        const mapW = rawMap[0].length;
+
+        this.worldLabels = [...(levelData.worldLabels || [])];
+        const charMap = rawMap;
 
         for (let y = 0; y < mapH; y++) {
             let row = [];
             for (let x = 0; x < mapW; x++) {
                 let c = charMap[y][x];
-                row.push((c === '#' || c === 'W' || c === 'Q' || c === '*' || c === 'G') ? c : ' ');
+                let oc = (levelData.overlays && levelData.overlays[y]) ? levelData.overlays[y][x] : ' ';
+                let wc = (levelData.wireMap && levelData.wireMap[y]) ? levelData.wireMap[y][x] : ' ';
+                
+                // Base static collision/rendering layer
+                // We keep the structural layer (walls, floors, holes) in this.map
+                // Interactive entities (B, X, T, @, etc.) will be stored in their own lists
+                const isStructural = (c === '#' || c === 'W' || c === '*' || c === '.' || c === 'G' || c === 'A' || c === 'I' || c === 'Y' || c === 'x' || c === 'z' || c === 'q' || c === 'f' || c === 'i' || c === 'j' || c === 'k' || c === 'h' || c === 'm' || c === 'a' || c === 'b' || c === 'c' || c === 'g' || c === 't' || c === 'N' || c === 'o' || c === ',' || c === '{' || c === '~' || c === '}' || c === '&' || c === '=' || c === ':' || c === ';' || c === '"' || c === '|' || c === "'" || c === '\u03A3' || c === '\u03C3' || c === '\u03C1' || c === '\u03C0' || c === '\u03A9');
+                const isOverlayStructural = (oc === '#' || oc === 'W' || oc === '*' || oc === '.' || oc === 'G' || oc === 'A' || oc === 'I' || oc === 'Y' || oc === 'x' || oc === 'z' || oc === 'q' || oc === 'f' || oc === 'i' || oc === 'j' || oc === 'k' || oc === 'h' || oc === 'm' || oc === 'g' || oc === 't' || oc === 'N' || oc === '&' || oc === '=' || oc === ':' || oc === ';' || oc === '"' || oc === '|' || oc === "'" || oc === '\u03A3' || oc === '\u03C3' || oc === '\u03C1' || oc === '\u03C0' || oc === '\u03A9');
+                
+                let finalChar = ' ';
+                if (isOverlayStructural) finalChar = oc;
+                else if (isStructural) finalChar = c;
+                
+                row.push(finalChar);
 
-                if (c === '@') {
-                    this.player.x = x;
-                    this.player.y = y;
-                    this.player.visualX = x;
-                    this.player.visualY = y;
-                    this.player.lastTX = x;
-                    this.player.lastTY = y;
+                if (c === '!' || oc === '!') {
+                    const labelText = (levelData.links && levelData.links[`${x},${y}_label`]);
+                    if (labelText) {
+                        this.worldLabels.push({
+                            x: x,
+                            y: y,
+                            text: labelText,
+                            color: '#00f0ff'
+                        });
+                    }
+                } else if (c === '@' || oc === '@') {
+                    const startX = (customSpawn && customSpawn.x !== undefined) ? customSpawn.x : x;
+                    const startY = (customSpawn && customSpawn.y !== undefined) ? customSpawn.y : y;
+                    
+                    this.player.x = startX;
+                    this.player.y = startY;
+                    this.player.prevX = startX;
+                    this.player.prevY = startY;
+                    this.player.visualX = startX;
+                    this.player.visualY = startY;
+                    this.player.lastTX = startX;
+                    this.player.lastTY = startY;
                     this.player.visualAngle = undefined;
                     this.player.isDead = false;
                     this.player.deathType = null;
-                    this.startPos = { x, y };
-                } else if (c === 'B') {
+                    this.startPos = { x: startX, y: startY };
+                    // Only add a charging station at spawn if explicitly set in level metadata
+                    if (levelData.spawnIsStation) {
+                        this.chargingStations.push({ x: startX, y: startY });
+                    }
+                } else if (c === 'B' || oc === 'B') {
                     this.sources.push({ x, y });
-                } else if (c === 'X') { 
+                } else if (c === 'X' || oc === 'X') { 
                     this.redSources.push({ x, y });
-                } else if (c === 'K') {
+                } else if (c === 'K' || oc === 'K') {
                     this.chargingStations.push({ x, y });
-                } else if (['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(c)) {
-                    this.wires.push({ x, y, type: c });
-                } else if (c === 'T' || (c >= '1' && c <= '9')) {
-                    const req = c === 'T' ? 1 : parseInt(c);
+                } else if (['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(c) || ['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(oc) || ['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(wc)) {
+                    const wireType = ['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(wc) ? wc : (['H', 'V', '+', 'L', 'J', 'C', 'F', 'u', 'd', 'l', 'r'].includes(oc) ? oc : c);
+                    this.wires.push({ x, y, type: wireType });
+                } else if (c === 'R' || oc === 'R') {
+                    const launcherConfig = (levelData.links && levelData.links[`${x},${y}_launcher`]) || {};
+                    launcherConfig.channel = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                    launcherConfig.dir = (levelData.links && levelData.links[`${x},${y}_dir`]) || 0;
+                    const launcher = LauncherFactory.create(x, y, launcherConfig);
+                    this.launchers.push(launcher);
+                } else if (c === 'T' || (c >= '1' && c <= '9') || oc === 'T' || (oc >= '1' && oc <= '9')) {
+                    const targetChar = (oc === 'T' || (oc >= '1' && oc <= '9')) ? oc : c;
+                    const req = targetChar === 'T' ? 1 : parseInt(targetChar);
                     this.targets.push({ x, y, required: req });
-                } else if (c === 'Z') {
+                } else if (c === 'Z' || oc === 'Z') {
                     this.brokenCores.push({ x, y });
-                } else if (c === '0') { 
+                } else if (c === '0' || oc === '0') { 
                     this.forbiddens.push({ x, y });
-                } else if (['>', '<', '^', 'v'].includes(c)) {
+                } else if (['>', '<', '^', 'v'].includes(c) || ['>', '<', '^', 'v'].includes(oc)) {
+                    const blockChar = ['>', '<', '^', 'v'].includes(oc) ? oc : c;
                     let dir = DIRS.RIGHT;
-                    if (c === '<') dir = DIRS.LEFT;
-                    if (c === '^') dir = DIRS.UP;
-                    if (c === 'v') dir = DIRS.DOWN;
+                    if (blockChar === '<') dir = DIRS.LEFT;
+                    if (blockChar === '^') dir = DIRS.UP;
+                    if (blockChar === 'v') dir = DIRS.DOWN;
                     this.blocks.push({ x, y, dir, origX: x, origY: y });
-                } else if (c === 'S') {
+                } else if (c === 'S' || oc === 'S') {
                     this.scrapPositions.add(`${x},${y}`);
                     this.totalScrap++;
-                } else if (['(', ')', '[', ']'].includes(c)) {
+                } else if (['(', ')', '[', ']'].includes(c) || ['(', ')', '[', ']'].includes(oc)) {
+                    const convChar = ['(', ')', '[', ']'].includes(oc) ? oc : c;
                     let dir = DIRS.LEFT;
-                    if (c === ')') dir = DIRS.RIGHT;
-                    if (c === '[') dir = DIRS.UP;
-                    if (c === ']') dir = DIRS.DOWN;
+                    if (convChar === ')') dir = DIRS.RIGHT;
+                    if (convChar === '[') dir = DIRS.UP;
+                    if (convChar === ']') dir = DIRS.DOWN;
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
                     this.conveyors.push({ x, y, dir, channel: chan });
-                } else if (c === 'D') {
-                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                } else if (c === 'D' || c === 'U' || oc === 'D' || oc === 'U') {
+                    const doorChar = (oc === 'D' || oc === 'U') ? oc : c;
+                    const isExit = (doorChar === 'U');
+                    const chan = (levelData.links && levelData.links[`${x},${y}`]) || (isExit ? 99 : 0);
+                    const exitTo = (levelData.links && levelData.links[`${x},${y}_exitTo`]);
+                    const spawnX = (levelData.links && levelData.links[`${x},${y}_spawnX`]);
+                    const spawnY = (levelData.links && levelData.links[`${x},${y}_spawnY`]);
+                    const initOpen = (levelData.links && levelData.links[`${x},${y}_init`]) === true;
                     this.doors.push({ 
                         x, y, 
-                        state: 'CLOSED', 
-                        visualOpen: 0,
+                        state: initOpen ? 'OPEN' : 'CLOSED', 
+                        visualOpen: initOpen ? 1.0 : 0,
+                        initOpen: initOpen,
                         error: false, 
                         closeTimer: 0, 
-                        channel: chan 
+                        channel: chan,
+                        exitTo: exitTo,
+                        spawnX: spawnX,
+                        spawnY: spawnY,
+                        isExit: isExit
                     });
-                } else if (c === '_' || c === 'P') {
+                } else if (c === '_' || c === 'P' || oc === '_' || oc === 'P') {
+                    const buttonChar = (oc === '_' || oc === 'P') ? oc : c;
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
-                    const behavior = (levelData.links && levelData.links[`${x},${y}_behavior`]) || (c === 'P' ? 'PRESSURE' : 'TIMER');
+                    const behavior = (levelData.links && levelData.links[`${x},${y}_behavior`]) || (buttonChar === 'P' ? 'PRESSURE' : 'TIMER');
                     const initState = (levelData.links && levelData.links[`${x},${y}_init`]) === true;
+                    const isGlobal = (levelData.links && levelData.links[`${x},${y}_isGlobal`]) === true;
                     
+                    // If global, the source of truth is GameProgress.signals
+                    let startingPressed = initState;
+                    if (isGlobal && window.GameProgress && GameProgress.hasSignal(chan)) {
+                        startingPressed = true;
+                    }
+
                     this.buttons.push({ 
                         x, y, 
-                        isPressed: initState, 
+                        isPressed: startingPressed, 
                         channel: chan, 
                         behavior: behavior,
                         timer: 0,
                         wasSteppedOn: false,
-                        energy: initState ? 1.0 : 0
+                        energy: startingPressed ? 1.0 : 0,
+                        charge: startingPressed ? 1.0 : 0,
+                        isActive: startingPressed,
+                        isGlobal: isGlobal
                     });
                 } else if (c === '?') {
                     const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
@@ -414,6 +676,8 @@ class GameState {
                     if (c === 'e') gDir = DIRS.RIGHT;
                     if (c === 'w') gDir = DIRS.LEFT;
                     this.gravityButtons.push({ x, y, dir: gDir, flashTimer: 0 });
+                } else if (c === '$') {
+                    this.shopTerminals.push({ x, y });
                 }
 
 
@@ -473,16 +737,20 @@ class GameState {
                             this.scrapPositions.add(`${x},${y}`);
                             this.totalScrap++;
                         }
-                    } else if (oc === 'D') {
-                        const chan = (levelData.links && levelData.links[`${x},${y}`]) || 0;
+                    } else if (oc === 'D' || oc === 'U') {
+                        const isExit = (oc === 'U');
+                        const chan = (levelData.links && levelData.links[`${x},${y}`]) || (isExit ? 99 : 0);
                         if (!this.doors.some(d => d.x === x && d.y === y)) {
+                            const exitTo = (levelData.links && levelData.links[`${x},${y}_exitTo`]);
                             this.doors.push({ 
                                 x, y, 
                                 state: 'CLOSED', 
                                 visualOpen: 0,
                                 error: false, 
                                 closeTimer: 0, 
-                                channel: chan 
+                                channel: chan,
+                                exitTo: exitTo,
+                                isExit: isExit
                             });
                         }
                     } else if (oc === '?') {
@@ -503,7 +771,9 @@ class GameState {
                                 behavior: behavior,
                                 timer: 0,
                                 wasSteppedOn: false,
-                                energy: initState ? 1.0 : 0
+                                energy: initState ? 1.0 : 0,
+                                charge: initState ? 1.0 : 0,
+                                isActive: initState
                             });
                         }
                     } else if (oc === 'E') {
@@ -543,7 +813,7 @@ class GameState {
                         }
                     } else if (oc === 'G') {
                         row[x] = 'G';
-                    } else if (oc === '!') {
+                    } else if (oc === '%') {
                         if (!this.singularitySwitchers.some(s => s.x === x && s.y === y)) {
                             this.singularitySwitchers.push({ x, y, wasSteppedOn: false, lightningTimer: 0 });
                         }
@@ -597,16 +867,28 @@ class GameState {
             }
         }
 
-        // Ensure spawn is always a station
-        if (!this.chargingStations.some(s => s.x === this.startPos.x && s.y === this.startPos.y)) {
-            this.chargingStations.push({ ...this.startPos });
+        // Ensure spawn is a station ONLY if configured
+        if (this.levelData.spawnIsStation) {
+            if (!this.chargingStations.some(s => s.x === this.startPos.x && s.y === this.startPos.y)) {
+                this.chargingStations.push({ ...this.startPos });
+            }
         }
 
         this.updateEnergy();
+        
+        // Apply persistent state if it exists
+        if (this.levelIndex !== -1 && window.GameProgress) {
+            const savedState = GameProgress.getLevelState(this.levelIndex);
+            if (savedState) this.applyLevelState(savedState);
+        }
+
         this.saveUndo(); 
 
         if (window.Graphics) {
             Graphics.initLevelContext(this);
+            Graphics.bakeBackground(this);
+            Graphics.clearParticles();
+            Graphics.clearTrails();
         }
 
         if (window.AudioSys && !this.isEditor) {
@@ -617,7 +899,7 @@ class GameState {
 
         // Trigger start dialogues (Handled in main.js when transition finishes)
         
-        // Initialize Ambient Floor Particles (Dust/Metal bits)
+        // Initialize Ambient Floor Particles (Dust/    { title: "Setor: Logística", tiles: [{c: 'o', n: 'Chão Placas Metal'}, {c: ',', n: 'Chão Tátil Amarelo'}, {c: '}', n: 'Teto Logístico (Proc)'}, {c: '{', n: 'Parede Estantes Caixas'}, {c: '~', n: 'Parede Estantes Sucata'}] }, bits)
         this.ambientParticles = [];
         for (let y = 0; y < this.map.length; y++) {
             for (let x = 0; x < this.map[0].length; x++) {
@@ -655,7 +937,8 @@ class GameState {
         if (!c) return false;
         const chan = Number(c.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
-        const isRemoteActive = this.remoteSignals.has(chan);
+        const isGlobalActive = window.GameProgress && GameProgress.hasSignal(chan);
+        const isRemoteActive = this.remoteSignals.has(chan) || isGlobalActive;
         const hasRemoteTrigger = this.remoteChannels && this.remoteChannels.has(chan);
 
         // If there are NO physical buttons AND no possibility of remote control, it's ON by default.
@@ -669,7 +952,8 @@ class GameState {
         if (!e) return false;
         const chan = Number(e.channel || 0);
         const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === chan);
-        const isRemoteActive = this.remoteSignals.has(chan);
+        const isGlobalActive = window.GameProgress && GameProgress.hasSignal(chan);
+        const isRemoteActive = this.remoteSignals.has(chan) || isGlobalActive;
         const hasRemoteTrigger = this.remoteChannels && this.remoteChannels.has(chan);
         
         // Logic for Hazards (Normally ON):
@@ -693,6 +977,21 @@ class GameState {
         this.updateSequences();
         if (window.Dialogue) Dialogue.update();
         if (this.player.isDead) this.player.deathTimer++;
+        
+        // --- RANDOM ROBOT SPEECH ---
+        if (this.state === 'PLAYING' && !this.player.isDead && Math.random() < 0.0005) {
+            if (window.AudioSys) AudioSys.speak('neutral');
+        }
+        
+        // --- KNOCKBACK DELAY LOGIC ---
+        if (this.player.knockbackDelay > 0) {
+            this.player.knockbackDelay--;
+            if (this.player.knockbackDelay === 0 && this.player.knockbackTarget) {
+                this.player.x = this.player.knockbackTarget.x;
+                this.player.y = this.player.knockbackTarget.y;
+                this.player.knockbackTarget = null;
+            }
+        }
 
         // Update Gravity Overlay Alpha
         if (this.gravitySlidingDir !== null) {
@@ -720,8 +1019,12 @@ class GameState {
             this.player.visualX = this.player.x; 
             this.player.visualY = this.player.y; 
         }
-        this.player.visualX += (this.player.x - this.player.visualX) * 0.4; // 0.4 is fast and responsive
-        this.player.visualY += (this.player.y - this.player.visualY) * 0.4;
+        let moveLerp = 0.4;
+        if (this.isShiftHeld && window.GameProgress && GameProgress.hasAbility('run')) {
+            moveLerp = 0.6; // Faster catchup for sprint
+        }
+        this.player.visualX += (this.player.x - this.player.visualX) * moveLerp; 
+        this.player.visualY += (this.player.y - this.player.visualY) * moveLerp;
 
         // --- PORTAL TELEPORTATION (Visual Continuity Logic) ---
         const pPortal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
@@ -756,6 +1059,10 @@ class GameState {
                 this.updateEnergy();
             }
         }
+
+        // --- LAUNCHERS & PROJECTILES ---
+        this.updateLaunchers();
+        this.updateProjectiles();
 
         // Smooth player rotation
         if (this.player.visualAngle === undefined) this.player.visualAngle = this.player.dir * (Math.PI / 2);
@@ -806,7 +1113,7 @@ class GameState {
         if (!this.player.isDead) {
             const px = Math.round(this.player.visualX);
             const py = Math.round(this.player.visualY);
-            if (this.map[py] && this.map[py][px] === '*') {
+            if (this.map[py] && (this.map[py][px] === '*' || this.map[py][px] === '.')) {
                 const qf = this.quantumFloors.find(q => q.x === px && q.y === py);
                 const bridged = (qf && qf.active) || this.conveyors.some(cv => cv.x === px && cv.y === py && !cv.disabled);
                 if (!bridged) {
@@ -871,7 +1178,7 @@ class GameState {
                 // Check for hole
                 const bx = Math.round(b.visualX);
                 const by = Math.round(b.visualY);
-                if (this.map[by] && this.map[by][bx] === '*') {
+                if (this.map[by] && (this.map[by][bx] === '*' || this.map[by][bx] === '.')) {
                     const qf = this.quantumFloors.find(q => q.x === bx && q.y === by);
                     const bridged = (qf && qf.active) || this.conveyors.some(cv => cv.x === bx && cv.y === by && !cv.disabled);
                     if (!bridged) {
@@ -1003,11 +1310,11 @@ class GameState {
             const ty = Math.floor(ny / 32);
             
             // Wall/Hole Collision
-            if (this.map[ty] && this.map[ty][tx] === '*') {
+            if (this.map[ty] && (this.map[ty][tx] === '*' || this.map[ty][tx] === '.')) {
                 // Fall into hole (Delete)
                 this.ambientParticles.splice(i, 1);
                 continue;
-            } else if (this.map[ty] && (this.map[ty][tx] === '#' || this.map[ty][tx] === 'W')) {
+            } else if (this.map[ty] && ['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G'].includes(this.map[ty][tx])) {
                 p.vx *= -0.5;
                 p.vy *= -0.5;
             } else {
@@ -1039,11 +1346,11 @@ class GameState {
             const tx = Math.floor(nx / 32);
             const ty = Math.floor(ny / 32);
             if (tx >= 0 && tx < this.map[0].length && ty >= 0 && ty < this.map.length) {
-                if (this.map[ty][tx] === '*') {
+                if (this.map[ty][tx] === '*' || this.map[ty][tx] === '.') {
                     // Fall into hole
                     this.debris.splice(i, 1);
                     continue;
-                } else if (this.map[ty][tx] === '#' || this.map[ty][tx] === 'W') {
+                } else if (['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G'].includes(this.map[ty][tx])) {
                     p.vx *= -0.5; p.vy *= -0.5; // Bounce
                 } else {
                     p.x = nx;
@@ -1082,6 +1389,12 @@ class GameState {
             }
         }
         if (this.player.visorTimer > 0) this.player.visorTimer--;
+        
+        // Handle invulnerability flash timer
+        if (this.player.flashTimer > 0) {
+            this.player.flashTimer--;
+            if (this.player.flashTimer === 0) this.player.invulnerable = false;
+        }
         
         // Continuous audio update (for LFO and smooth transitions)
         if (window.AudioSys) {
@@ -1125,9 +1438,16 @@ class GameState {
                          this.blocks.some(b => Math.abs(b.visualX - b.x) > 0.01 || Math.abs(b.visualY - b.y) > 0.01 || Math.abs((b.visualAngle || (b.dir * Math.PI / 2)) - (b.dir * Math.PI / 2)) > 0.01);
 
         if (this.lasersNeedUpdate || isMotion) {
+            // Update energy flow during motion to keep wires (at least logically) in sync
+            this.updateEnergy();
             this.updateEmitters();
             this.lasersNeedUpdate = false;
+        } else if (this.wasMotion && !isMotion) {
+            // Final update when everything settles for maximum precision
+            this.updateEnergy();
+            this.updateEmitters();
         }
+        this.wasMotion = isMotion;
         
         // --- Laser Audio (After state update) ---
         if (window.AudioSys && this.state === 'PLAYING') {
@@ -1135,20 +1455,22 @@ class GameState {
         }
         
         this.updateSliding();
+        if (this.fogOfWar) this.updateDiscovery();
         if (this.state === 'PLAYING') {
             this.checkDialogues('walk');
         }
 
         if (this.state === 'REVERSING') {
             // Process multiple states per frame for a fast "Rewind" look
+            const stopAt = (this.lastCheckpointIndex || 0);
             for (let i = 0; i < 3; i++) {
-                if (this.undoStack.length > 1) {
+                if (this.undoStack.length > stopAt + 1) {
                     const prevState = this.undoStack.pop();
                     this.applyState(prevState, true); // SNAP visuals
-                    AudioSys.doorGrind();
                 } else {
-                    if (this.undoStack.length === 1) {
-                        this.applyState(this.undoStack[0], true);
+                    // We've reached the checkpoint/start state
+                    if (this.undoStack.length === stopAt + 1) {
+                        this.applyState(this.undoStack[stopAt], true);
                     }
                     this.state = 'PLAYING';
                     if (this.onReverseComplete) {
@@ -1173,10 +1495,17 @@ class GameState {
             if (Math.abs(d.visualOpen - target) > 0.01) { isSomethingAnimating = true; break; }
         }
 
-        if (isSomethingAnimating && this.state === 'PLAYING') {
+        // Force save if on a powered charging station to ensure checkpoint updates
+        const onPoweredStation = this.chargingStations.some(s => s.x === this.player.x && s.y === this.player.y && this.poweredStations.has(`${s.x},${s.y}`));
+        if (onPoweredStation) isSomethingAnimating = true;
+
+        if (isSomethingAnimating && this.state === 'PLAYING' && !this.player.isDead) {
             this.saveUndo();
             // Cap stack to prevent memory issues with continuous recording
-            if (this.undoStack.length > 2000) this.undoStack.shift();
+            if (this.undoStack.length > 2000) {
+                this.undoStack.shift();
+                if (this.lastCheckpointIndex > 0) this.lastCheckpointIndex--;
+            }
         }
 
         if (this.state === 'WINNING') {
@@ -1192,12 +1521,12 @@ class GameState {
             if (this.victoryTimer <= 0) {
                 this.state = 'LEVEL_COMPLETE';
                 AudioSys.levelComplete();
-                this.score += 1000 + Math.floor(this.time * 10);
+                this.score += 1000 + (this.time > 0 ? Math.floor(this.time * 10) : 0);
                 
                 // Award stars based on percentage
                 const lvl = LEVELS[this.levelIndex];
-                const totalTime = lvl.timer || 60;
-                const timePercent = (this.time / totalTime) * 100;
+                const totalTime = (lvl && lvl.timer) ? lvl.timer : 0;
+                const timePercent = totalTime > 0 ? (this.time / totalTime) * 100 : 100;
                 const stars = timePercent > 50 ? 3 : (timePercent > 20 ? 2 : 1);
                 
                 this.economyBonus = 0;
@@ -1205,8 +1534,7 @@ class GameState {
                     this.economyBonus = LevelSelector.completeLevel(this.levelIndex, stars, this.moveCount);
                     
                     // Track global stats on completion
-                    const lvl = LEVELS[this.levelIndex];
-                    const timeSpent = (lvl.timer || 60) - Math.floor(this.time);
+                    const timeSpent = (totalTime > 0) ? (totalTime - Math.floor(this.time)) : 0;
                     LevelSelector.trackStat('totalTime', Math.max(0, timeSpent));
                     
                     let levelAmps = 0;
@@ -1256,18 +1584,42 @@ class GameState {
                         }
                     }
                 }
+            }
 
-                if (this.moves === initialMoves) {
-                    if (window.AudioSys) AudioSys.corePowered();
+            // --- HP RECHARGE ---
+            if (HPSystem.currentQuarters < HPSystem.totalMaxQuarters) {
+                this.hpRechargeTimer = (this.hpRechargeTimer || 0) + 1;
+                // Recharge 1 quarter every 15 frames
+                if (this.hpRechargeTimer >= 15) {
+                    HPSystem.heal(1);
+                    this.hpRechargeTimer = 0;
                     if (window.Graphics) {
-                        for (let i = 0; i < 15; i++) {
-                            Graphics.spawnParticle(this.startPos.x * 32 + 16, this.startPos.y * 32 + 16, '#00ff9f');
+                        for (let i = 0; i < 2; i++) {
+                            Graphics.spawnParticle(this.player.x * 32 + 16, this.player.y * 32 + 16, '#ff003c', 'spark');
                         }
+                    }
+                }
+            }
+
+            // --- CHECKPOINT MARKING ---
+            const sKey = `${currentStation.x},${currentStation.y}`;
+            // Update checkpoint continuously while on a powered station
+            this.lastCheckpointIndex = Math.max(0, this.undoStack.length - 1);
+            
+            // Trigger effects only on ENTRY
+            if (this.lastStationKey !== sKey) {
+                this.lastStationKey = sKey;
+                if (window.AudioSys) AudioSys.playPortalClick();
+                
+                if (window.Graphics) {
+                    for (let i = 0; i < 8; i++) {
+                        Graphics.spawnParticle(this.player.x * 32 + 16, this.player.y * 32 + 16, '#00f0ff', 'circle');
                     }
                 }
             }
         } else {
             this.rechargeTimer = 0;
+            this.lastStationKey = null; // Reset when leaving station
         }
 
         // Update Button States
@@ -1318,6 +1670,17 @@ class GameState {
                     break;
             }
 
+            if (btn.isPressed !== wasPressed) {
+                // --- NEW: GLOBAL SIGNAL SYNC ---
+                if (btn.isGlobal && window.GameProgress) {
+                    if (btn.isPressed) GameProgress.addSignal(btn.channel);
+                    else GameProgress.removeSignal(btn.channel);
+                }
+
+                this.updateEnergy();
+                this.lasersNeedUpdate = true;
+            }
+
             if (isSteppedOn && !btn.wasSteppedOn) {
                 if (window.AudioSys && btn.behavior !== 'TOGGLE' && btn.behavior !== 'PRESSURE') AudioSys.buttonClick();
             }
@@ -1329,7 +1692,8 @@ class GameState {
         for (let qf of this.quantumFloors) {
             const qfChan = Number(qf.channel || 0);
             const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === qfChan);
-            const isRemoteActive = this.remoteSignals.has(qfChan);
+            const isGlobalActive = window.GameProgress && GameProgress.hasSignal(qfChan);
+            const isRemoteActive = this.remoteSignals.has(qfChan) || isGlobalActive;
             const allPressed = (chanButtons.length > 0 && chanButtons.every(b => b.isPressed)) || isRemoteActive;
             
             // Signal is now handled by the button's internal timer
@@ -1391,9 +1755,13 @@ class GameState {
             // Link door to button: ALL buttons on the same channel must be pressed
             const chanButtons = this.buttons.filter(b => Number(b.channel || 0) === dChan);
             const allPressed = chanButtons.length > 0 && chanButtons.every(b => b.isPressed);
-            const isRemoteActive = this.remoteSignals.has(dChan);
+            const isGlobalActive = window.GameProgress && GameProgress.hasSignal(dChan);
+            const isRemoteActive = this.remoteSignals.has(dChan) || isGlobalActive;
             
-            const shouldBeOpen = (isPowered || allPressed || isRemoteActive);
+            door.unlocked = (isPowered || allPressed || isRemoteActive || door.initOpen);
+            
+            // Exit doors don't open automatically, they just unlock (green light)
+            const shouldBeOpen = door.isExit ? door.forceOpen : door.unlocked;
             const wasOpen = door.state === 'OPEN' || door.state === 'BROKEN_OPEN';
 
             if (door.state === 'BROKEN_OPEN') continue; // Stay open forever
@@ -1415,6 +1783,11 @@ class GameState {
                         const blockIndex = this.blocks.findIndex(b => b.x === door.x && b.y === door.y && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
                         
                         if (isPlayerIn) {
+                            // If it's an exit sequence, don't kill the player
+                            if (this.player.isEnteringExit) {
+                                door.state = 'CLOSED';
+                                return;
+                            }
                             door.state = 'CLOSED';
                             this.handleDeath(true); 
                             return;
@@ -1600,10 +1973,25 @@ class GameState {
 
 
     movePlayer(dx, dy) {
-        if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead || this.gravitySlidingDir !== null) return;
+        if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead || this.player.invulnerable || this.gravitySlidingDir !== null) return;
 
         const pDist = Math.abs(this.player.x - this.player.visualX) + Math.abs(this.player.y - this.player.visualY);
-        if (pDist > 0.6) return; 
+        let threshold = 0.6;
+        if (this.isShiftHeld && window.GameProgress && GameProgress.hasAbility('run')) {
+            threshold = 0.8; // Allow next move sooner if sprinting
+        }
+        if (pDist > threshold) return; 
+
+        let targetDir = DIRS.DOWN;
+        if (dx > 0) targetDir = DIRS.RIGHT;
+        if (dx < 0) targetDir = DIRS.LEFT;
+        if (dy < 0) targetDir = DIRS.UP;
+        if (dy > 0) targetDir = DIRS.DOWN;
+
+        // Update direction immediately (Visual feedback even if blocked)
+        if (!this.player.grabbedBlock) {
+            this.player.dir = targetDir;
+        }
 
         const nx = this.player.x + dx;
         const ny = this.player.y + dy;
@@ -1611,15 +1999,16 @@ class GameState {
         const conveyor = this.conveyors.find(c => c.x === this.player.x && c.y === this.player.y);
         if (conveyor && this.isConveyorActive(conveyor)) return;
 
-        if (this.map[ny] === undefined || this.map[ny][nx] === undefined || this.map[ny][nx] === '#' || this.map[ny][nx] === 'W') return;
+        const structuralChars = ['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G', 'g', 'x', 'q', 'N', '\"', '|', ':', ';', '{', '~', '}', '=', '\u03A3', '\u03C0', '\u03A9'];
+        const isStructural = this.map[ny] === undefined || this.map[ny][nx] === undefined || structuralChars.includes(this.map[ny][nx]);
+        const isLauncher = this.launchers.some(l => l.x === nx && l.y === ny);
+        
+        if (isStructural || isLauncher) return;
 
         const ox = this.player.x;
         const oy = this.player.y;
-
-        let targetDir = DIRS.DOWN;
-        if (dx > 0) targetDir = DIRS.RIGHT;
-        if (dx < 0) targetDir = DIRS.LEFT;
-        if (dy < 0) targetDir = DIRS.UP;
+        this.player.prevX = ox;
+        this.player.prevY = oy;
 
         // GRAB LOGIC: If grabbing, we move as a unit.
         if (this.player.grabbedBlock) {
@@ -1670,7 +2059,6 @@ class GameState {
             }
         }
 
-        this.player.dir = targetDir;
         let moveSuccessful = false;
 
         let blocksToPush = [];
@@ -1691,6 +2079,19 @@ class GameState {
         }
 
         if (blocksToPush.length > 0) {
+            if (blocksToPush.length > 1 && window.GameProgress && !GameProgress.hasAbility('multi_push')) {
+                this.player.visorTimer = 20;
+                this.player.visorColor = '#ff0055';
+                if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                return;
+            }
+            // PRISM manipulation check (Módulo de Óptica)
+            if (blocksToPush.some(b => b.type === 'PRISM') && window.GameProgress && !GameProgress.hasAbility('manipulate_prisms')) {
+                this.player.visorTimer = 20;
+                this.player.visorColor = '#ff0055';
+                if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                return;
+            }
             const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy, false));
             
             if (allBlocksCanMove) {
@@ -1714,6 +2115,12 @@ class GameState {
 
                 const pPortal = this.portals.find(p => p.x === nx && p.y === ny);
                 if (pPortal) {
+                    if (window.GameProgress && !GameProgress.hasAbility('portal_travel')) {
+                        // Knockback away from portal
+                        this.takeDamage('PORTAL_COLLAPSE', -dx, -dy);
+                        if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                        return;
+                    }
                     this.player.x = pPortal.targetX + dx;
                     this.player.y = pPortal.targetY + dy;
                     this.player.visualX = this.player.x;
@@ -1742,6 +2149,10 @@ class GameState {
 
             const portal = this.portals.find(p => p.x === this.player.x && p.y === this.player.y);
             if (portal) {
+                if (window.GameProgress && !GameProgress.hasAbility('portal_travel')) {
+                    this.handleDeath(true, 'PORTAL_COLLAPSE');
+                    return;
+                }
                 this.player.isTeleporting = true;
                 this.player.teleportDir = { dx, dy };
             }
@@ -1832,6 +2243,41 @@ class GameState {
                 break;
             
             case 'music_intensity':
+                if (window.AudioSys && AudioSys.setIntensity) {
+                    AudioSys.setIntensity(parseFloat(event.action) || 0);
+                }
+                break;
+            
+            case 'move_player_to_exit':
+                this.saveUndo();
+                this.player.x = event.x;
+                this.player.y = event.y;
+                // Don't update visualX/Y to allow smooth slide if we want, 
+                // but here we just want the player "inside" the tile
+                break;
+            
+            case 'close_exit_door':
+                const exDoor = this.doors.find(d => d.x === this.player.x && d.y === this.player.y && d.isExit);
+                if (exDoor) {
+                    exDoor.forceOpen = false;
+                    if (window.AudioSys) AudioSys.playDoorOpen(); // Door close sound is usually same or similar
+                }
+                break;
+            
+            case 'level_complete':
+                const exitDoor = this.doors.find(d => d.x === this.player.x && d.y === this.player.y && d.isExit);
+                const targetLvl = (exitDoor && exitDoor.exitTo !== undefined) ? exitDoor.exitTo : this.levelIndex + 1;
+                
+                // NEW: Get custom spawn if defined on the exit door
+                let customSpawn = null;
+                if (exitDoor && exitDoor.spawnX !== undefined && exitDoor.spawnY !== undefined) {
+                    customSpawn = { x: Number(exitDoor.spawnX), y: Number(exitDoor.spawnY) };
+                }
+
+                this.startTransition(() => {
+                    this.loadLevel(targetLvl, false, customSpawn);
+                }, false, (exitDoor && exitDoor.exitTo !== undefined) ? null : "SETOR COMPLETO");
+                break;
                 const intensity = parseInt(event.action);
                 if (!isNaN(intensity) && window.AudioSys) {
                     AudioSys.setMusicIntensity(intensity);
@@ -1845,6 +2291,34 @@ class GameState {
                 else if (event.action === 'toggle') {
                     if (this.remoteSignals.has(chan)) this.remoteSignals.delete(chan);
                     else this.remoteSignals.add(chan);
+                }
+                break;
+            
+            case 'global_signal':
+                const gChan = parseInt(event.channel || 0);
+                if (window.GameProgress) {
+                    if (event.action === 'activate') GameProgress.addSignal(gChan);
+                    else if (event.action === 'deactivate') GameProgress.removeSignal(gChan);
+                    else if (event.action === 'toggle') {
+                        if (GameProgress.hasSignal(gChan)) GameProgress.removeSignal(gChan);
+                        else GameProgress.addSignal(gChan);
+                    }
+                }
+                break;
+
+            case 'grant_ability':
+                if (window.GameProgress) {
+                    GameProgress.grantAbility(event.action);
+                    if (window.AudioSys) AudioSys.playChapterUnlock();
+                }
+                break;
+
+            case 'increase_max_hp':
+                if (window.HPSystem) {
+                    HPSystem.addHeartContainer();
+                    if (window.AudioSys) AudioSys.playChapterUnlock();
+                    this.player.visorTimer = 40;
+                    this.player.visorColor = '#00ffcc'; // Cyan for HP
                 }
                 break;
 
@@ -1957,6 +2431,10 @@ class GameState {
         if (this.scrapPositions.has(posKey)) {
             this.scrapPositions.delete(posKey);
             this.scrapCollected++;
+            if (window.GameProgress) {
+                GameProgress.scrapTotal++;
+                this.scrapTotal = GameProgress.scrapTotal; // Keep local sync for systems that use it
+            }
             if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalScrap', 1);
             if (window.AudioSys) AudioSys.playScrapCollect();
             for (let i = 0; i < 6; i++) {
@@ -1964,12 +2442,33 @@ class GameState {
             }
         }
 
-        this.moves--;
+        // this.moves--; // REMOVED: No more energy consumption
         this.moveCount++;
         if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('robotMoves', 1);
         
-        if (this.moves <= 0) {
-            this.handleDeath(false);
+        // if (this.moves <= 0) {
+        //     this.handleDeath(false);
+        // }
+
+        // --- ROOM NAVIGATION ---
+        const door = this.doors.find(d => d.x === this.player.x && d.y === this.player.y && (d.state === 'OPEN' || d.state === 'BROKEN_OPEN'));
+        if (door) {
+            const exitChan = this.levelData.exitChannel || 99;
+            const isExitDoor = (door.channel == exitChan) || (door.exitTo !== undefined) || door.isExit || (this.map[door.y][door.x] === 'U') || (this.levelData.overlays && this.levelData.overlays[door.y] && this.levelData.overlays[door.y][door.x] === 'U');
+            
+            if (isExitDoor) {
+                const targetLvl = door.exitTo !== undefined ? door.exitTo : this.levelIndex + 1;
+                const spawnPos = (door.spawnX !== undefined && door.spawnY !== undefined) ? { x: door.spawnX, y: door.spawnY } : null;
+                this.startTransition(() => {
+                    this.loadLevel(targetLvl, false, spawnPos);
+                }, false, door.exitTo ? null : "SETOR COMPLETO");
+            } else if (door.exitTo !== undefined) {
+                const targetLvl = door.exitTo;
+                const spawnPos = (door.spawnX !== undefined && door.spawnY !== undefined) ? { x: door.spawnX, y: door.spawnY } : null;
+                this.startTransition(() => {
+                    this.loadLevel(targetLvl, false, spawnPos);
+                });
+            }
         }
 
         this.checkDialogues('walk');
@@ -1977,6 +2476,13 @@ class GameState {
 
     toggleGrab() {
         if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead) return;
+
+        // Check for ability
+        if (window.GameProgress && !GameProgress.hasAbility('grab')) {
+            this.player.visorTimer = 20;
+            this.player.visorColor = '#ff0055'; // Error Red
+            return;
+        }
 
         if (this.player.grabbedBlock) {
             this.player.grabbedBlock = null;
@@ -2010,6 +2516,29 @@ class GameState {
     interact() {
         if (this.state !== 'PLAYING' || this.transitionState !== 'NONE' || this.player.isDead) return;
         
+        // Find adjacent tile in player direction
+        let tx = this.player.x, ty = this.player.y;
+        if (this.player.dir === DIRS.UP) ty--;
+        else if (this.player.dir === DIRS.DOWN) ty++;
+        else if (this.player.dir === DIRS.LEFT) tx--;
+        else if (this.player.dir === DIRS.RIGHT) tx++;
+
+        // Check for Charging Station (Terminal)
+        const station = this.chargingStations.find(s => s.x === this.player.x && s.y === this.player.y);
+        if (station) {
+            if (window.StatsTerminal) {
+                StatsTerminal.toggle(this);
+                return;
+            }
+        }
+
+        // Check Shop interaction (Adjacent)
+        const shop = this.shopTerminals.find(s => s.x === tx && s.y === ty);
+        if (shop) {
+            if (window.ShopSystem) ShopSystem.toggle(this);
+            return;
+        }
+
         // Lock interaction if on conveyor
         const onConveyor = this.conveyors.some(c => c.x === this.player.x && c.y === this.player.y);
         if (onConveyor) return;
@@ -2017,13 +2546,6 @@ class GameState {
         let actionTaken = false;
 
 
-        // Find adjacent tile in player direction
-        let tx = this.player.x;
-        let ty = this.player.y;
-        if (this.player.dir === DIRS.UP) ty--;
-        if (this.player.dir === DIRS.DOWN) ty++;
-        if (this.player.dir === DIRS.LEFT) tx--;
-        if (this.player.dir === DIRS.RIGHT) tx++;
 
         // 1. Check for Block or Portal to interact
         const portal = this.portals.find(p => p.x === tx && p.y === ty);
@@ -2060,6 +2582,13 @@ class GameState {
 
         const b = this.blocks.find(b => b.x === tx && b.y === ty && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)));
         if (b && !actionTaken) {
+            // Ability check for Prisms
+            if (b.type === 'PRISM' && window.GameProgress && !GameProgress.hasAbility('manipulate_prisms')) {
+                this.player.visorTimer = 20;
+                this.player.visorColor = '#ff0055'; // Error Red
+                return;
+            }
+
             this.saveUndo();
             b.dir = (b.dir + 1) % 4;
             this.player.visorTimer = 15;
@@ -2068,6 +2597,38 @@ class GameState {
             else AudioSys.rotate();
             this.updateEnergy();
             actionTaken = true;
+        }
+
+        // 1.5 Check for Exit Door interaction
+        if (!actionTaken) {
+            const door = this.doors.find(d => d.x === tx && d.y === ty && d.isExit);
+            if (door && door.unlocked && door.state === 'CLOSED') {
+                door.forceOpen = true; // Trigger opening
+                this.player.isEnteringExit = true; // Block movement
+                
+                // Sequence: Open -> Wait -> Move Player -> Close -> Transition
+                this.activeSequences.push({
+                    origin: { x: door.x, y: door.y },
+                    index: 0,
+                    waitTimer: 0,
+                    events: [
+                        { type: 'wait', action: 25 }, // Wait for door to open visually
+                        { type: 'move_player_to_exit', x: door.x, y: door.y },
+                        { type: 'wait', action: 10 },
+                        { type: 'close_exit_door' },
+                        { type: 'wait', action: 20 },
+                        { type: 'level_complete' }
+                    ]
+                });
+                if (window.AudioSys) AudioSys.playDoorOpen();
+                actionTaken = true;
+            } else if (door && !door.unlocked) {
+                // Denied feedback
+                this.player.visorTimer = 20;
+                this.player.visorColor = '#ff0055';
+                if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                actionTaken = true;
+            }
         }
 
         // 2. Check for Target Core to activate
@@ -2090,12 +2651,9 @@ class GameState {
                 });
 
                 if (allMet && this.targets.length > 0) {
-                    this.state = 'WINNING';
-                    this.victoryTimer = 30;
-                    this.hitStopTimer = 6; // Hit Stop freeze for impact!
-                    this.resultTimer = 0; // Reset for flashing
+                    // Win condition is now handled by checkWinCondition -> remoteSignals.add(exitChannel)
+                    // We just give feedback here
                     AudioSys.corePowered();
-
                     for (const t of this.targets) {
                         for (let i = 0; i < 15; i++) {
                             Graphics.spawnParticle(t.x * 32 + 16, t.y * 32 + 16, '#00ff9f');
@@ -2108,21 +2666,57 @@ class GameState {
             }
         }
 
+        // 3. Check for Emitter to rotate
+        if (!actionTaken) {
+            const emitter = this.emitters.find(e => e.x === tx && e.y === ty);
+            if (emitter) {
+                if (window.GameProgress && !GameProgress.hasAbility('rotate_emitters')) {
+                    this.player.visorTimer = 20;
+                    this.player.visorColor = '#ff0055'; // Error Red
+                    if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                    return;
+                }
+                this.saveUndo();
+                emitter.dir = (emitter.dir + 1) % 4;
+                this.player.visorTimer = 15;
+                this.player.visorColor = '#00ff41'; // Success Green
+                if (window.AudioSys) AudioSys.rotate();
+                this.lasersNeedUpdate = true;
+                actionTaken = true;
+            }
+        }
+
+        // 4. Check for Singularity Switcher to toggle
+        if (!actionTaken) {
+            const switcher = this.singularitySwitchers.find(s => s.x === tx && s.y === ty);
+            if (switcher) {
+                if (window.GameProgress && !GameProgress.hasAbility('singularity_interaction')) {
+                    this.player.visorTimer = 20;
+                    this.player.visorColor = '#ff0055'; // Error Red
+                    if (window.AudioSys && AudioSys.playDenied) AudioSys.playDenied();
+                    return;
+                }
+                this.saveUndo();
+                this.isSolarPhase = !this.isSolarPhase;
+                switcher.lightningTimer = 20;
+                this.player.visorTimer = 20;
+                this.player.visorColor = this.isSolarPhase ? '#ffd700' : '#bf00ff';
+                if (window.AudioSys) AudioSys.playGravityShift(); // Reusing gravity sound for phase shift
+                this.lasersNeedUpdate = true;
+                actionTaken = true;
+            }
+        }
+
         if (actionTaken) {
-            // Smoke puffs when rotating (Costs energy)
+            // Smoke puffs when rotating
             for (let i = 0; i < 4; i++) {
                 const offsetX = (Math.random() - 0.5) * 16;
                 const offsetY = (Math.random() - 0.5) * 8;
                 Graphics.spawnParticle(this.player.x * 32 + 16 + offsetX, this.player.y * 32 + 24 + offsetY, 'rgba(240, 240, 240, 0.6)', 'smoke');
             }
 
-            // Energy penalty for rotation
-            this.moves--;
             this.moveCount++;
             if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('rotations', 1);
-            if (this.moves <= 0) {
-                this.handleDeath(false);
-            }
             this.lasersNeedUpdate = true;
         } else {
             // Check if we hit a core (even if it didn't cost energy, we might want a small puff)
@@ -2134,6 +2728,40 @@ class GameState {
                 }
             }
         }
+    }
+
+    updateLaunchers() {
+        if (this.state !== 'PLAYING') return;
+        this.launchers.forEach(l => l.update(this));
+    }
+
+    updateProjectiles() {
+        if (this.state === 'REVERSING') return;
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.update(this);
+            if (p.dead) {
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    isTileSolid(x, y) {
+        if (y < 0 || y >= this.map.length || x < 0 || x >= this.map[0].length) return true;
+        const c = this.map[y][x];
+        const structuralChars = ['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G', 'g', 'x', 'q', 'N', '\"', '|', ':', ';', '{', '~', '}', '=', '\u03A3', '\u03C0', '\u03A9'];
+        if (structuralChars.includes(c)) return true;
+        
+        if (this.launchers.some(l => l.x === x && l.y === y)) return true;
+        
+        if (this.doors.some(d => d.x === x && d.y === y && d.state === 'CLOSED')) return true;
+        if (this.targets.some(t => t.x === x && t.y === y)) return true;
+        if (this.sources.some(s => s.x === x && s.y === y)) return true;
+        if (this.redSources.some(s => s.x === x && s.y === y)) return true;
+        if (this.forbiddens.some(f => f.x === x && f.y === y)) return true;
+        if (this.emitters.some(e => e.x === x && e.y === y)) return true;
+        
+        return false;
     }
 
     isTilePassable(x, y, ignoreObj = null, dx = 0, dy = 0, isRobot = false) {
@@ -2148,8 +2776,10 @@ class GameState {
             }
         }
 
-        if ((this.map[y][x] === '#' || this.map[y][x] === 'W' || this.map[y][x] === 'G') && 
-            !this.portals.some(p => p.x === x && p.y === y)) return false;
+        const structuralChars = ['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G', 'g', 'x', 'q', 'N', '\"', '|', ':', ';', '{', '~', '}', '=', '\u03A3', '\u03C0', '\u03A9'];
+        if (structuralChars.includes(this.map[y][x]) && !this.portals.some(p => p.x === x && p.y === y)) return false;
+        
+        if (this.launchers.some(l => l.x === x && l.y === y)) return false;
         
         // Convert ignoreObj to array if it's not already
         const ignores = Array.isArray(ignoreObj) ? ignoreObj : (ignoreObj ? [ignoreObj] : []);
@@ -2159,7 +2789,7 @@ class GameState {
         if (door && door.state === 'CLOSED') return false;
         
         // Check blocks (excluding the ones moving if applicable)
-        if (this.blocks.some(b => b.x === x && b.y === y && !ignores.includes(b) && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)))) return false;
+        if (this.blocks.some(b => b.x === x && b.y === y && !ignores.includes(b) && !b.isFalling && (!b.phase || (b.phase === 'SOLAR' && this.isSolarPhase) || (b.phase === 'LUNAR' && !this.isSolarPhase)))) return false;
         
         // Check entities
         if (this.sources.some(s => s.x === x && s.y === y)) return false;
@@ -2168,6 +2798,7 @@ class GameState {
         if (this.forbiddens.some(f => f.x === x && f.y === y)) return false;
         if (this.brokenCores.some(b => b.x === x && b.y === y)) return false;
         if (this.emitters.some(e => e.x === x && e.y === y)) return false;
+        if (this.shopTerminals.some(s => s.x === x && s.y === y)) return false;
         
         // Check Singularity Switchers (Blocks cannot enter)
         if (!isRobot && this.singularitySwitchers.some(s => s.x === x && s.y === y)) return false;
@@ -2290,6 +2921,8 @@ class GameState {
             const activeGB = this.gravityButtons.find(g => g.x === this.player.x && g.y === this.player.y);
             if (activeGB) activeGB.flashTimer = 10;
 
+            this.updateEnergy(); // Update energy during each step of gravity sliding
+            
             if (this.screenShakeTimer < 3) this.screenShakeTimer = 3;
             if (window.AudioSys && AudioSys.doorGrind) {
                 AudioSys.doorGrind();
@@ -2347,6 +2980,11 @@ class GameState {
         }
 
         if (blocksToPush.length > 0) {
+            if (blocksToPush.length > 1 && window.GameProgress && !GameProgress.hasAbility('multi_push')) {
+                this.player.visorTimer = 20;
+                this.player.visorColor = '#ff0055';
+                return;
+            }
             const allBlocksCanMove = blocksToPush.every(b => this.isTilePassable(b.x + dx, b.y + dy, blocksToPush, dx, dy, false));
             if (this.isTilePassable(scanX, scanY, [obj, ...blocksToPush], dx, dy, isPlayer) && allBlocksCanMove) {
 
@@ -2365,6 +3003,12 @@ class GameState {
         }
 
         if (this.isTilePassable(nx, ny, obj, dx, dy, isPlayer)) {
+            if (isPlayer) {
+                this.player.prevX = obj.x;
+                this.player.prevY = obj.y;
+            }
+            obj.x = nx;
+            obj.y = ny;
             // PORTAL SWALLOW (Conveyor)
             const portal = this.portals.find(p => p.x === nx && p.y === ny);
             if (portal && portal.slot && !portal.slot.content && !isPlayer) {
@@ -2564,7 +3208,7 @@ class GameState {
                 
                 // Player collision
                 if (this.player.x === cx && this.player.y === cy && !this.player.isDead) {
-                    this.handleDeath(true, 'LASER');
+                    this.handleDeath(true, 'LASER', dx, dy);
                     e.laserPath.push({ x: cx, y: cy, type: 'PLAYER' });
                     break;
                 }
@@ -2745,22 +3389,43 @@ class GameState {
                 const isInvalid = block.dir === entryDir; 
                 const isCorrectEntry = !isInvalid; 
 
-                let nx = x, ny = y;
-                if (block.dir === DIRS.UP) ny--;
-                else if (block.dir === DIRS.DOWN) ny++;
-                else if (block.dir === DIRS.LEFT) nx--;
-                else if (block.dir === DIRS.RIGHT) nx++;
+                const isParallel = entryDir === (block.dir + 2) % 4;
+                const hasSideways = window.GameProgress && GameProgress.hasAbility('sideways_transmission') && block.type !== 'PRISM';
 
-                const hasOutput = checkValidOutput(nx, ny);
-                blockActive = isCorrectEntry && hasOutput;
+                let outputDirs = [];
+                if (isParallel) {
+                    outputDirs.push(block.dir);
+                } else if (hasSideways) {
+                    outputDirs.push(block.dir); // Allow L-shape
+                }
+                
+                // Diffuse to sides if has ability
+                if (hasSideways) {
+                    const s1 = (block.dir + 1) % 4;
+                    const s2 = (block.dir + 3) % 4;
+                    if (s1 !== entryDir) outputDirs.push(s1);
+                    if (s2 !== entryDir) outputDirs.push(s2);
+                }
+
+                for (const outDir of outputDirs) {
+                    let nx = x, ny = y;
+                    if (outDir === DIRS.UP) ny--;
+                    else if (outDir === DIRS.DOWN) ny++;
+                    else if (outDir === DIRS.LEFT) nx--;
+                    else if (outDir === DIRS.RIGHT) nx++;
+
+                    const hasOutput = checkValidOutput(nx, ny);
+                    if (isCorrectEntry && hasOutput) {
+                        blockActive = true;
+                        if (trace(nx, ny, outDir, color, charge + 1, path.concat({ x, y }), forceOcean, true)) {
+                            reachedValidTarget = true;
+                        }
+                    }
+                }
 
                 this.poweredBlocks.set(`${x},${y}`, { dir: block.dir, color: displayColor, invalid: isInvalid, active: blockActive, isOcean: forceOcean });
 
-                if (blockActive) {
-                    if (trace(nx, ny, block.dir, color, charge + 1, path.concat({ x, y }), forceOcean, true)) {
-                        reachedValidTarget = true;
-                    }
-                } else if (isInvalid) {
+                if (isInvalid) {
                     for (const p of path.concat({ x, y })) {
                         const pEntry = this.poweredWires.get(`${p.x},${p.y}`);
                         if (pEntry && pEntry.color !== 'OCEAN') pEntry.color = 'YELLOW';
@@ -3037,6 +3702,28 @@ class GameState {
 
     checkWinCondition() {
         if (this.state !== 'PLAYING') return;
+        
+        const allMet = this.targets.length > 0 && this.targets.every(t => {
+            const data = this.poweredTargets.get(`${t.x},${t.y}`) || { charge: 0, contaminated: false };
+            return data.charge >= t.required && !data.contaminated;
+        });
+
+        if (allMet) {
+            const exitChan = this.levelData.exitChannel || 99;
+            const isGlobalActive = window.GameProgress && GameProgress.hasSignal(exitChan);
+            if (!this.remoteSignals.has(exitChan) && !isGlobalActive) {
+                this.remoteSignals.add(exitChan);
+                // Trigger visual feedback once
+                this.hitStopTimer = 6;
+                if (window.AudioSys) AudioSys.corePowered();
+            }
+        } else {
+            const exitChan = this.levelData.exitChannel || 99;
+            const isGlobalActive = window.GameProgress && GameProgress.hasSignal(exitChan);
+            if (this.remoteSignals.has(exitChan) || isGlobalActive) {
+                this.remoteSignals.delete(exitChan);
+            }
+        }
     }
 
     spawnDebris(x, y, count, color, initialDir = {x:0,y:0}) {
@@ -3068,70 +3755,139 @@ class GameState {
         }
     }
 
-    handleDeath(isHazard = false, type = null) {
-        if (this.transitionState !== 'NONE' || this.state === 'REVERSING' || this.state === 'GAMEOVER' || this.state === 'RESULT') return;
+    takeDamage(type, kdx = 0, kdy = 0) {
+        if (this.player.invulnerable || this.state === 'REVERSING') return;
         
-        this.resultTimer = 0; // Reset for flashing red vignette
+        const damageTable = { 
+            LASER: 4, 
+            CRUSHED: 8, 
+            HOLE: 12, 
+            SHUTDOWN: 12, 
+            PORTAL_COLLAPSE: 6, 
+            ENERGY_HIT: 4, 
+            MECHANICAL_HIT: 2, 
+            VOID_HIT: 12 
+        };
+        const dmg = damageTable[type] || 4;
+        const died = HPSystem.takeDamage(dmg);
         
-        // Subtract life for BOTH cases now
-        this.lives = Math.max(0, this.lives - 1);
+        // Audio + visual feedback
+        if (window.AudioSys) AudioSys.lifeLost();
+        this.player.flashTimer = 20;  // ~0.3s of invulnerability (Reduced to prevent laser skipping)
+        this.player.invulnerable = true;
+        this.resultTimer = 0; // Trigger vignette
         
-        if (type === 'HOLE') {
-            if (window.AudioSys) AudioSys.playFall();
-            if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalDeaths', 1);
-        } else if (isHazard) {
-            AudioSys.explosion();
-            if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalDeaths', 1);
-            
-            // Spawn debris instead of using deathTimer for pieces
-            this.spawnDebris(this.player.x * 32 + 16, this.player.y * 32 + 16, 12, '#ed8936', this.player.deathDir);
-            this.spawnDebris(this.player.x * 32 + 16, this.player.y * 32 + 16, 8, '#3182ce', this.player.deathDir);
-        } else {
-            AudioSys.lifeLost(); // Shut down sound
-            // Spawn smoke for energy out
-            for (let i = 0; i < 8; i++) {
-                Graphics.spawnParticle(this.player.x * 32 + 16, this.player.y * 32 + 16, 'rgba(100,100,100,0.5)', 'smoke');
-            }
-        }
+        // Knockback Logic
+        if (!died) {
+            // "sempre seja para o lado contrário de onde o robô está olhando"
+            let rdx = 0, rdy = 0;
+            if (this.player.dir === DIRS.RIGHT) rdx = -1;
+            else if (this.player.dir === DIRS.LEFT) rdx = 1;
+            else if (this.player.dir === DIRS.UP) rdy = 1;
+            else if (this.player.dir === DIRS.DOWN) rdy = -1;
 
-        this.player.isDead = true;
-        this.player.deathType = type || (isHazard ? 'CRUSHED' : 'SHUTDOWN');
-        this.player.deathTimer = 0;
-        
-        // Find an open direction for pieces to fly into
-        this.player.deathDir = { x: 0, y: 0 };
-        if (isHazard) {
-            const dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
-            for (const d of dirs) {
-                const tx = this.player.x + d.x;
-                const ty = this.player.y + d.y;
-                if (tx >= 0 && tx < this.map[0].length && ty >= 0 && ty < this.map.length) {
-                    const tile = this.map[ty][tx];
-                    const isDoor = this.doors.some(dr => dr.x === tx && dr.y === ty);
-                    if (tile !== '#' && tile !== 'W' && !isDoor) {
-                        this.player.deathDir = d;
-                        break;
+            let tx = this.player.x + rdx;
+            let ty = this.player.y + rdy;
+
+            // Store target for delayed application (to show the "hit" impact visually)
+            let finalTarget = null;
+
+            // Try to move opposite to facing direction first
+            if ((tx !== this.player.x || ty !== this.player.y) && this.isTilePassable(tx, ty, this.player, rdx, rdy, true)) {
+                finalTarget = { x: tx, y: ty };
+            } else {
+                // Fallback: expulsion to previous position to ensure area isolation
+                if (this.player.prevX !== undefined && (this.player.prevX !== this.player.x || this.player.prevY !== this.player.y)) {
+                    if (this.isTilePassable(this.player.prevX, this.player.prevY, this.player, 0, 0, true)) {
+                        finalTarget = { x: this.player.prevX, y: this.player.prevY };
                     }
                 }
             }
+
+            if (finalTarget) {
+                this.player.knockbackTarget = finalTarget;
+                this.player.knockbackDelay = 8; // Stay on the hazard tile for 8 frames to show the impact
+            }
         }
 
-        // Logic flow choice:
-        if (!isHazard && this.lives > 0) {
-            // AUTO-RESPAWN with Fade (Battery Empty)
-            setTimeout(() => {
-                this.startTransition(() => {
-                    this.loadLevel(this.levelIndex, true); // keepLives = true
-                }, false, 'FALHA');
-            }, 800);
+        if (typeof LevelSelector !== 'undefined') LevelSelector.trackStat('totalDeaths', 1);
+        
+        if (died) {
+            this.triggerDeath(type);
         } else {
-            // RESULT SCREEN (Hazard or No Lives Left)
-            setTimeout(() => {
-                if (typeof ResultScreen !== 'undefined') {
-                    this.state = 'RESULT';
-                    ResultScreen.open(this, true); // true = FAILED
+            // Screen shake for hit
+            this.screenShakeTimer = 15;
+            this.screenShakeForce = 2.0;
+            if (window.AudioSys) AudioSys.speak('damage');
+        }
+    }
+
+    triggerDeath(type) {
+        if (this.state === 'REVERSING') return;
+        
+        this.player.isDead = true;
+        this.player.deathType = type;
+        this.player.deathTimer = 0;
+        
+        if (window.AudioSys) AudioSys.speak('dead');
+
+        // Find an open direction for pieces to fly into
+        this.player.deathDir = { x: 0, y: 0 };
+        const dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+        for (const d of dirs) {
+            const tx = this.player.x + d.x;
+            const ty = this.player.y + d.y;
+            if (tx >= 0 && tx < this.map[0].length && ty >= 0 && ty < this.map.length) {
+                const tile = this.map[ty][tx];
+                const isDoor = this.doors.some(dr => dr.x === tx && dr.y === ty);
+                if (tile !== '#' && tile !== 'W' && !isDoor) {
+                    this.player.deathDir = d;
+                    break;
                 }
-            }, 1000);
+            }
+        }
+
+        // Visual Explosion / Particles
+        if (type === 'LASER' || type === 'CRUSHED') {
+            if (window.AudioSys) AudioSys.explosion();
+            this.spawnDebris(this.player.x * 32 + 16, this.player.y * 32 + 16, 12, '#ed8936', this.player.deathDir);
+            this.spawnDebris(this.player.x * 32 + 16, this.player.y * 32 + 16, 8, '#3182ce', this.player.deathDir);
+        } else if (type === 'HOLE') {
+            if (window.AudioSys) AudioSys.playFall();
+        } else if (type === 'PORTAL_COLLAPSE') {
+            if (window.AudioSys) AudioSys.explosion(); // High energy collapse
+            this.spawnDebris(this.player.x * 32 + 16, this.player.y * 32 + 16, 20, '#bf00ff', {x:0, y:0});
+        }
+
+        setTimeout(() => {
+            this.startReverse(() => {
+                this.player.isDead = false;
+                this.player.invulnerable = false;
+                this.player.flashTimer = 0;
+                
+                // Final safety sync to ensure all visuals are snapped and velocities cleared
+                const finalState = this.undoStack[this.lastCheckpointIndex || 0];
+                if (finalState) {
+                    this.applyState(finalState, true);
+                }
+                
+                HPSystem.fullHeal();
+                // showDeathComment(type) will be implemented in Fase 4
+            });
+        }, 800);
+    }
+
+    handleDeath(isHazard = false, type = null, kdx = 0, kdy = 0) {
+        if (this.transitionState !== 'NONE' || this.state === 'REVERSING' || this.state === 'GAMEOVER' || this.state === 'RESULT' || this.player.isDead) return;
+        
+        const deathType = type || (isHazard ? 'CRUSHED' : 'SHUTDOWN');
+        const isInstantDeath = (deathType === 'HOLE' || deathType === 'SHUTDOWN');
+        
+        if (isInstantDeath) {
+            HPSystem.currentQuarters = 0;
+            this.triggerDeath(deathType);
+        } else {
+            this.takeDamage(deathType, kdx, kdy);
         }
     }
 

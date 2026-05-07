@@ -101,6 +101,23 @@ Object.assign(window.AudioSys, {
         setTimeout(() => this.playTone(100, 'sawtooth', 0.4, 0.1), 100);
     },
 
+    playDenied() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.1);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    },
+
     playChapterUnlock() {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const now = audioCtx.currentTime;
@@ -140,5 +157,29 @@ Object.assign(window.AudioSys, {
             osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
             osc.start(now); osc.stop(now + duration);
         });
+    },
+
+    _timerPitchIdx: 0,
+    timerTick(seconds) {
+        if (seconds < 0) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const now = audioCtx.currentTime;
+        const isEmergency = seconds <= 10;
+        
+        // "cada segundo que passa debe dar um tom com variação do pitch a cada vez"
+        this._timerPitchIdx = (this._timerPitchIdx + 1) % 4;
+        const cyclePitch = 1.0 + (this._timerPitchIdx * 0.05);
+        
+        // Increase pitch as time runs out (tension)
+        const timeFactor = isEmergency ? (1.0 + (10 - seconds) * 0.05) : 1.0;
+        const baseFreq = isEmergency ? 880 : 440;
+        const freq = baseFreq * cyclePitch * timeFactor * (0.98 + Math.random() * 0.04);
+        
+        const type = isEmergency ? 'square' : 'sine';
+        const vol = isEmergency ? 0.08 : 0.05;
+        const duration = isEmergency ? 0.08 : 0.12;
+        
+        this.playTone(freq, type, duration, vol, now);
     }
 });

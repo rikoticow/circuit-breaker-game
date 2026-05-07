@@ -1,83 +1,88 @@
-# Guia de Construção de Mapas: CIRCUIT BREAKER
+# 🏗️ Guia de Construção de Mapas - Circuit Breaker
 
-Este guia descreve como criar e editar níveis para o jogo no arquivo `js/levels.js`.
+Este guia define as regras e padrões para a criação de novos níveis e setores na engine.
 
-## 📐 Estrutura do Grid
-*   **Tamanho Padrão:** 20 colunas x 15 linhas.
-*   **Coordenadas:** (0,0) é o canto superior esquerdo.
+## 📐 Estrutura do JSON do Nível
+Todo nível é um objeto JavaScript exportado em `js/levels.js` contendo:
+*   **Metadata:** `id`, `name`, `sector` (A, B, C, Logística, Óptica), `difficulty`.
+*   **Camadas:**
+    1.  `map`: Matriz de caracteres definindo a estrutura base (chão, abismos, paredes, fiação, spawns).
+    2.  `overlays`: Elementos visuais superiores (portas, sombras, cabos suspensos, botões de piso).
+*   **Links:** Metadados para conexões lógicas, transições e rótulos holográficos.
+
+---
 
 ## 🔣 Dicionário de Símbolos
 
-### Estrutura e Jogador
-*   `#` : **Parede** (Obstáculo intransponível).
-*   ` ` : **Chão** (Espaço vazio para caminhar e empurrar blocos).
-*   `@` : **Ponto de Início** do Jogador (Robô).
+### 🏗️ Estrutura e Ambiente (`map`)
+*   `#` : **Parede Padrão** (Sólida, bloqueia laser).
+*   `W` : **Teto/Parede Superior** (Estética de profundidade).
+*   ` ` (Espaço) : **Chão de Cobre** (Padrão do setor).
+*   `a`, `b`, `c`, `t` : **Variantes de Chão** (Estético: Laboratório, Industrial, High-Tech, Óptico).
+*   `A`, `I`, `Y` : **Estruturas de Setor** (Paredes decorativas específicas).
+*   `f`, `i`, `k`, `j`, `h`, `m`, `q` : **Paredes Técnicas/Animadas** (Terminais, grades, painéis, energia ou óptica).
+*   `G` : **Vidro Técnico** : Sólido para entidades, mas permeável para lasers.
+*   `*` : **Abismo (Pit)** : Causa queda e morte (gatilha Reverse).
+*   `@` : **Ponto de Início (Spawn)**.
+*   `0` : **Zona Proibida** : Obstáculo sólido e absoluto (bloqueia movimento e lasers).
+*   `Z` : **Núcleo Quebrado** : Obstáculo sólido com animação de fumaça.
+*   `S` : **Sucata (Scrap)** : Moeda industrial coletável.
+*   `o`, `,` : **Piso Logístico** : Metal e Tátil Antiderrapante.
+*   `{` : **Estante de Caixas** : Parede industrial com pilhas de caixas amarelas (Setor Logística).
+*   `~` : **Estante de Sucata** : Parede industrial com peças de robô, orbes e componentes (Setor Logística).
+*   `}` : **Teto Industrial (Logística)**.
+*   `&` : **Chão de Realidade** : Chão multicolorido com LEDs pulsantes (Setor Realidade).
+*   `=` : **Teto de Realidade** : Teto modular com neon arco-íris (Setor Realidade).
+*   `:` : **Parede de Realidade** : Parede modular com painéis multicoloridos.
+*   `;` : **Conduíte de Realidade** : Parede com tubos de dados multicoloridos.
+*   `π` : **Parede Setor de Processamento** : Servidores e conduítes ciano pulsantes.
+*   `Ω` : **Teto Setor de Processamento** : Estrutura modular com processador central.
+*   `Σ` : **Chão Setor de Processamento** : Placas de CPU com bus de dados.
+*   `"` : **Parede Setor Quântico** : Metal pesado com circuitos roxos.
+*   `!` : **Marcador de Rótulo** : Define a posição de um holograma de texto (configurado nos `links`).
 
-### ⚡ Fontes de Energia (Emitem em todas as direções)
-*   `B` : **Fonte Azul** (Energia Limpa).
-*   `X` : **Fonte Vermelha** (Energia Corrompida - Causa Game Over se chegar ao núcleo).
+### 🔌 Fiação e Energia (`map` ou `overlays`)
+*   `B` : **Fonte Azul** (Energia Estável).
+*   `X` : **Fonte Vermelha** (Energia Corrompida - Causa Dano).
+*   **Cabos de Energia (Wires):**
+    *   `H`, `V` : Retas (Horizontal/Vertical).
+    *   `L`, `J`, `F`, `C` : Curvas/Cantos.
+    *   `+` : Cruzamento de cabos.
+    *   `u`, `d`, `l`, `r` : Terminações (Ponta de cabo Up/Down/Left/Right).
+*   **Mecanismos de Carga:**
+    *   `T` : **Núcleo Alvo** (Abre conexões quando recebe energia).
+    *   `1`-`9` : **Núcleos de Carga** : Exigem X Amplificadores para validar.
+    *   `Q` : **Catalisador** : Dispara laser em 4 direções quando alimentado.
+    *   `K` : **Estação de Carregamento** : Checkpoint automático quando energizada.
+    *   `$` : **Terminal de Loja** : Ponto de troca de sucata por upgrades.
 
-### 🎯 Núcleos Alvo (Objetivos)
-*   `T` : **Núcleo Verde Standard** (Exige 1 Amp para abrir).
-*   `1` a `9` : **Núcleo Verde com Requisito** (O número indica quantos Amplificadores a energia deve atravessar antes de chegar nele).
-
-### 🔌 Fios e Conexões (Caminhos Fixos)
-*   `H` : Cano Horizontal (━)
-*   `V` : Cano Vertical (┃)
-*   `+` : Cruzamento (╋)
-*   `L` : Curva Superior Direita (┗)
-*   `J` : Curva Superior Esquerda (┛)
-*   `C` : Curva Inferior Esquerda (┓)
-*   `F` : Curva Inferior Direita (┏)
-
-**Junções em T:**
-*   `u` : Direita / Esquerda / Cima (┻)
-*   `d` : Direita / Esquerda / Baixo (┳)
-*   `l` : Cima / Baixo / Esquerda (┫)
-*   `r` : Cima / Baixo / Direita (┣)
-
-### 📦 Blocos Amplificadores (Empurráveis e Rotacionáveis)
-Os blocos aumentam a carga da energia em +1 Amp.
-*   `>` : Apontando para a Direita
-*   `<` : Apontando para a Esquerda
-*   `^` : Apontando para Cima
-*   `v` : Apontando para Baixo
-
----
-
-## ⚙️ Mecânicas Importantes
-
-### 1. Sistema de Relé (Relay)
-Quando um núcleo (T ou 1-9) recebe a carga necessária, ele se torna uma **Fonte de Energia** para os fios conectados a ele. 
-*   **Válvula Unidirecional:** Um núcleo nunca envia energia de volta pelo caminho de onde ela veio. Isso evita loops infinitos.
-
-### 2. Lógica de Amperagem (Amps)
-*   A energia começa com **0 Amps**.
-*   Cada **Bloco Amplificador** pelo qual a energia passa soma **+1 Amp** ao fluxo.
-*   Os Núcleos Alvo só abrem se a carga recebida for **maior ou igual** ao seu número (ex: Núcleo `3` precisa de um fluxo que passou por pelo menos 3 blocos).
-
-### 3. Contaminação Vermelha
-*   Se energia de uma **Fonte Vermelha (X)** atingir qualquer parte de um circuito conectado a um núcleo, o circuito fica "Contaminado".
-*   Núcleos contaminados não abrem e bloqueiam a vitória.
-
-### 4. Cores de Feedback (Triângulos e Fios)
-*   **Branco:** Inativo.
-*   **Amarelo:** Alerta de Contramão (Energia tentando entrar pela frente do bloco).
-*   **Azul Oceano:** Energizado (Fluxo ativo, mas ainda não completou o objetivo).
-*   **Ciano Vibrante:** Validado! Circuito completo e objetivo atingido.
-
-### 5. Consumo de Energia (Power)
-*   O robô tem uma barra de **Power** na parte inferior.
-*   Cada **movimento** ou **rotação** consome exatamente **1 unidade** de Power.
-*   Se o Power chegar a zero, o robô explode.
-
-### 6. Limite de Tempo
-*   Existe um cronômetro regressivo de **60 segundos** global.
-*   Você deve vencer o nível antes que o tempo acabe, independente de quanto Power ainda tenha.
+### ⚙️ Mecanismos de Chão e Movimento (`overlays`)
+*   `_` : **Placa de Pressão** : Ativa canal enquanto algo estiver sobre ela.
+*   `(`, `)`, `[`, `]` : **Esteiras (Conveyors)** : Movem entidades na direção (Left, Right, Up, Down).
+*   `n`, `s`, `e`, `w` : **Botões de Gravidade** : Alteram a gravidade da sala (North, South, East, West).
+*   `D` / `U` : **Portas** : `D` é porta lógica, `U` é saída de nível.
+*   `?` : **Piso Quântico** : Chão que aparece/desaparece via sinais lógicos.
+*   `p` / `y` : **Cubo de Fase** : Blocos que alternam entre sólido e intangível (LUNAR / SOLAR).
+*   `%` : **Alternador de Singularidade** : Alterna a fase Solar/Lunar ao ser interagido.
+*   `M` : **Prisma de Refração** : Reflete lasers em 90 graus (direção ajustável via `dir`).
+*   `E` : **Emissor Laser** : Fonte contínua de laser quando alimentado.
+*   `O` : **Portal** : Teleporta entidades entre canais de mesma cor.
 
 ---
 
-## 💡 Dicas de Design
-1.  **Gargalos:** Use Junções em T para criar decisões onde o jogador precisa escolher qual caminho energizar primeiro.
-2.  **Relés em Cadeia:** Crie fases onde um núcleo abre caminho para energizar o próximo, como uma reação em cadeia.
-3.  **Contaminação Tática:** Use fontes vermelhas perto de caminhos óbvios para forçar o jogador a criar rotas mais complexas.
+## 🛡️ Símbolos Disponíveis para Expansão
+Ao criar novos sistemas mecânicos, utilize esta lista de caracteres livres para evitar conflitos com a engine:
+
+*   **Letras Seguras:** `g` (minúsculo), `R` (maiúsculo - usar com cautela).
+*   **Símbolos ASCII:** `-`, `/`, `\`, `'`, `` ` ``.
+*   **Unicode Técnicos (UTF-8):** `∞`, `◊`, `∆`, `■`, `░`, `▒`, `▓`.
+
+> [!IMPORTANT]
+> Nunca utilize `u`, `d`, `l`, `r` ou `P`, pois são vitais para o sistema de fiação e botões.
+
+---
+
+## 💡 Regras de Ouro
+1.  **Exploração:** Use portas `U` com `exitTo` para interconectar setores ao Hub.
+2.  **Persistência:** O estado de alavancas e blocos é salvo automaticamente.
+3.  **Dificuldade:** Introduza novas mecânicas em salas isoladas antes de combiná-las.

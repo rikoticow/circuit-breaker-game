@@ -20,7 +20,10 @@ const COLORS = {
     coreTargetIdle: '#114422',
     coreTargetPowered: '#00ff9f',
     coreForbiddenIdle: '#441111',
-    coreForbiddenPowered: '#ff003c'
+    coreForbiddenPowered: '#ff003c',
+    hpFull: '#ff003c',
+    hpEmpty: '#220000',
+    hpEdge: '#ff5588'
 };
 
 const DIRS = {
@@ -74,43 +77,235 @@ const Graphics = {
         this.levelSeed = (effectiveIndex !== undefined && effectiveIndex !== -1) ? effectiveIndex * 137 : Math.floor(Math.random() * 1000);
     },
 
-    drawStaticBackground(game, startX, endX, startY, endY) {
-        const mapH = game.map.length;
-        const mapW = game.map[0].length;
-        
-        // Clamp bounds
-        startX = Math.max(0, Math.floor(startX));
-        startY = Math.max(0, Math.floor(startY));
-        endX = Math.min(mapW, Math.ceil(endX));
-        endY = Math.min(mapH, Math.ceil(endY));
+    drawStaticBackground(game, startX, endX, startY, endY, frame = 0) {
+        if (!this.ctx || !game.map || !game.map[0]) return;
 
-        // Draw Floors and Holes (Static Base)
-        for (let y = startY; y < endY; y++) {
-            for (let x = startX; x < endX; x++) {
-                const c = game.map[y][x];
-                if (c === '*') {
-                    let mask = 0;
-                    if (y > 0 && game.map[y-1][x] === '*') mask |= 1;
-                    if (x < mapW - 1 && game.map[y][x+1] === '*') mask |= 2;
-                    if (y < mapH - 1 && game.map[y+1][x] === '*') mask |= 4;
-                    if (x > 0 && game.map[y][x-1] === '*') mask |= 8;
-                    this.drawHole(x, y, mask);
-                } else if (c !== '#' && c !== 'W') {
-                    this.drawFloor(x, y);
-                }
+        // 1. Ensure Background is Baked for the CURRENT level
+        const levelKey = `${game.levelIndex}_${game.map[0].length}x${game.map.length}_${this.levelSeed}`;
+        if (!this.bgCanvas || this.bakedLevelKey !== levelKey) {
+            this.bakeBackground(game);
+        }
+
+        // 2. Draw the baked background
+        if (this.bgCanvas) {
+            try {
+                this.ctx.drawImage(this.bgCanvas, 0, 0);
+            } catch (e) {
+                console.error("Error drawing bgCanvas:", e);
+                // Fallback: If drawing fails (e.g. canvas too large), we could 
+                // potentially draw manually, but for now we just log it.
             }
         }
 
-        // Draw Walls and Ceilings (Static Structures)
+        // 3. Draw Animated Elements (Wall Variant 7 - Computer Terminal, Energy Pillars)
+        if (!game.map || !game.map[0]) return;
+        
+        startX = Math.max(0, Math.floor(startX));
+        startY = Math.max(0, Math.floor(startY));
+        endX = Math.min(game.map[0].length, Math.ceil(endX));
+        endY = Math.min(game.map.length, Math.ceil(endY));
+
         for (let y = startY; y < endY; y++) {
             for (let x = startX; x < endX; x++) {
-                const c = game.map[y][x];
-                if (c === '#') {
-                    this.drawCeiling(x, y);
-                } else if (c === 'W') {
-                    this.drawWallFace(x, y);
+                const row = game.map[y];
+                if (!row) continue;
+                const c = row[x];
+                // Technical/Animated tiles that need per-frame drawing or specialized handling
+                if (['W', 'f', 'i', 'k', 'h', 'm', 'g', 'q', ':', ';', '&', '=', '\u03C0', '\u03A9', '\"', '|', '\u03A3', '\u03C3'].includes(c)) {
+                    const seedX = x + (this.levelSeed || 0);
+                    const seedY = y + (this.levelSeed || 0);
+                    const variant = Math.abs(seedX * 7 + seedY * 31) % 10;
+                    
+                    // Conditions for per-frame dynamic rendering:
+                    // 1. Terminals/Animated Walls (\u03C0 has blinking LEDs)
+                    // 2. Reality/Processing/Quantum Ceilings (for connectivity mask stability)
+                    // 3. Special Floors (&, \u03A3)
+                    const isDynamic = (variant === 7 && (c === 'W' || c === 'f')) || 
+                                      ['i', 'k', 'h', 'm', 'g', 'q', ':', ';', '&', '=', '\u03C0', '\u03A9', '|', '\u03A3', '\u03C3'].includes(c);
+                    
+                    if (isDynamic) {
+                        if (c === '&' || c === '\u03A3' || c === '\u03C3') {
+                            this.drawFloor(x, y, c);
+                        } else if (c === '=' || c === '\u03A9' || c === '|') {
+                            let mask = 0;
+                            if (y > 0 && game.map[y-1][x] === c) mask |= 1;
+                            if (x < game.map[0].length - 1 && game.map[y][x+1] === c) mask |= 2;
+                            if (y < game.map.length - 1 && game.map[y+1][x] === c) mask |= 4;
+                            if (x > 0 && game.map[y][x-1] === c) mask |= 8;
+                            
+                            if (c === '=') this.drawRealityCeiling(x, y, mask);
+                            else if (c === '\u03A9') this.drawProcessingCeiling(x, y, mask);
+                            else if (c === '|') this.drawQuantumCeiling(x, y, mask);
+                        } else {
+                            this.drawWallFace(x, y, c);
+                        }
+                    }
                 }
             }
+        }
+    },
+
+    bakeBackground(game) {
+        if (!game.map || !game.map[0]) return;
+        
+        const mapH = game.map.length;
+        const mapW = game.map[0].length;
+        
+        // Initialize or Resize bgCanvas to fit the entire map
+        if (!this.bgCanvas) this.bgCanvas = document.createElement('canvas');
+        this.bgCanvas.width = mapW * this.tileSize;
+        this.bgCanvas.height = mapH * this.tileSize;
+        this.bgCtx = this.bgCanvas.getContext('2d');
+        if (!this.bgCtx) return;
+        this.bgCtx.imageSmoothingEnabled = false;
+
+        // Clear with background color
+        this.bgCtx.fillStyle = COLORS.bg;
+        this.bgCtx.fillRect(0, 0, this.bgCanvas.width, this.bgCanvas.height);
+
+        // Temp context swap to use existing draw methods from environment.js
+        const oldCtx = this.ctx;
+        this.ctx = this.bgCtx;
+
+        try {
+            // Phase 1: Draw Floors and Holes (Base Layer)
+            for (let y = 0; y < mapH; y++) {
+                const row = game.map[y];
+                for (let x = 0; x < mapW; x++) {
+                    const c = row[x];
+                    if (c === '*') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y-1][x] === '*') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x+1] === '*') mask |= 2;
+                        if (y < mapH - 1 && game.map[y+1][x] === '*') mask |= 4;
+                        if (x > 0 && game.map[y][x-1] === '*') mask |= 8;
+                        this.drawHole(x, y, mask);
+                    } else if (c === '.') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y-1][x] === '.') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x+1] === '.') mask |= 2;
+                        if (y < mapH - 1 && game.map[y+1][x] === '.') mask |= 4;
+                        if (x > 0 && game.map[y][x-1] === '.') mask |= 8;
+                        this.drawVacuumAbyss(x, y, mask);
+                    } else if (c === ',') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y-1][x] === ',') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x+1] === ',') mask |= 2;
+                        if (y < mapH - 1 && game.map[y+1][x] === ',') mask |= 4;
+                        if (x > 0 && game.map[y][x-1] === ',') mask |= 8;
+                        this.drawFloor(x, y, ',', mask);
+                    } else if (c === '\u03C3') {
+                        let mask = 0;
+                        const structuralChars = ['#', 'W', 'A', 'I', 'Y', 'f', 'i', 'j', 'k', 'h', 'm', 'G', 'g', 'x', 'q', 'N', '\"', '|', ':', ';', '{', '~', '}', '=', '\u03A3', '\u03C0', '\u03A9'];
+                        const isS = (tx, ty) => {
+                            if (ty < 0 || ty >= mapH || tx < 0 || tx >= mapW) return false;
+                            const nc = game.map[ty][tx];
+                            return structuralChars.includes(nc) || nc === '*' || nc === '.';
+                        };
+                        if (isS(x, y - 1)) mask |= 1;
+                        if (isS(x + 1, y)) mask |= 2;
+                        if (isS(x, y + 1)) mask |= 4;
+                        if (isS(x - 1, y)) mask |= 8;
+                        this.drawFloor(x, y, '\u03C3', mask);
+                    } else if (c === '\u03C1') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y-1][x] === '\u03C1') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x+1] === '\u03C1') mask |= 2;
+                        if (y < mapH - 1 && game.map[y+1][x] === '\u03C1') mask |= 4;
+                        if (x > 0 && game.map[y][x-1] === '\u03C1') mask |= 8;
+                        this.drawFloor(x, y, '\u03C1', mask);
+                    } else {
+                        // Use explicit floor if defined, otherwise default copper floor (' ')
+                        const floorChar = ['a', 'b', 'c', 't', 'z', 'o', '&', '\''].includes(c) ? c : ' ';
+                        this.drawFloor(x, y, floorChar);
+                    }
+                }
+            }
+
+            // Phase 2: Draw Walls and Ceilings (Structure Layer)
+            for (let y = 0; y < mapH; y++) {
+                const row = game.map[y];
+                for (let x = 0; x < mapW; x++) {
+                    const c = row[x];
+                    if (c === 'N') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === 'N') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === 'N') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === 'N') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === 'N') mask |= 8;
+                        this.drawOpticalCeiling(x, y, mask);
+                    } else if (c === 'Y') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === 'Y') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === 'Y') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === 'Y') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === 'Y') mask |= 8;
+                        this.drawHighTechCeiling(x, y, mask);
+                    } else if (c === '=') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === '=') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === '=') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === '=') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === '=') mask |= 8;
+                        this.drawRealityCeiling(x, y, mask);
+                    } else if (c === '#') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === '#') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === '#') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === '#') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === '#') mask |= 8;
+                        this.drawBronzeCeiling(x, y, mask);
+                    } else if (c === 'A') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === 'A') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === 'A') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === 'A') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === 'A') mask |= 8;
+                        this.drawLabCeiling(x, y, mask);
+                    } else if (c === '}') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === '}') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === '}') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === '}') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === '}') mask |= 8;
+                        this.drawLogisticCeiling(x, y, mask);
+                    } else if (c === '\u03A9') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === '\u03A9') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === '\u03A9') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === '\u03A9') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === '\u03A9') mask |= 8;
+                        this.drawProcessingCeiling(x, y, mask);
+                    } else if (c === '|') {
+                        let mask = 0;
+                        if (y > 0 && game.map[y - 1][x] === '|') mask |= 1;
+                        if (x < mapW - 1 && game.map[y][x + 1] === '|') mask |= 2;
+                        if (y < mapH - 1 && game.map[y + 1][x] === '|') mask |= 4;
+                        if (x > 0 && game.map[y][x - 1] === '|') mask |= 8;
+                        this.drawQuantumCeiling(x, y, mask);
+                    } else if (c === 'I' || c === 'x') {
+                        this.drawCeiling(x, y, c);
+                    } else if (['W', 'f', 'i', 'j', 'k', 'h', 'm', 'g', 'q', '{', '~', ':', ';', '\"', '\u03A3', '\u03C0'].includes(c)) {
+                        const seedX = x + (this.levelSeed || 0);
+                        const seedY = y + (this.levelSeed || 0);
+                        const variant = Math.abs(seedX * 7 + seedY * 31) % 10;
+                        
+                        // Decide if this wall should be baked or rendered dynamically (animated)
+                        const isAnimated = (variant === 7 && (c === 'W' || c === 'f')) || ['i', 'k', 'h', 'm', 'g', 'q', ':', ';', '\u03C0'].includes(c);
+                        
+                        if (!isAnimated) { 
+                            this.drawWallFace(x, y, c);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error during background baking:", e);
+        } finally {
+            // ALWAYS restore the main context
+            this.ctx = oldCtx;
+            // Mark as baked for this specific state
+            this.bakedLevelKey = `${game.levelIndex}_${mapW}x${mapH}_${this.levelSeed}`;
         }
     },
 
@@ -119,14 +314,340 @@ const Graphics = {
         this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     },
 
+    lastHP: 0,
+    hpFlashTimers: new Array(20).fill(0), // Support up to 5 hearts (20 quarters)
+    
+    lastScrapCount: 0,
+    scrapSlideY: -50,
+    scrapDisplayTimer: 0,
+
+    hudEntranceTimer: 0,
+    _lastHudLevel: -1,
+
     drawHUD(game) {
+        // --- HP Flash Logic ---
+        const currentHP = HPSystem.currentQuarters;
+        if (this.lastHP > currentHP) {
+            for (let i = currentHP; i < this.lastHP; i++) {
+                if (i < this.hpFlashTimers.length) this.hpFlashTimers[i] = 30;
+            }
+        }
+        this.lastHP = currentHP;
+        for (let i = 0; i < this.hpFlashTimers.length; i++) {
+            if (this.hpFlashTimers[i] > 0) this.hpFlashTimers[i]--;
+        }
+
+        // --- Scrap Slide Logic ---
+        const currentScrap = game.scrapCollected;
+        if (currentScrap > this.lastScrapCount) {
+            this.scrapDisplayTimer = 180; // 3 seconds
+        }
+        this.lastScrapCount = currentScrap;
+
+        if (this.scrapDisplayTimer > 0) {
+            this.scrapDisplayTimer--;
+            this.scrapSlideY += (35 - this.scrapSlideY) * 0.1;
+        } else {
+            this.scrapSlideY += (-50 - this.scrapSlideY) * 0.1;
+        }
+
+        // --- HUD Entrance Timer ---
+        if (this._lastHudLevel !== game.levelIndex) {
+            this._lastHudLevel = game.levelIndex;
+            this.hudEntranceTimer = 180; // 3 seconds total
+        }
+        if (this.hudEntranceTimer > 0) this.hudEntranceTimer--;
+
         // Draw Security Alert Pulse
         if (game.isSecurityAlert) {
             this._drawSecurityAlert(this.ctx, game);
         }
         
-        // Draw Result Vignette (Red for death/gameOver, Green for win)
+        // Draw Result Vignette
         this._drawResultVignette(this.ctx, game);
+        
+        // --- NEW CMD HUD ---
+        const ctx = this.ctx;
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        const margin = 40; // Inward margin for hearts
+
+        ctx.save();
+        
+        // 1. HP Status (Top Left)
+        this._drawHearts(ctx, game, 60, 35);
+
+        // 2. Main Info Area (Top Center)
+        this._drawCenterInfo(ctx, game, w / 2, 35);
+
+        // 3. Scrap Info (Top Right)
+        this._drawTopRightInfo(ctx, game, w - 20, 35);
+
+        ctx.restore();
+    },
+
+    _drawCenterInfo(ctx, game, x, y) {
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#00ff9f';
+        
+        // Sequence: 180->60 (Name), 60->30 (Transition), 30->0 (Timer/Amps)
+
+        // 1. Level Name (Top Area)
+        if (this.hudEntranceTimer > 30) {
+            const outProgress = Math.max(0, Math.min(1, (60 - this.hudEntranceTimer) / 30));
+            ctx.save();
+            ctx.translate(0, -outProgress * 50);
+            ctx.globalAlpha = 1 - outProgress;
+
+            const lvl = LEVELS[game.levelIndex];
+            const targetName = (lvl ? lvl.name.toUpperCase() : "LABORATÓRIO");
+            const levelNumStr = `NÍVEL ${(game.levelIndex + 1).toString().padStart(2, '0')}`;
+            let name = (window.currentDisplayMode === 1) ? targetName : levelNumStr;
+            if (window.glitchTimer > 0) name = this.scrambleText(name, window.glitchTimer / 80);
+            
+            ctx.font = '24px "VT323"';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#00ff9f';
+            ctx.fillText(name, x, y);
+            ctx.restore();
+        }
+
+        // 2. Timer & Amps (Bottom Area)
+        if (this.hudEntranceTimer <= 30) {
+            const inProgress = Math.max(0, Math.min(1, (30 - this.hudEntranceTimer) / 30));
+            ctx.save();
+            ctx.translate(0, (1 - inProgress) * -50);
+            ctx.globalAlpha = inProgress;
+
+            ctx.font = '20px "VT323"';
+            
+            // PRE-CALCULATE TOTAL WIDTH
+            let timerStr = "";
+            let tW = 0;
+            if (game.time !== -1) {
+                let min = Math.floor(game.time / 60);
+                let sec = game.time % 60;
+                timerStr = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+                tW = ctx.measureText(timerStr).width + 8; // Including padding
+            }
+
+            let ampsLabel = "";
+            let alW = 0;
+            let totalReq = 0;
+            let totalCurrent = 0;
+            if (game.targets.length > 0) {
+                ampsLabel = (timerStr ? " | AMPS " : "AMPS ");
+                alW = ctx.measureText(ampsLabel).width;
+                for (const t of game.targets) {
+                    totalReq += t.required;
+                    const data = game.poweredTargets.get(`${t.x},${t.y}`);
+                    totalCurrent += Math.min(t.required, data ? data.charge : 0);
+                }
+            }
+            const barsW = totalReq * 7; // 4px bar + 3px gap
+            
+            const totalW = tW + alW + barsW;
+            let currentX = x - (totalW / 2);
+
+            // DRAW TIMER
+            if (timerStr) {
+                ctx.fillStyle = '#00ff9f';
+                ctx.fillRect(currentX, y - 10, tW, 20); // 20px tall box
+                ctx.fillStyle = '#000000';
+                ctx.shadowBlur = 0;
+                ctx.fillText(timerStr, currentX + 4, y);
+                currentX += tW;
+            }
+
+            // DRAW AMPS LABEL
+            if (ampsLabel) {
+                ctx.fillStyle = '#00ff9f';
+                ctx.shadowBlur = 8;
+                ctx.fillText(ampsLabel, currentX, y);
+                currentX += alW;
+            }
+
+            // DRAW BARS
+            for (let i = 0; i < totalReq; i++) {
+                ctx.fillStyle = i < totalCurrent ? '#00ff9f' : '#051a0f';
+                ctx.strokeStyle = '#00ff9f';
+                ctx.lineWidth = 1;
+                
+                const bx = currentX + i * 7;
+                const by = y - 7;
+                ctx.fillRect(bx, by, 5, 14);
+                ctx.strokeRect(bx, by, 5, 14);
+                
+                if (i < totalCurrent) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.4;
+                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = '#00ff9f';
+                    ctx.fillRect(bx, by, 5, 14);
+                    ctx.restore();
+                }
+            }
+            ctx.restore();
+        }
+        ctx.restore();
+    },
+
+    _drawTopRightInfo(ctx, game, x, y) {
+        // Scrap (Sliding)
+        if (this.scrapSlideY > -45) {
+            ctx.save();
+            ctx.translate(0, this.scrapSlideY - y);
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.font = '20px "VT323"';
+            ctx.fillStyle = '#00ff9f';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#00ff9f';
+            
+            // Only current total, as requested
+            const scrapStr = `${game.scrapCollected}`;
+            ctx.fillText(scrapStr, x, y);
+            
+            // Draw Gear Icon - Aligned slightly lower (+2px) for VT323 visual center
+            this._drawGearIcon(ctx, x - ctx.measureText(scrapStr).width - 15, y + 2, 8);
+            ctx.restore();
+        }
+    },
+
+    _drawGearIcon(ctx, x, y, r) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Date.now() * 0.002); // Constant rotation
+        
+        ctx.strokeStyle = '#00ff9f';
+        ctx.lineWidth = 1.5;
+        
+        // Core
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Teeth
+        for (let i = 0; i < 8; i++) {
+            ctx.rotate(Math.PI / 4);
+            ctx.fillRect(-1.5, -r, 3, r * 0.4);
+        }
+        
+        // Inner hole
+        ctx.beginPath();
+        ctx.arc(0, 0, 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        
+        ctx.restore();
+    },
+
+    _drawHearts(ctx, game, x, y) {
+        const hearts = HPSystem.getHeartStates();
+        const spacing = 22;
+        
+        hearts.forEach((h, i) => {
+            this._drawHeart(ctx, x + i * spacing, y, h.fill, h.isBroken, i);
+        });
+    },
+
+    _drawHeart(ctx, x, y, fill, isBroken, heartIndex) {
+        const size = 9;
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Hexagon Path Helper
+        const hexPath = (r) => {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+                const px = Math.cos(angle) * r;
+                const py = Math.sin(angle) * r;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+        };
+
+        // 1. Outer Edge (Technological Green)
+        hexPath(size + 2);
+        ctx.strokeStyle = isBroken ? '#441111' : '#00ff9f';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // 2. Inner Background
+        hexPath(size);
+        ctx.fillStyle = '#051a0f';
+        ctx.fill();
+
+        // 3. Fill (Fractional - Zelda Style "Pizza Cut")
+        if (fill > 0 && !isBroken) {
+            ctx.save();
+            hexPath(size);
+            ctx.clip();
+            
+            ctx.fillStyle = '#00ff9f';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#00ff9f';
+            
+            // Draw quadrants based on fill count (1-4)
+            // Piece 1: Top-Left
+            if (fill >= 1) ctx.fillRect(-size, -size, size, size);
+            // Piece 2: Top-Right
+            if (fill >= 2) ctx.fillRect(0, -size, size, size);
+            // Piece 3: Bottom-Left
+            if (fill >= 3) ctx.fillRect(-size, 0, size, size);
+            // Piece 4: Bottom-Right
+            if (fill >= 4) ctx.fillRect(0, 0, size, size);
+
+            // Separators (The "Pizza Cut" lines)
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#051a0f'; // Same as background
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-size, 0); ctx.lineTo(size, 0);
+            ctx.moveTo(0, -size); ctx.lineTo(0, size);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // 4. Flash Effect for lost segments
+        if (heartIndex !== undefined) {
+            for (let q = 0; q < 4; q++) {
+                const globalQ = heartIndex * 4 + q;
+                const flashTimer = this.hpFlashTimers[globalQ];
+                if (flashTimer > 0) {
+                    ctx.save();
+                    hexPath(size);
+                    ctx.clip();
+                    
+                    // Each quarter (q=0 is bottom, q=3 is top)
+                    // Wait, fill order: q=0 is bottom-most quarter
+                    const qHeight = (size * 2) / 4;
+                    const qY = size - (q + 1) * qHeight;
+                    
+                    // Flash color (white or neon red based on timer)
+                    ctx.fillStyle = (flashTimer % 4 < 2) ? '#ffffff' : '#ff003c';
+                    ctx.globalAlpha = flashTimer / 30;
+                    ctx.fillRect(-size, qY, size * 2, qHeight);
+                    
+                    ctx.restore();
+                }
+            }
+        }
+
+        if (isBroken) {
+            ctx.fillStyle = '#ff003c';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText("X", 0, 4);
+        }
+
+        ctx.restore();
     },
 
     _drawSecurityAlert(ctx, game) {
@@ -398,4 +919,49 @@ const Graphics = {
         ctx.fill();
         ctx.restore();
     },
+
+    /**
+     * Scrambles text based on intensity (Crypt effect)
+     * Shared logic with Dialogue system but optimized for Canvas
+     */
+    scrambleText(text, intensity, seed = 0) {
+        if (intensity <= 0) return text;
+        const symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
+        const timeStep = Math.floor(Date.now() / 100);
+        let scrambled = "";
+        for (let i = 0; i < text.length; i++) {
+            if (text[i] === " ") { scrambled += " "; continue; }
+            // Deterministic scramble based on time, position (seed), and char index
+            const charSeed = (timeStep * (i + 1) + seed) % 1000;
+            const rand = (Math.sin(charSeed) * 10000) % 1;
+            if (Math.abs(rand) < (0.3 * intensity)) {
+                const symIdx = Math.floor(Math.abs(Math.cos(charSeed) * symbols.length));
+                scrambled += symbols[symIdx];
+            } else {
+                scrambled += text[i];
+            }
+        }
+        return scrambled;
+    },
+
+    drawFogOfWar(game) {
+        if (!game.fogOfWar) return;
+        
+        const ctx = this.ctx;
+        const ts = this.tileSize;
+        const startX = Math.floor(game.camera.x / ts);
+        const endX = Math.ceil((game.camera.x + 640) / ts);
+        const startY = Math.floor(game.camera.y / ts);
+        const endY = Math.ceil((game.camera.y + 480) / ts);
+
+        ctx.fillStyle = "#000000";
+        
+        for (let y = startY; y < endY; y++) {
+            for (let x = startX; x < endX; x++) {
+                if (!game.discovered.has(`${x},${y}`)) {
+                    ctx.fillRect(x * ts, y * ts, ts, ts);
+                }
+            }
+        }
+    }
 };

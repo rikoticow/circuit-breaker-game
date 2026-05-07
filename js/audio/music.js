@@ -96,10 +96,10 @@ Object.assign(window.AudioSys, {
 
         const themesMap = [
             'industrial',  // Setor 01: Steel Heart Awakening
-            'adventure',   // Setor 02: Binary Explorer
+            'jungle',      // Setor 02: Neon Wilds
             'aero',        // Setor 03: Skyward Flow
             'aquatic',     // Setor 04: Quantum Abyss
-            'jungle',      // Setor 05: Neon Wilds
+            'adventure',   // Setor 05: Binary Explorer
             'void',        // Setor 06: Shadows of the Void
             'epic',        // Setor 07: Reality Breach
             'climax',      // Setor 08: Overclocked Spirit
@@ -108,6 +108,11 @@ Object.assign(window.AudioSys, {
         ];
 
         this.currentThemeKey = themesMap[sectorIdx] || 'aero';
+
+        // Hub / Nexus Special Case
+        if (level && level.name && level.name.includes("NEXUS")) {
+            this.currentThemeKey = 'nexus';
+        }
 
         // Casos especiais baseados em mecânica (ex: cair no abismo)
         if (hasPits && sectorIdx < 3) {
@@ -683,6 +688,99 @@ Object.assign(window.AudioSys, {
                     }
                 }
             }
+        },
+
+        nexus: {
+            getBPM(intensity) {
+                if (intensity === 0) return 85;  // Penumbra
+                if (intensity === 1) return 110; // Máquinas Ativas
+                return 135; // Salto Temporal (Ação)
+            },
+            playStep(step, time) {
+                const bar = Math.floor(step / 16); 
+                const localStep = step % 16;
+                const progBar = bar % 32; 
+                
+                // Progressão de Tensão e Mistério (Acordes Menores e Suspensos)
+                const padChords = [
+                    [123.47, 146.83, 185.00], [98.00, 123.47, 146.83], [82.41, 98.00, 123.47], [92.50, 110.00, 138.59],
+                    [123.47, 146.83, 185.00], [98.00, 123.47, 146.83], [82.41, 98.00, 123.47], [92.50, 110.00, 138.59],
+                    [123.47, 146.83, 185.00], [98.00, 123.47, 146.83], [130.81, 164.81, 196.00], [92.50, 110.00, 138.59],
+                    [123.47, 146.83, 185.00], [98.00, 123.47, 146.83], [130.81, 164.81, 196.00], [92.50, 110.00, 138.59],
+                    [82.41, 98.00, 123.47], [130.81, 164.81, 196.00], [110.00, 130.81, 164.81], [123.47, 146.83, 185.00],
+                    [82.41, 98.00, 123.47], [130.81, 164.81, 196.00], [110.00, 130.81, 164.81], [123.47, 146.83, 185.00],
+                    [98.00, 123.47, 146.83], [146.83, 185.00, 220.00], [82.41, 98.00, 123.47], [130.81, 164.81, 196.00],
+                    [123.47, 146.83, 185.00], [98.00, 123.47, 146.83], [92.50, 110.00, 138.59], [92.50, 110.00, 138.59]
+                ];
+                
+                const bassRoots = [
+                    61.74, 49.00, 41.20, 46.25, 61.74, 49.00, 41.20, 46.25,
+                    61.74, 49.00, 65.41, 46.25, 61.74, 49.00, 65.41, 46.25,
+                    41.20, 65.41, 55.00, 61.74, 41.20, 65.41, 55.00, 61.74,
+                    49.00, 73.42, 41.20, 65.41, 61.74, 49.00, 46.25, 46.25
+                ];
+
+                // --- 1. AMBIÊNCIA SOMBRIA (Void Pad) ---
+                if (localStep === 0) {
+                    this.playVoidPad_Nexus(padChords[progBar], time, this.musicIntensity);
+                }
+
+                // --- 2. CAMADAS DE AÇÃO (Substitui o Braam) ---
+                if (this.musicIntensity === 2) {
+                    const arpNote = padChords[progBar][localStep % 3] * 2;
+                    this.playCyberArp(arpNote, time);
+                    if (localStep % 2 !== 0) {
+                        this.playActionChug(bassRoots[progBar] * 2, time);
+                    }
+                }
+
+                // --- 3. FUMO E VAPOR (Steam Vents) ---
+                if (this.musicIntensity > 0) {
+                    if (localStep === 0 && progBar % 4 === 3) {
+                        this.playSteamVent(time, true);
+                    }
+                    if (this.musicIntensity === 2 && localStep === 12 && progBar % 2 === 0) {
+                        this.playSteamVent(time, false);
+                    }
+                } else {
+                    if (localStep === 0 && progBar === 0) this.playSteamVent(time, true);
+                }
+
+                // --- 4. ENGRENAGENS E BATERIA (Mecânica Pesada) ---
+                if (this.musicIntensity > 0) {
+                    if (this.musicIntensity === 2 || progBar >= 16) {
+                        if (localStep % 2 === 0) this.playNexusTechBass(bassRoots[progBar], time);
+                    } else {
+                        if (localStep === 0 || localStep === 6) this.playNexusTechBass(bassRoots[progBar], time);
+                    }
+                    if (localStep === 0 || localStep === 8) this.playPiston(time);
+                    if (this.musicIntensity > 1 || progBar >= 8) {
+                        if (localStep === 4 || localStep === 12) this.playSoftSnare_Nexus(time);
+                    }
+                    if (this.musicIntensity === 1 && localStep % 4 === 2) {
+                        this.playRadarBlip(time);
+                    }
+                } else {
+                    if (localStep === 0 && progBar % 2 === 0) this.playPiston(time);
+                }
+
+                // --- 5. A MELODIA (Mistério e Fantasia) ---
+                const melody = [
+                    [493.88, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 392.00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 329.63, 0, 0, 0, 0, 0, 0, 0], [369.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [493.88, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 392.00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 329.63, 0, 0, 0, 0, 0, 0, 0], [369.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [739.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 587.33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 659.25, 0, 0, 0, 0, 0, 0, 0], [739.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [739.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 587.33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 659.25, 0, 0, 0, 0, 0, 0, 0], [739.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [659.25, 0, 0, 0, 493.88, 0, 0, 0, 392.00, 0, 0, 0, 329.63, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [440.00, 0, 0, 0, 523.25, 0, 0, 0, 659.25, 0, 0, 0, 880.00, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [659.25, 0, 0, 0, 493.88, 0, 0, 0, 392.00, 0, 0, 0, 329.63, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [440.00, 0, 0, 0, 523.25, 0, 0, 0, 659.25, 0, 0, 0, 739.99, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [987.77, 0, 0, 0, 0, 0, 0, 0, 783.99, 0, 0, 0, 0, 0, 0, 0], [1174.66,0, 0, 0, 0, 0, 0, 0, 880.00, 0, 0, 0, 0, 0, 0, 0], [1318.51,0, 0, 0, 0, 0, 0, 0, 987.77, 0, 0, 0, 0, 0, 0, 0], [1046.50,0, 0, 0, 0, 0, 0, 0, 783.99, 0, 0, 0, 0, 0, 0, 0],
+                    [987.77, 0, 0, 0, 0, 0, 0, 0, 783.99, 0, 0, 0, 0, 0, 0, 0], [1174.66,0, 0, 0, 0, 0, 0, 0, 880.00, 0, 0, 0, 0, 0, 0, 0], [1479.98,0, 0, 0, 1318.51,0, 0, 0, 1046.50,0, 0, 0, 880.00, 0, 0, 0], [739.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                ];
+                const note = melody[progBar][localStep];
+                if (note > 0 && this.musicIntensity > 0) {
+                    this.playMysticLead(note, time, this.musicIntensity);
+                }
+            }
         }
     }
 });
+

@@ -38,19 +38,30 @@ function createTilePreview(char) {
     const oldCtx = Graphics.ctx;
     Graphics.ctx = tCtx;
     
-    if (char !== '*') Graphics.drawFloor(0, 0);
-    if (char === '#') Graphics.drawCeiling(0, 0);
-    else if (char === 'W') Graphics.drawWallFace(0, 0);
-    else if (char === '*') Graphics.drawHole(0, 0, animFrame);
+    if (char !== '*' && char !== '.' && char !== '#' && char !== 'A' && char !== 'I' && char !== 'Y' && char !== 'x' && char !== 'N' && char !== '}' && char !== '=' && char !== 'Ω' && char !== 'π' && char !== '\u03A3' && char !== '\u03C3' && char !== '\u03C1' && char !== "'" && char !== '"' && char !== '|' && !['B', 'X', 'Z', 'T', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(char)) Graphics.drawFloor(0, 0);
+    if (char === '#') Graphics.drawBronzeCeiling(0, 0, 0);
+    else if (char === 'A') Graphics.drawLabCeiling(0, 0, 0);
+    else if (char === '}') Graphics.drawLogisticCeiling(0, 0, 0);
+    else if (char === 'I' || char === 'x') Graphics.drawCeiling(0, 0, char);
+    else if (char === 'N') Graphics.drawOpticalCeiling(0, 0, 0);
+    else if (char === 'Y') Graphics.drawHighTechCeiling(0, 0, 0);
+    else if (char === '=') Graphics.drawRealityCeiling(0, 0, 0);
+    else if (char === 'Ω') Graphics.drawProcessingCeiling(0, 0, 0);
+    else if (char === 'W' || char === 'f' || char === 'i' || char === 'j' || char === 'k' || char === 'h' || char === 'm' || char === 'g' || char === 'q' || char === '{' || char === '~' || char === ':' || char === ';' || char === 'π' || char === '\u03A3' || char === '"') Graphics.drawWallFace(0, 0, char);
+    else if (char === '*') Graphics.drawHole(0, 0, 0);
+    else if (char === '.') Graphics.drawVacuumAbyss(0, 0, 0);
     else if (char === '@') Graphics.drawRobot(0, 0, 1, 0);
     else if (char === 'K') Graphics.drawChargingStation(0, 0, true, animFrame);
     else if (['B'].includes(char)) Graphics.drawCore(0, 0, 'B', true);
     else if (['X'].includes(char)) Graphics.drawCore(0, 0, 'X', true);
     else if (char === 'T') Graphics.drawCore(0, 0, '1', false, 1, 0, false);
     else if (char === 'Z') Graphics.drawBrokenCore(0, 0, animFrame);
+    else if (char === 'a' || char === 'b' || char === 'c' || char === 't' || char === 'z' || char === 'o' || char === ',' || char === '&' || char === '\u03C3' || char === '\u03C1' || char === "'") Graphics.drawFloor(0, 0, char);
+    else if (char === '|') Graphics.drawQuantumCeiling(0, 0, 0);
     else if (char >= '1' && char <= '9') Graphics.drawCore(0, 0, char, false, parseInt(char), 0, false);
     else if (['H','V','+','L','J','C','F','u','d','l','r'].includes(char)) Graphics.drawWire(0, 0, char, null);
     else if (char === 'S') Graphics.drawScrap(0, 0, animFrame);
+    else if (char === '%') Graphics.drawSingularitySwitcher(0, 0, true, animFrame);
     else if (['>','<','^','v','y','p'].includes(char)) {
         let d = 0; if(char==='v') d=1; if(char==='<') d=2; if(char==='^') d=3;
         let ph = (char === 'y') ? 'SOLAR' : (char === 'p' ? 'LUNAR' : null);
@@ -58,8 +69,8 @@ function createTilePreview(char) {
     } else if (['(', ')', '[', ']'].includes(char)) {
         let d = 2; if(char===')') d=0; if(char==='[') d=3; if(char===']') d=1;
         Graphics.drawConveyor(0, 0, d, -1, null);
-    } else if (char === 'D') {
-        Graphics.drawDoor(0, 0, 'CLOSED', false, 0);
+    } else if (char === 'D' || char === 'U') {
+        Graphics.drawDoor(0, 0, 'CLOSED', false, 0, 'HORIZONTAL', null, 0, char === 'U');
     } else if (char === '_') {
         Graphics.drawButton(0, 0, false);
     } else if (char === '?') {
@@ -68,6 +79,16 @@ function createTilePreview(char) {
         Graphics.drawPurpleButton(0, 0, false);
     } else if (char === 'E') {
         Graphics.drawEmitter(0, 0, 0, animFrame);
+    } else if (char === 'R') {
+        tCtx.save();
+        tCtx.translate(16, 16);
+        tCtx.fillStyle = '#00f0ff';
+        tCtx.beginPath();
+        tCtx.moveTo(0, -12); tCtx.lineTo(12, 12); tCtx.lineTo(-12, 12); tCtx.closePath();
+        tCtx.fill();
+        tCtx.strokeStyle = '#fff';
+        tCtx.strokeRect(-14, -14, 28, 28);
+        tCtx.restore();
     } else if (char === 'M') {
         Graphics.drawBlock(0, 0, 0, null, 0, 0, 'PRISM');
     } else if (char === 'Q') {
@@ -77,7 +98,9 @@ function createTilePreview(char) {
     } else if (char === 'O') {
         Graphics.drawPortal(0, 0, 0, animFrame, undefined);
     } else if (char === '!') {
-        Graphics.drawSingularitySwitcher(0, 0, true, animFrame);
+        Graphics.drawWorldLabel(0, 0, "!");
+    } else if (char === '$') {
+        Graphics.drawShopTerminal(0, 0, animFrame);
     } else if (['n', 's', 'e', 'w'].includes(char)) {
         let d = DIRS.UP;
         if (char === 's') d = DIRS.DOWN;
@@ -107,15 +130,17 @@ function buildPalette() {
     container.innerHTML = '';
     PALETTE.forEach(group => {
         // Filter groups based on activeLayer
-        const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico";
+        const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico" || group.title === "Núcleos";
         const isBlockGroup = group.title === "Amplificadores";
+        const isWireGroup = group.title === "Fios (Rede)";
         const isEventGroup = group.title === "Eventos";
         const isGravityGroup = group.title === "Gravidade";
         
         if (activeLayer === 'overlays' && !isOverlayGroup && !isGravityGroup) return;
         if (activeLayer === 'blocks' && !isBlockGroup) return;
+        if (activeLayer === 'wires' && !isWireGroup) return;
         if (activeLayer === 'events' && !isEventGroup) return;
-        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup || isEventGroup || isGravityGroup)) return;
+        if (activeLayer === 'base' && (isOverlayGroup || isBlockGroup || isEventGroup || isGravityGroup || isWireGroup)) return;
 
         const gDiv = document.createElement('div');
         gDiv.className = 'palette-group';
@@ -152,6 +177,7 @@ function setLayer(layer) {
     // Set default tile for layer
     if (activeLayer === 'blocks') selectedTile = '>';
     else if (activeLayer === 'overlays') selectedTile = ')';
+    else if (activeLayer === 'wires') selectedTile = 'H';
     else if (activeLayer === 'events') selectedTile = '💬';
     else selectedTile = '#';
     
@@ -233,18 +259,17 @@ function updateLevelList() {
         ).join('');
 
         item.innerHTML = `
-            <div class="lvl-title">${lvlIdx}: ${lvl.name}</div>
-            <div style="display: flex; gap: 5px; align-items: center; margin: 4px 0;">
-                <span style="font-size: 11px; color: #666;">Cap:</span>
-                <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeChapterForLevel(${lvlIdx}, ${currentChapterIdx}, this.value)" style="font-size: 11px; background: #333; color: #fff; border: 1px solid #444; flex: 1;">
-                    ${options}
-                </select>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
+                <div class="lvl-title" style="flex: 1;">${lvlIdx}: ${lvl.name}</div>
+                <div class="lvl-actions" style="flex-shrink: 0;">
+                    <button class="action-btn" onclick="event.stopPropagation(); moveLevelInChapter(${lvlIdx}, -1)" title="Subir">▲</button>
+                    <button class="action-btn" onclick="event.stopPropagation(); moveLevelInChapter(${lvlIdx}, 1)" title="Baixar">▼</button>
+                    <button class="action-btn" onclick="event.stopPropagation(); removeFromChapter(${lvlIdx})" title="Remover" style="color: #ffaa00;">×</button>
+                </div>
             </div>
-            <div class="lvl-actions">
-                <button class="action-btn" onclick="event.stopPropagation(); moveLevelInChapter(${lvlIdx}, -1)" title="Subir">🔼</button>
-                <button class="action-btn" onclick="event.stopPropagation(); moveLevelInChapter(${lvlIdx}, 1)" title="Baixar">🔽</button>
-                <button class="action-btn" onclick="event.stopPropagation(); removeFromChapter(${lvlIdx})" title="Remover do Capítulo" style="color: #ffaa00;">✖</button>
-            </div>
+            <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeChapterForLevel(${lvlIdx}, ${currentChapterIdx}, this.value)" style="font-size: 10px; height: 16px; background: #111; color: #00ff9f; border: 1px solid #333; margin-top: 2px; width: 100%; padding: 0;">
+                ${options}
+            </select>
         `;
         
         item.onclick = () => loadLevel(lvlIdx);
@@ -267,10 +292,12 @@ function updateLevelList() {
         item.style.opacity = "0.6";
         
         item.innerHTML = `
-            <div class="lvl-title">${i}: ${lvl.name}</div>
-            <div class="lvl-actions">
-                <button class="action-btn" onclick="event.stopPropagation(); addToChapter(${i})" style="color: #00ff9f;">➕ ADD AO CAPÍTULO</button>
-                <button class="action-btn" onclick="event.stopPropagation(); deleteLevel(${i})" title="Deletar" style="color: #ff4444;">🗑️</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
+                <div class="lvl-title" style="flex: 1;">${i}: ${lvl.name}</div>
+                <div class="lvl-actions" style="flex-shrink: 0;">
+                    <button class="action-btn" onclick="event.stopPropagation(); addToChapter(${i})" style="color: #00ff9f; font-size: 10px;">➕ ADD</button>
+                    <button class="action-btn" onclick="event.stopPropagation(); deleteLevel(${i})" title="Deletar" style="color: #ff4444;">🗑️</button>
+                </div>
             </div>
         `;
         
@@ -379,30 +406,36 @@ function resizeMap() {
     let nextMap = [];
     let nextBlocksMap = [];
     let nextOverlayMap = [];
+    let nextWireMap = [];
 
     for (let y = 0; y < newH; y++) {
         let row = [];
         let bRow = [];
         let oRow = [];
+        let wRow = [];
         for (let x = 0; x < newW; x++) {
             if (y < oldH && x < oldW) {
                 row.push(currentMap[y][x]);
                 bRow.push(currentBlocksMap[y][x]);
                 oRow.push(currentOverlayMap[y][x]);
+                wRow.push(currentWiresMap[y][x]);
             } else {
                 row.push('#'); // Default to ceiling
                 bRow.push(' ');
                 oRow.push(' ');
+                wRow.push(' ');
             }
         }
         nextMap.push(row);
         nextBlocksMap.push(bRow);
         nextOverlayMap.push(oRow);
+        nextWireMap.push(wRow);
     }
 
     currentMap = nextMap;
     currentBlocksMap = nextBlocksMap;
     currentOverlayMap = nextOverlayMap;
+    currentWiresMap = nextWireMap;
 
     canvas.width = newW * 32;
     canvas.height = newH * 32;
@@ -724,9 +757,12 @@ function updateTriggerManagerList() {
                         <option value="visual_sparks" ${event.type === 'visual_sparks' ? 'selected' : ''}>✨ FAÍSCAS</option>
                         <option value="security_alert" ${event.type === 'security_alert' ? 'selected' : ''}>🚨 ALERTA</option>
                         <option value="remote_signal" ${event.type === 'remote_signal' ? 'selected' : ''}>📡 SINAL</option>
+                        <option value="global_signal" ${event.type === 'global_signal' ? 'selected' : ''}>🌍 SINAL GLOBAL</option>
                         <option value="dimension_shift" ${event.type === 'dimension_shift' ? 'selected' : ''}>🌀 DIMENSÃO</option>
                         <option value="gravity" ${event.type === 'gravity' ? 'selected' : ''}>⚛️ GRAVIDADE</option>
                         <option value="dialogue" ${event.type === 'dialogue' ? 'selected' : ''}>💬 DIÁLOGO</option>
+                        <option value="grant_ability" ${event.type === 'grant_ability' ? 'selected' : ''}>🦾 HABILIDADE</option>
+                        <option value="increase_max_hp" ${event.type === 'increase_max_hp' ? 'selected' : ''}>❤️ AUM. VIDA MÁX</option>
                     </select>
                     ${renderEventActionInput(tIdx, eIdx, event)}
                 </div>
@@ -799,14 +835,16 @@ function updateTriggerEventProp(tIdx, eIdx, prop, value) {
                 'blackout': 'activate',
                 'security_alert': 'activate',
                 'remote_signal': 'activate',
+                'global_signal': 'activate',
                 'dimension_shift': 'toggle',
                 'gravity': 'down',
                 'earthquake': '30',
                 'visual_sparks': '',
-                'dialogue': ''
+                'dialogue': '',
+                'grant_ability': 'grab'
             };
             event.action = defaults[value] || '';
-            if (value === 'remote_signal') event.channel = '0';
+            if (value === 'remote_signal' || value === 'global_signal') event.channel = '0';
             if (value === 'earthquake') event.force = '0.8';
         }
         
@@ -960,6 +998,58 @@ function setupPropertyListeners() {
         }
     };
 
+    document.getElementById('prop-exit-lvl').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        let val = e.target.value;
+        
+        // Find if this input matches a level name or index
+        const targetLvl = LEVELS.find((l, idx) => l.name === val || idx.toString() === val);
+        
+        // If we found a level and it has a name, ALWAYS use the name for stability
+        if (targetLvl && targetLvl.name) {
+            val = targetLvl.name;
+            e.target.value = val; // Update UI to show the resolved name
+        } else if (!isNaN(val) && val.trim() !== "") {
+            val = parseInt(val);
+        }
+        
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_exitTo`] = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-spawn-station').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const lvl = levelsData[currentLevelIdx];
+        lvl.spawnIsStation = e.target.checked;
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-label-text').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const text = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_label`] = text;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    document.getElementById('prop-label-color').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const color = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_labelColor`] = color;
+        }
+        saveHistory(); rebuildMock();
+    };
+
     // Channels & Numbers
     document.getElementById('prop-amps').oninput = (e) => {
         if (editTargets.length === 0) return;
@@ -1038,6 +1128,17 @@ function setupPropertyListeners() {
         saveHistory(); rebuildMock();
     };
 
+    document.getElementById('prop-is-global').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = e.target.checked;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            lvl.links[`${target.x},${target.y}_isGlobal`] = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+
     document.getElementById('prop-behavior').onchange = (e) => {
         if (editTargets.length === 0) return;
         const behavior = e.target.value;
@@ -1045,8 +1146,104 @@ function setupPropertyListeners() {
         if (!lvl.links) lvl.links = {};
         for (const target of editTargets) {
             const char = [currentBlocksMap[target.y][target.x], currentOverlayMap[target.y][target.x], currentMap[target.y][target.x]].find(c => c !== ' ');
-            if (char === 'E' || char === 'M') lvl.links[`${target.x},${target.y}_dir`] = parseInt(behavior);
+            if (char === 'E' || char === 'M' || char === 'R') lvl.links[`${target.x},${target.y}_dir`] = parseInt(behavior);
             else lvl.links[`${target.x},${target.y}_behavior`] = behavior;
+        }
+        saveHistory(); rebuildMock();
+    };
+
+    // Launcher properties
+    document.getElementById('prop-launcher-model').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const model = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        
+        let type, proj;
+        if (model === 'MECHANICAL') { type = 'box'; proj = 'box'; }
+        else if (model === 'VOID') { type = 'antimatter'; proj = 'antimatter'; }
+        else { type = 'energy'; proj = 'energy'; }
+
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].type = type;
+            lvl.links[key].projectileType = proj;
+        }
+        saveHistory(); rebuildMock();
+    };
+    document.getElementById('prop-launcher-rate').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseFloat(e.target.value) || 2.0;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].fireRate = Math.round(val * 60); 
+            lvl.links[key].rate = val; 
+        }
+        saveHistory(); rebuildMock();
+    };
+    document.getElementById('prop-launcher-speed').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseFloat(e.target.value) || 4.0;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].speed = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+    document.getElementById('prop-launcher-delay').oninput = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseFloat(e.target.value) || 0.0;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].initialDelay = Math.round(val * 60);
+            lvl.links[key].delay = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+    document.getElementById('prop-launcher-rotate-dir').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = e.target.value;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].rotateDir = val === 'FIXED' ? 'CW' : val;
+            lvl.links[key].autoRotate = val === 'FIXED' ? 0 : (lvl.links[key].autoRotate || 4);
+        }
+        saveHistory(); rebuildMock(); updatePropertyPanel();
+    };
+    document.getElementById('prop-launcher-axes').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseInt(e.target.value);
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].autoRotate = val;
+        }
+        saveHistory(); rebuildMock();
+    };
+    document.getElementById('prop-launcher-rotate-every').onchange = (e) => {
+        if (editTargets.length === 0) return;
+        const val = parseInt(e.target.value) || 1;
+        const lvl = levelsData[currentLevelIdx];
+        if (!lvl.links) lvl.links = {};
+        for (const target of editTargets) {
+            const key = `${target.x},${target.y}_launcher`;
+            if (!lvl.links[key]) lvl.links[key] = {};
+            lvl.links[key].rotateEvery = val;
         }
         saveHistory(); rebuildMock();
     };
@@ -1065,8 +1262,15 @@ function setupPropertyListeners() {
             chan: lvl.links?.[key],
             behavior: lvl.links?.[`${key}_behavior`],
             init: lvl.links?.[`${key}_init`],
+            isGlobal: lvl.links?.[`${key}_isGlobal`],
             dir: lvl.links?.[`${key}_dir`],
-            color: lvl.links?.[`${key}_color`]
+            color: lvl.links?.[`${key}_color`],
+            exitTo: lvl.links?.[`${key}_exitTo`],
+            spawnX: lvl.links?.[`${key}_spawnX`],
+            spawnY: lvl.links?.[`${key}_spawnY`],
+            label: lvl.links?.[`${key}_label`],
+            labelColor: lvl.links?.[`${key}_labelColor`],
+            launcher: lvl.links?.[`${key}_launcher`] ? JSON.parse(JSON.stringify(lvl.links[`${key}_launcher`])) : null
         };
     };
 
@@ -1079,8 +1283,15 @@ function setupPropertyListeners() {
             if (clipboard.chan !== undefined) lvl.links[key] = clipboard.chan;
             if (clipboard.behavior !== undefined) lvl.links[`${key}_behavior`] = clipboard.behavior;
             if (clipboard.init !== undefined) lvl.links[`${key}_init`] = clipboard.init;
+            if (clipboard.isGlobal !== undefined) lvl.links[`${key}_isGlobal`] = clipboard.isGlobal;
             if (clipboard.dir !== undefined) lvl.links[`${key}_dir`] = clipboard.dir;
             if (clipboard.color !== undefined) lvl.links[`${key}_color`] = clipboard.color;
+            if (clipboard.exitTo !== undefined) lvl.links[`${key}_exitTo`] = clipboard.exitTo;
+            if (clipboard.spawnX !== undefined) lvl.links[`${key}_spawnX`] = clipboard.spawnX;
+            if (clipboard.spawnY !== undefined) lvl.links[`${key}_spawnY`] = clipboard.spawnY;
+            if (clipboard.label !== undefined) lvl.links[`${key}_label`] = clipboard.label;
+            if (clipboard.labelColor !== undefined) lvl.links[`${key}_labelColor`] = clipboard.labelColor;
+            if (clipboard.launcher !== undefined) lvl.links[`${key}_launcher`] = JSON.parse(JSON.stringify(clipboard.launcher));
         }
         saveHistory(); rebuildMock(); updatePropertyPanel();
     };
@@ -1097,17 +1308,18 @@ function updatePropertyPanel() {
     document.getElementById('prop-amps').parentElement.style.display = isAmps ? 'flex' : 'none';
     if (isAmps) document.getElementById('prop-amps').value = char === 'T' ? 1 : parseInt(char);
 
-    const hasChannel = ['D', '_', 'P', 'E', 'O', '?', '(', ')', '[', ']', 'M'].includes(char);
+    const hasChannel = ['D', 'U', '_', 'P', 'E', 'O', '?', '(', ')', '[', ']', 'M'].includes(char);
     document.getElementById('prop-channel-container').style.display = hasChannel ? 'flex' : 'none';
     if (hasChannel) {
         const chan = lvl.links?.[`${p.x},${p.y}`] || 0;
         document.getElementById('prop-channel').value = chan;
         document.getElementById('prop-channel-val').innerText = chan;
+        document.getElementById('prop-is-global').checked = lvl.links?.[`${p.x},${p.y}_isGlobal`] === true;
         updateChannelGrid();
     }
 
     const hasBehavior = ['_', 'P', '?', 'D'].includes(char);
-    const isSpecial = char === 'E' || char === 'M';
+    const isSpecial = char === 'E' || char === 'M' || char === 'R';
     document.getElementById('prop-behavior-container').style.display = (hasBehavior || isSpecial) ? 'flex' : 'none';
     
     const behaviorSelect = document.getElementById('prop-behavior');
@@ -1129,9 +1341,13 @@ function updatePropertyPanel() {
         behaviorSelect.value = lvl.links?.[`${p.x},${p.y}_dir`] || 0;
     }
 
-    const hasToggle = ['D', 'E', '_', 'P'].includes(char);
+    const hasToggle = ['D', 'U', 'E', '_', 'P'].includes(char);
     document.getElementById('prop-toggle-container').style.display = hasToggle ? 'flex' : 'none';
     if (hasToggle) {
+        const toggleLabel = document.querySelector('#prop-toggle-container span');
+        if (toggleLabel) {
+            toggleLabel.innerText = (char === 'D' || char === 'U') ? 'Inicia Aberta:' : 'Inicial On:';
+        }
         document.getElementById('prop-toggle').checked = lvl.links?.[`${p.x},${p.y}_init`] === true;
     }
 
@@ -1149,8 +1365,82 @@ function updatePropertyPanel() {
         document.getElementById('prop-dialogue-icon').value = d.icon || "central";
         document.getElementById('prop-dialogue-trigger').value = d.trigger || "walk";
         document.getElementById('prop-dialogue-autodismiss').checked = d.autoDismiss !== false;
-        document.getElementById('prop-dialogue-delay').value = (d.dismissDelay !== undefined ? d.dismissDelay : 1500) / 1000;
+        document.getElementById('prop-dialogue-delay').value = (d.dismissDelay || 1500) / 1000;
         document.getElementById('prop-dialogue-lockplayer').checked = d.lockPlayer !== false;
+    }
+
+    const isExitDoor = char === 'U';
+    document.getElementById('prop-exit-container').style.display = isExitDoor ? 'flex' : 'none';
+    if (isExitDoor) {
+        document.getElementById('prop-exit-lvl').value = lvl.links?.[`${p.x},${p.y}_exitTo`] ?? 0;
+        
+        const spawnX = lvl.links?.[`${p.x},${p.y}_spawnX`];
+        const spawnY = lvl.links?.[`${p.x},${p.y}_spawnY`];
+        const infoEl = document.getElementById('prop-exit-spawn-info');
+        const coordsEl = document.getElementById('prop-exit-spawn-coords');
+        
+        if (spawnX !== undefined && spawnY !== undefined) {
+            if (infoEl) infoEl.style.display = 'block';
+            if (coordsEl) coordsEl.innerText = `${spawnX}, ${spawnY}`;
+        } else {
+            if (infoEl) infoEl.style.display = 'none';
+        }
+
+        // Update datalist
+        const dl = document.getElementById('level-search-list');
+        if (dl) {
+            dl.innerHTML = '';
+            LEVELS.forEach((l, idx) => {
+                const opt = document.createElement('option');
+                opt.value = l.name || idx;
+                opt.textContent = `[ID: ${idx}]`;
+                dl.appendChild(opt);
+            });
+        }
+    }
+
+    const isSpawn = char === '@';
+    document.getElementById('prop-spawn-container').style.display = isSpawn ? 'flex' : 'none';
+    if (isSpawn) {
+        document.getElementById('prop-spawn-station').checked = lvl.spawnIsStation === true;
+    }
+
+    const isLauncher = char === 'R';
+    document.getElementById('prop-launcher-container').style.display = isLauncher ? 'flex' : 'none';
+    if (isLauncher) {
+        const config = lvl.links?.[`${p.x},${p.y}_launcher`] || {};
+        let model = 'ENERGY';
+        if (config.type === 'box') model = 'MECHANICAL';
+        if (config.type === 'antimatter') model = 'VOID';
+        
+        document.getElementById('prop-launcher-model').value = model;
+        document.getElementById('prop-launcher-rate').value = config.rate || 2.0;
+        document.getElementById('prop-launcher-speed').value = config.speed || 4.0;
+        document.getElementById('prop-launcher-delay').value = config.delay || 0.0;
+        
+        const autoRotate = config.autoRotate || 0;
+        const rotateDir = config.rotateDir || 'CW';
+        
+        document.getElementById('prop-launcher-rotate-dir').value = autoRotate === 0 ? 'FIXED' : rotateDir;
+        document.getElementById('prop-launcher-axes').value = autoRotate || 4;
+        document.getElementById('prop-launcher-rotate-every').value = config.rotateEvery || 1;
+        document.getElementById('prop-launcher-axes-container').style.display = autoRotate === 0 ? 'none' : 'flex';
+        
+        // Channel Grid support for Launcher
+        const chan = lvl.links?.[`${p.x},${p.y}`] || 0;
+        document.getElementById('prop-channel').value = chan;
+        document.getElementById('prop-channel-val').innerText = chan;
+        document.getElementById('prop-channel-container').style.display = 'flex';
+        document.getElementById('prop-global-container').style.display = 'flex';
+        document.getElementById('prop-is-global').checked = lvl.links?.[`${p.x},${p.y}_isGlobal`] || false;
+        updateChannelGrid();
+    }
+
+    const isLabel = char === '!';
+    document.getElementById('prop-label-container').style.display = isLabel ? 'flex' : 'none';
+    if (isLabel) {
+        document.getElementById('prop-label-text').value = lvl.links?.[`${p.x},${p.y}_label`] || "";
+        document.getElementById('prop-label-color').value = lvl.links?.[`${p.x},${p.y}_labelColor`] || "#00f0ff";
     }
 }
 
@@ -1170,7 +1460,7 @@ function updateChannelGrid() {
         }
     }
 
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 50; i++) {
         const cell = document.createElement('div');
         cell.className = 'chan-cell' + (i === currentChan ? ' active' : '') + (usedChannels.has(i) ? ' in-use' : '');
         cell.innerText = i;
@@ -1214,7 +1504,21 @@ function renderEventActionInput(tIdx, eIdx, event) {
                         <option value="deactivate" ${event.action === 'deactivate' ? 'selected' : ''}>DESATIVAR</option>
                         <option value="toggle" ${event.action === 'toggle' ? 'selected' : ''}>ALTERNAR</option>
                     </select>
-                    <input type="number" min="0" max="29" value="${event.channel || 0}" 
+                    <input type="number" min="0" max="49" value="${event.channel || 0}" 
+                        style="${style} width: 40px;" 
+                        onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'channel', this.value)" placeholder="Ch">
+                </div>
+            `;
+            
+        case 'global_signal':
+            return `
+                <div style="display: flex; gap: 4px;">
+                    <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style} flex: 1;">
+                        <option value="activate" ${event.action === 'activate' ? 'selected' : ''}>GRAVAR SINAL</option>
+                        <option value="deactivate" ${event.action === 'deactivate' ? 'selected' : ''}>APAGAR SINAL</option>
+                        <option value="toggle" ${event.action === 'toggle' ? 'selected' : ''}>ALTERNAR</option>
+                    </select>
+                    <input type="number" min="0" max="49" value="${event.channel || 0}" 
                         style="${style} width: 40px;" 
                         onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'channel', this.value)" placeholder="Ch">
                 </div>
@@ -1267,6 +1571,23 @@ function renderEventActionInput(tIdx, eIdx, event) {
                     style="${style}" 
                     onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" placeholder="Chave do Diálogo">
             `;
+        
+        case 'grant_ability':
+            return `
+                <select onchange="updateTriggerEventProp(${tIdx}, ${eIdx}, 'action', this.value)" style="${style}">
+                    <option value="grab" ${event.action === 'grab' ? 'selected' : ''}>AGARRAR (Módulo Magnético)</option>
+                    <option value="multi_push" ${event.action === 'multi_push' ? 'selected' : ''}>MÚLTIPLO EMPUXO (Hidráulica)</option>
+                    <option value="manipulate_prisms" ${event.action === 'manipulate_prisms' ? 'selected' : ''}>ÓPTICA AVANÇADA (Prismas)</option>
+                    <option value="singularity_interaction" ${event.action === 'singularity_interaction' ? 'selected' : ''}>CHAVE DE SINGULARIDADE</option>
+                    <option value="portal_travel" ${event.action === 'portal_travel' ? 'selected' : ''}>VIAGEM ENTRE-PORTAIS</option>
+                    <option value="rotate_emitters" ${event.action === 'rotate_emitters' ? 'selected' : ''}>GIRO DE EMISSORES</option>
+                    <option value="sideways_transmission" ${event.action === 'sideways_transmission' ? 'selected' : ''}>DIFUSÃO LATERAL (Cubos)</option>
+                    <option value="run" ${event.action === 'run' ? 'selected' : ''}>SOBRECARGA (Sprint/Correr)</option>
+                </select>
+            `;
+
+        case 'increase_max_hp':
+            return `<div style="font-size: 11px; color: #ffcc00; padding: 4px; background: rgba(0,0,0,0.3); border-radius: 3px;">+1 Tanque de HP (Máximo)</div>`;
 
         default:
             return `<div style="font-size: 9px; color: #444; padding: 4px;">Sem parâmetros</div>`;

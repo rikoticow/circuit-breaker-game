@@ -208,7 +208,7 @@
     <!-- Mocks e Dependências -->
     <script>
         // Define AudioSys no escopo global antes dos scripts carregarem
-        window.audioCtx = null;
+        var audioCtx = null;
         window.AudioSys = {
             musicActive: false,
             currentThemeKey: 'industrial',
@@ -216,18 +216,18 @@
             current16thNote: 0,
             nextNoteTime: 0,
             tempoBPM: 120,
-            masterGain: null,
+            musicGain: null,
             
             init() {
-                if (window.audioCtx) return;
-                window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                this.masterGain = window.audioCtx.createGain();
-                this.masterGain.gain.value = 0.5;
-                this.masterGain.connect(window.audioCtx.destination);
+                if (audioCtx) return;
+                audioCtx = window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                this.musicGain = audioCtx.createGain();
+                this.musicGain.gain.value = 0.5;
+                this.musicGain.connect(audioCtx.destination);
             },
 
             resume() {
-                if (window.audioCtx) window.audioCtx.resume();
+                if (audioCtx) audioCtx.resume();
             }
         };
     </script>
@@ -239,10 +239,10 @@
     <script>
         const tracks = [
             { id: 'industrial', sector: '01', title: 'Steel Heart Awakening' },
-            { id: 'adventure', sector: '02', title: 'Binary Explorer' },
+            { id: 'jungle', sector: '02', title: 'Neon Wilds' },
             { id: 'aero', sector: '03', title: 'Skyward Flow' },
             { id: 'aquatic', sector: '04', title: 'Quantum Abyss' },
-            { id: 'jungle', sector: '05', title: 'Neon Wilds' },
+            { id: 'adventure', sector: '05', title: 'Binary Explorer' },
             { id: 'void', sector: '06', title: 'Shadows of the Void' },
             { id: 'epic', sector: '07', title: 'Reality Breach' },
             { id: 'climax', sector: '08', title: 'Overclocked Spirit' },

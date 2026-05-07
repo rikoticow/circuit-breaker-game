@@ -51,14 +51,20 @@ const ResultScreen = {
 
         // Capture result data
         const lvl = LEVELS[gameState.levelIndex];
-        const totalTime = lvl.timer || 60;
+        const totalTime = lvl ? (lvl.timer || 60) : 60;
         const timeRemaining = gameState.time;
-        const timePercent = (timeRemaining / totalTime) * 100;
-
-        // Percentage-based stars: >50% = 3, >20% = 2, else 1
-        const stars = timePercent > 50 ? 3 : (timePercent > 20 ? 2 : 1);
         
-        const baseScore = 1000 + Math.floor(timeRemaining * 10);
+        let stars = 1;
+        let baseScore = 1000;
+        
+        if (timeRemaining === -1) {
+            stars = 3; // Perfect completion if no timer specified (adventure style)
+            baseScore = 1000;
+        } else {
+            const timePercent = (timeRemaining / totalTime) * 100;
+            stars = timePercent > 50 ? 3 : (timePercent > 20 ? 2 : 1);
+            baseScore = 1000 + Math.floor(timeRemaining * 10);
+        }
 
         // Calculate bonus
         let bonus = 0;
@@ -66,7 +72,7 @@ const ResultScreen = {
         if (gameState.lives === 3) {
             bonus = 500;
             bonusLabel = 'INTEGRIDADE TOTAL (+500 CREDITS)';
-        } else if (timePercent > 75) {
+        } else if (timeRemaining !== -1 && (timeRemaining / totalTime) * 100 > 75) {
             bonus = 400;
             bonusLabel = 'VELOCIDADE RELÂMPAGO (+400 CREDITS)';
         } else if (stars === 3) {
@@ -136,7 +142,7 @@ const ResultScreen = {
         }
         if (key === 'Enter' || key === ' ') {
             if (window.AudioSys) AudioSys.corePowered();
-            if (this.selectedButton === 0) return 'REPLAY';
+            if (this.selectedButton === 0) return this.failed || this.isGameOver ? 'REPLAY' : 'REPLAY';
             if (this.failed || this.isGameOver) {
                 if (this.selectedButton === 1) return 'MAIN_MENU';
             } else {
@@ -650,7 +656,7 @@ const ResultScreen = {
         };
 
         // Left Column Items (Row index 0 and 1 relative to bodyYStart)
-        const timeBonusLabel = `(+${this.data.timeRemaining * 10} CREDITS)`;
+        const timeBonusLabel = this.data.timeRemaining === -1 ? null : `(+${this.data.timeRemaining * 10} CREDITS)`;
         const moveBonusLabel = this.data.economyBonus > 0 ? `(+${this.data.economyBonus} CREDITS)` : null;
         
         drawColItem(0, 'TIME', this._formatTime(this.data.timeRemaining), timeBonusLabel, 0);
@@ -720,17 +726,17 @@ const ResultScreen = {
         const isLastLevel = this.data.levelIndex >= LEVELS.length - 1;
         const seconds = Math.max(0, Math.ceil(this.autoAdvanceTimer / 60));
         
-        let nextLevelLabel = 'PRÓXIMO NÍVEL';
+        let nextLevelLabel = 'CONTINUAR';
         let nextBtnColor = '#00ff9f';
 
         if (isLastLevel) {
             nextLevelLabel = 'CONCLUIR';
             nextBtnColor = '#00f0ff'; // Cyan for completion
         } else if (typeof LevelSelector !== 'undefined' && LevelSelector.pendingChapterUnlock) {
-            nextLevelLabel = this.isAutoAdvanceActive ? `NOVO SETOR (${seconds}s)` : 'NOVO SETOR';
+            nextLevelLabel = this.isAutoAdvanceActive ? `CONTINUAR (${seconds}s)` : 'CONTINUAR';
             nextBtnColor = '#00ff9f';
         } else if (this.isAutoAdvanceActive) {
-            nextLevelLabel = `PRÓXIMO NÍVEL (${seconds}s)`;
+            nextLevelLabel = `CONTINUAR (${seconds}s)`;
         }
 
         let buttons = [];
@@ -741,8 +747,8 @@ const ResultScreen = {
             ];
         } else {
             buttons = [
-                { label: 'REPLAY', width: 100, color: '#00f0ff' },
-                { label: nextLevelLabel, width: 240, color: nextBtnColor },
+                { label: 'REPETIR SETOR', width: 140, color: '#00f0ff' },
+                { label: nextLevelLabel, width: 220, color: nextBtnColor },
                 { label: 'MENU', width: 100, color: '#00f0ff' }
             ];
         }
@@ -900,8 +906,9 @@ const ResultScreen = {
     },
 
     _formatTime(seconds) {
+        if (seconds === -1) return '--:--';
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 };

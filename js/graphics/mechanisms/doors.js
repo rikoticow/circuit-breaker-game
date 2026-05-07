@@ -1,13 +1,37 @@
 Object.assign(Graphics, {
-    drawDoor(x, y, state, isError, frame, orientation, side, openPct = null) {
+    drawDoor(x, y, state, isError, frame, orientation, side, openPct = null, isExit = false, isUnlocked = false) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
 
+        // Status Light Logic
+        let lightColor = isUnlocked ? '#00ff9f' : '#ff003c';
+        
+        // Broken doors flash between Yellow and Red (Emergency hazard)
+        if (state === 'BROKEN_OPEN') {
+            lightColor = (Math.floor(frame / 15) % 2 === 0) ? '#ffcc00' : '#ff0000';
+        }
+        
         if (state === 'OPEN' || state === 'BROKEN_OPEN') {
-            this.ctx.fillStyle = 'rgba(0, 240, 255, 0.05)';
+            this.ctx.fillStyle = isExit ? 'rgba(0, 255, 159, 0.05)' : 'rgba(0, 240, 255, 0.05)';
             this.ctx.fillRect(px, py, ts, ts);
         }
+
+        // 1. Draw Door Frame (Static part with the light)
+        this.ctx.strokeStyle = '#1a202c';
+        this.ctx.lineWidth = 4;
+        this.ctx.strokeRect(px + 2, py + 2, ts - 4, ts - 4);
+        
+        // Status LED Support (Small base)
+        this.ctx.fillStyle = '#2d3748';
+        this.ctx.fillRect(px + ts/2 - 9, py - 7, 18, 6);
+        
+        // Status LED (Rectangular Bar - 50% size)
+        this.ctx.fillStyle = lightColor;
+        this.ctx.shadowBlur = 12;
+        this.ctx.shadowColor = lightColor;
+        this.ctx.fillRect(px + ts/2 - 8, py - 6, 16, 4);
+        this.ctx.shadowBlur = 0;
 
         this.ctx.save();
         if (openPct === null) {
@@ -21,6 +45,12 @@ Object.assign(Graphics, {
         else if (side === 'TOP') oy = -dist * openPct;
         else if (side === 'BOTTOM') oy = dist * openPct;
         else oy = -dist * openPct;
+
+        // Apply Mask: Only draw the door panels within the tile bounds
+        // This makes it look like they are entering the ceiling/wall
+        this.ctx.beginPath();
+        this.ctx.rect(px, py, ts, ts);
+        this.ctx.clip();
 
         this.ctx.translate(px + ox, py + oy);
         this.ctx.fillStyle = '#2d3748';
@@ -60,8 +90,9 @@ Object.assign(Graphics, {
         this.ctx.clip();
         
         const stripeW = 8;
+        const mainColor = isExit ? '#00ff9f' : '#ffcc00';
         for (let i = -ts; i < ts * 2; i += stripeW * 2) {
-            this.ctx.fillStyle = '#ffcc00';
+            this.ctx.fillStyle = mainColor;
             this.ctx.beginPath();
             this.ctx.moveTo(i, 0); this.ctx.lineTo(i + stripeW, 0); this.ctx.lineTo(i + stripeW - ts, ts); this.ctx.lineTo(i - ts, ts);
             this.ctx.fill();
@@ -89,12 +120,12 @@ Object.assign(Graphics, {
                 else if (side === 'TOP') { sx = edgePos; sy = ts - 2; }
                 else if (side === 'BOTTOM') { sx = edgePos; sy = 2; }
                 else { sx = edgePos; sy = ts - 2; }
-                for(let i=0; i<2; i++) this.spawnParticle(px + ox + sx, py + oy + sy, '#ffcc00', 'spark', true);
+                for(let i=0; i<2; i++) this.spawnParticle(px + ox + sx, py + oy + sy, mainColor, 'spark', true);
             }
         } else if (isError) {
             if (Math.floor(frame / 10) % 2 === 0) {
                 this.ctx.save();
-                this.ctx.fillStyle = '#ffcc00';
+                this.ctx.fillStyle = mainColor;
                 this.ctx.beginPath();
                 this.ctx.arc(ts/2, ts/2, 6, 0, Math.PI * 2);
                 this.ctx.fill();

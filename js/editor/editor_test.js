@@ -25,8 +25,7 @@ function startTest() {
     const currentLvlData = levelsData[currentLevelIdx] || {};
     const lvl = {
         name: document.getElementById('lvl-name').value || "NÍVEL EM EDIÇÃO",
-        time: parseInt(document.getElementById('lvl-battery').value) || 30,
-        timer: parseInt(document.getElementById('lvl-timer').value) || 60,
+        timer: (document.getElementById('lvl-timer') ? parseInt(document.getElementById('lvl-timer').value) : 0) || 0,
         map: currentMap.map(row => row.join('')),
         blocks: currentBlocksMap.map(row => row.join('')),
         overlays: currentOverlayMap.map(row => row.join('')),
@@ -42,6 +41,8 @@ function startTest() {
     isTestMode = true;
     document.getElementById('test-overlay').style.display = 'flex';
     
+    if (window.GameProgress) GameProgress.clear();
+    
     // 4. Mock LEVELS BEFORE GameState
     if (!originalLevels) originalLevels = LEVELS;
     LEVELS = [lvl];
@@ -55,7 +56,7 @@ function startTest() {
     testGame.loadLevel(0); // Force load now that LEVELS is [lvl]
     testGame.checkDialogues('start');
     
-    testGame.maxMoves = lvl.time;
+    testGame.maxMoves = 0;
     testGame.transitionState = 'NONE';
     testGame.transitionProgress = 0;
     
@@ -158,6 +159,28 @@ function testLoop(timestamp) {
     }
 
     // Entities (Simplified for test loop, reusing logic from main.js)
+    if (testGame.worldLabels) {
+        for (const lbl of testGame.worldLabels) {
+            const dx = testGame.player.visualX - lbl.x;
+            const dy = testGame.player.visualY - lbl.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            let alpha = 0;
+            if (dist <= 2) alpha = 1;
+            else if (dist < 4) alpha = 1 - (dist - 2) / 2;
+            
+            if (alpha > 0) {
+                Graphics.drawWorldLabel(lbl.x, lbl.y, lbl.text, lbl.color, alpha);
+            }
+        }
+    }
+
+    if (testGame.shopTerminals) {
+        for (const st of testGame.shopTerminals) {
+            Graphics.drawShopTerminal(st.x, st.y, testAnimFrame);
+        }
+    }
+
     for (const wr of testGame.wires) {
         const flow = testGame.poweredWires.get(`${wr.x},${wr.y}`) || null;
         Graphics.drawWire(wr.x, wr.y, wr.type, flow, testAnimFrame);
@@ -169,6 +192,12 @@ function testLoop(timestamp) {
     const isTestSliding = testGame && testGame.gravitySlidingDir !== null;
     for (const gb of testGame.gravityButtons) Graphics.drawGravityButton(gb.x, gb.y, gb.dir, testAnimFrame, gb.flashTimer, isTestSliding);
     for (const sw of testGame.singularitySwitchers) Graphics.drawSingularitySwitcher(sw.x, sw.y, testGame.isSolarPhase, testAnimFrame, sw.lightningTimer, testGame.map, sw.lightningSeed);
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const c = testGame.map[y][x];
+        }
+    }
 
     for (const s of testGame.chargingStations) {
         const powered = testGame.poweredStations.has(`${s.x},${s.y}`);
@@ -182,7 +211,9 @@ function testLoop(timestamp) {
 
     // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
     for (const d of testGame.doors) {
-        Graphics.drawDoor(d.x, d.y, d.state, d.error, testAnimFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
+        const exitChan = testGame.levelData.exitChannel || 99;
+        const isExit = (d.channel == exitChan) || (d.exitTo !== undefined) || d.isExit;
+        Graphics.drawDoor(d.x, d.y, d.state, d.error, testAnimFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen, isExit);
     }
 
     for (let y = 0; y < h; y++) {
@@ -290,9 +321,7 @@ function updateTestUI() {
     if (levelNameEl) {
         const lvlName = document.getElementById('lvl-name').value || "NÍVEL DE TESTE";
         levelNameEl.innerText = lvlName.toUpperCase();
-    }
-
-    const timeEl = document.getElementById('ui-time');
+    }    const timeEl = document.getElementById('ui-time');
     if (timeEl) {
         let min = Math.floor(testGame.time / 60);
         let sec = testGame.time % 60;
@@ -304,9 +333,8 @@ function updateTestUI() {
 
     updateBar('lives-bar', testGame.lives, 3);
     
-    const maxMoves = testGame.maxMoves || 30;
-    updateBar('energy-bar-seg', testGame.moves, maxMoves);
-    document.getElementById('ui-power-count').innerText = testGame.moves.toString().padStart(2, '0');
+    // updateBar('energy-bar-seg', testGame.moves, maxMoves); // REMOVED
+    // document.getElementById('ui-power-count').innerText = testGame.moves.toString().padStart(2, '0'); // REMOVED
 
     let totalReq = 0;
     let totalCurrent = 0;

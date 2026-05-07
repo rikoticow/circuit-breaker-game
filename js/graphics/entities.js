@@ -161,9 +161,19 @@ Object.assign(Graphics, {
         this.ctx.restore();
     },
 
-    drawRobot(x, y, dir, frame, colorOverride = null, vx = 0, vy = 0, isDead = false, deathType = null, deathTimer = 0, deathDir = {x:0, y:0}, isGrabbing = false) {
+    drawRobot(x, y, dir, frame, colorOverride = null, vx = 0, vy = 0, isDead = false, deathType = null, deathTimer = 0, deathDir = {x:0, y:0}, isGrabbing = false, flashTimer = 0) {
         const ts = this.tileSize, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
         this.ctx.save(); this.ctx.translate(cx, cy);
+        
+        // --- DAMAGE FLASH EFFECT ---
+        if (flashTimer > 0) {
+            if (Math.floor(frame / 2) % 2 === 0) {
+                this.ctx.filter = 'brightness(5) contrast(2)';
+            }
+            if (frame % 3 === 0) {
+                this.spawnParticle(cx + (Math.random()-0.5)*15, cy + (Math.random()-0.5)*15, '#ffffff', 'spark');
+            }
+        }
         if (isDead && deathType === 'HOLE') {
             const progress = Math.min(1.0, deathTimer / 20), scale = Math.max(0, 1.0 - progress), rot = progress * Math.PI * 6;
             this.ctx.scale(scale, scale); this.ctx.rotate(rot); this.ctx.globalAlpha = Math.max(0, 1.0 - progress); this.ctx.filter = `brightness(${Math.max(0, 100 - progress * 150)}%)`;
@@ -250,5 +260,153 @@ Object.assign(Graphics, {
         const comp = rem === 0; this.ctx.fillStyle = comp ? 'rgba(0, 100, 50, 0.95)' : 'rgba(10, 15, 20, 0.95)'; this.ctx.strokeStyle = comp ? '#00ff9f' : '#00f0ff'; this.ctx.lineWidth = 2;
         const r = 6; this.ctx.beginPath(); this.ctx.moveTo(bgX + r, bgY); this.ctx.lineTo(bgX + bgW - r, bgY); this.ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + r); this.ctx.lineTo(bgX + bgW, bgY + bgH - r); this.ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - r, bgY + bgH); this.ctx.lineTo(bgX + r, bgY + bgH); this.ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - r); this.ctx.lineTo(bgX, bgY + r); this.ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY); this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke();
         this.ctx.fillStyle = '#fff'; this.ctx.textBaseline = 'middle'; this.ctx.fillText(val, cx, textY + 1); this.ctx.textBaseline = 'alphabetic';
+    },
+
+    drawShopTerminal(x, y, frame) {
+        const ts = this.tileSize, px = x * ts, py = y * ts;
+        const cx = px + ts/2, cy = py + ts/2;
+        this.ctx.save();
+        
+        // 1. External Casing (Bulkier/Industrial)
+        // Draw slightly wider/taller than the hit-box for presence
+        const casingGrad = this.ctx.createLinearGradient(px, py, px + ts, py + ts);
+        casingGrad.addColorStop(0, '#1e1e24');
+        casingGrad.addColorStop(0.5, '#33333d');
+        casingGrad.addColorStop(1, '#121217');
+        this.ctx.fillStyle = casingGrad;
+        
+        // Main Body (Bulkier)
+        this.ctx.fillRect(px + 1, py - 2, ts - 2, ts + 2); // Slight vertical overflow
+        
+        // Side Supports/Pillars
+        this.ctx.fillStyle = '#0a0a0f';
+        this.ctx.fillRect(px, py + 2, 3, ts - 4);
+        this.ctx.fillRect(px + ts - 3, py + 2, 3, ts - 4);
+
+        // Bevel / Rim
+        this.ctx.strokeStyle = '#4a4a55';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(px + 2, py - 1, ts - 4, ts);
+
+        // 2. Main Screen Area (CRT Green)
+        this.ctx.fillStyle = '#003300'; // Darker background
+        this.ctx.fillRect(px + 5, py + 3, ts - 10, 16);
+        
+        // CRT Scanline Effect (Static)
+        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        for(let i=0; i<16; i+=2) {
+            this.ctx.fillRect(px + 5, py + 3 + i, ts - 10, 1);
+        }
+
+        // Animated Data Scroll (Fixed math to stay inside ts-10)
+        const scrollOffset = (frame * 0.3) % 10;
+        this.ctx.fillStyle = 'rgba(0, 255, 80, 0.4)';
+        const screenW = ts - 10; // 22px
+        for(let i=0; i<3; i++) {
+            const h = 1 + Math.random() * 2;
+            const sx = px + 7 + i*7; // 7, 14, 21. Max at 21+6=27. Wait, 5+22=27. Perfect.
+            this.ctx.fillRect(sx, py + 4 + scrollOffset, 4, h);
+        }
+
+        // Shop Icon ($) - Golden
+        this.ctx.fillStyle = '#ffd700'; // Gold
+        this.ctx.font = 'bold 16px "VT323", monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowBlur = 4;
+        this.ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+        this.ctx.fillText('$', cx, py + 15);
+        this.ctx.shadowBlur = 0;
+
+        // 3. Control Panel
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(px + 4, py + 21, ts - 8, 8);
+        
+        // Keyboard (Illuminated keys)
+        for(let i=0; i<5; i++) {
+            for(let j=0; j<2; j++) {
+                const isSpecial = (i + j + Math.floor(frame/15)) % 6 === 0;
+                this.ctx.fillStyle = isSpecial ? '#ff8800' : '#333';
+                this.ctx.fillRect(px + 6 + i*4, py + 22 + j*3, 3, 2);
+            }
+        }
+
+        // 4. Status LEDs
+        const ledOn = (frame % 30 < 15);
+        this.ctx.fillStyle = ledOn ? '#ff3344' : '#550000';
+        this.ctx.fillRect(px + ts - 8, py + 4, 2, 2); 
+        this.ctx.fillStyle = '#00ff88';
+        this.ctx.fillRect(px + ts - 8, py + 8, 2, 2);
+
+        // 5. Cable connection (bottom)
+        this.ctx.strokeStyle = '#111';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(cx - 4, py + ts);
+        this.ctx.quadraticCurveTo(cx - 2, py + ts + 4, cx, py + ts);
+        this.ctx.stroke();
+
+        this.ctx.restore();
+    },
+
+    drawChargingStation(x, y, powered, frame) {
+        const ts = this.tileSize, px = x * ts, py = y * ts;
+        const cx = px + ts/2, cy = py + ts/2;
+        this.ctx.save();
+        
+        // 1. Octagonal Pad Base
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.beginPath();
+        const r = ts/2 - 2;
+        for(let i=0; i<8; i++) {
+            const angle = (i * Math.PI / 4) + Math.PI/8;
+            const ax = cx + Math.cos(angle) * r;
+            const ay = cy + Math.sin(angle) * r;
+            if(i===0) this.ctx.moveTo(ax, ay);
+            else this.ctx.lineTo(ax, ay);
+        }
+        this.ctx.closePath();
+        this.ctx.fill();
+        
+        // Rim highlight
+        this.ctx.strokeStyle = powered ? '#00f0ff' : '#333';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // 2. Inner Circuitry Lines
+        if (powered) {
+            this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+            this.ctx.lineWidth = 1;
+            for(let i=0; i<4; i++) {
+                const angle = i * Math.PI / 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(cx + Math.cos(angle) * 4, cy + Math.sin(angle) * 4);
+                this.ctx.lineTo(cx + Math.cos(angle) * 12, cy + Math.sin(angle) * 12);
+                this.ctx.stroke();
+            }
+        }
+
+        // 3. Central Energy Core (embedded)
+        const pulse = 0.6 + Math.sin(frame * 0.1) * 0.4;
+        const coreColor = powered ? `rgba(0, 240, 255, ${pulse})` : '#222';
+        this.ctx.fillStyle = coreColor;
+        this.ctx.shadowBlur = powered ? 10 * pulse : 0;
+        this.ctx.shadowColor = '#00f0ff';
+        
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // 4. Rotating Charging Ring
+        if (powered) {
+            this.ctx.shadowBlur = 0;
+            this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+            this.ctx.setLineDash([4, 4]);
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, 10, frame * 0.05, frame * 0.05 + Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
+
+        this.ctx.restore();
     }
 });

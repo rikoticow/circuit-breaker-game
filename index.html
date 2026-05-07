@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,37 +9,10 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/dialogue.css">
 </head>
+
 <body>
     <div id="game-container">
-        <div id="ui-top">
-            <div class="hazard-overlay"></div>
-            <div class="ui-element" id="ui-level-name">LOADING...</div>
-            <div class="ui-separator">|</div>
-            <div class="ui-element">TEMPO <span id="ui-time">01:00</span></div>
-            <div class="ui-separator">|</div>
-            <div class="ui-element scrap-display"><div class="ui-scrap-icon"></div> <span id="ui-score">0/0</span></div>
-        </div>
-        
         <canvas id="gameCanvas" width="640" height="480"></canvas>
-        
-        <div id="ui-bottom">
-            <div class="hazard-overlay"></div>
-            <div class="ui-status-bars">
-                <div class="ui-bar-container horizontal">
-                    <span class="bar-label">VIDAS</span>
-                    <div id="lives-bar" class="segmented-bar horizontal" style="--bar-color: #ffcc00;"></div>
-                </div>
-                <div class="ui-bar-container horizontal">
-                    <span class="bar-label">ENERGIA</span>
-                    <div id="energy-bar-seg" class="segmented-bar horizontal" style="--bar-color: #00f0ff;"></div>
-                    <span id="ui-power-count" class="bar-label">00</span>
-                </div>
-                <div class="ui-bar-container horizontal">
-                    <span class="bar-label">AMPERES</span>
-                    <div id="amps-bar" class="segmented-bar horizontal fixed-segments" style="--bar-color: #00ff9f;"></div>
-                </div>
-            </div>
-        </div>
 
         <style>
             .ui-status-bars {
@@ -46,121 +20,162 @@
                 justify-content: center;
                 gap: 20px;
                 padding: 10px;
-                background: rgba(0,0,0,0.8);
+                background: rgba(0, 0, 0, 0.8);
                 border-top: 2px solid #222;
             }
+
             .ui-bar-container.horizontal {
                 display: flex;
                 align-items: center;
                 gap: 8px;
             }
+
             .segmented-bar.horizontal {
                 flex-direction: row;
                 height: 12px;
                 gap: 1px;
             }
+
             #energy-bar-seg {
-                width: 250px; /* Max width for Power only */
+                width: 250px;
+                /* Max width for Power only */
             }
+
             .segmented-bar.horizontal .segment {
-                flex: 1; 
+                flex: 1;
                 height: 100%;
                 min-width: 1px;
             }
+
             .fixed-segments .segment {
                 flex: none !important;
                 width: 8px !important;
             }
+
             #lives-bar .segment {
                 flex: none !important;
-                width: 12px !important; /* Extra large for lives */
+                width: 12px !important;
+                /* Extra large for lives */
             }
+
             .bar-label {
                 font-family: 'VT323', monospace;
                 font-size: 14px;
                 color: #fff;
                 text-shadow: 1px 1px #000;
             }
+
             .segmented-bar {
                 background: #000;
                 border: 2px solid #fff;
                 padding: 1px;
                 display: flex;
-                box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+                box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
             }
+
             .segmented-bar.vertical {
                 flex-direction: column-reverse;
                 width: 14px;
                 gap: 1px;
             }
+
             .segment {
                 flex: 1;
                 height: 100%;
                 min-width: 1px;
                 background: var(--bar-color);
-                box-shadow: inset 1px 1px 0 rgba(255,255,255,0.3), 
-                            inset -1px -1px 0 rgba(0,0,0,0.3);
-                border: 1px solid rgba(0,0,0,0.2);
-                box-sizing: border-box; /* Crucial for size consistency */
+                box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.3),
+                    inset -1px -1px 0 rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                box-sizing: border-box;
+                /* Crucial for size consistency */
             }
+
             .segment.empty {
                 background: #222;
-                box-shadow: inset 1px 1px 2px rgba(0,0,0,0.6);
-                border: 1px solid rgba(0,0,0,0.4);
+                box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.6);
+                border: 1px solid rgba(0, 0, 0, 0.4);
             }
 
             /* Hazard Overlay for UI coverage */
-            #ui-top, #ui-bottom {
+            #ui-top,
+            #ui-bottom {
                 position: relative;
                 overflow: hidden;
             }
-            .ui-element, .ui-status-bars {
+
+            .ui-element,
+            .ui-status-bars {
                 position: relative;
                 transition: filter 0.3s;
             }
-            #ui-top.covered .ui-element, #ui-bottom.covered .ui-status-bars {
+
+            #ui-top.covered .ui-element,
+            #ui-bottom.covered .ui-status-bars {
                 filter: brightness(0.2) grayscale(1);
             }
+
             .hazard-overlay {
                 position: absolute;
-                top: 0; left: 0; width: 200%; height: 100%; /* Wider for scrolling */
-                background: repeating-linear-gradient(
-                    -45deg,
-                    #ffcc00,
-                    #ffcc00 20px,
-                    #111 20px,
-                    #111 40px
-                );
-                background-size: 56.56px 100%; /* Calculated for seamless 45deg repeat (40 * sqrt(2)) */
+                top: 0;
+                left: 0;
+                width: 200%;
+                height: 100%;
+                /* Wider for scrolling */
+                background: repeating-linear-gradient(-45deg,
+                        #ffcc00,
+                        #ffcc00 20px,
+                        #111 20px,
+                        #111 40px);
+                background-size: 56.56px 100%;
+                /* Calculated for seamless 45deg repeat (40 * sqrt(2)) */
                 border-top: 2px solid #444;
                 border-bottom: 2px solid #000;
-                box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+                box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
                 z-index: 200;
                 display: none;
                 opacity: 0;
                 transition: opacity 0.3s;
                 animation: hazard-scroll 1s linear infinite;
             }
+
             @keyframes hazard-scroll {
-                from { background-position: 0 0; }
-                to { background-position: 56.56px 0; }
+                from {
+                    background-position: 0 0;
+                }
+
+                to {
+                    background-position: 56.56px 0;
+                }
             }
-            #ui-top.covered .hazard-overlay, #ui-bottom.covered .hazard-overlay {
+
+            #ui-top.covered .hazard-overlay,
+            #ui-bottom.covered .hazard-overlay {
                 display: block;
                 opacity: 1;
             }
+
             /* Add some industrial bolts to the overlay */
-            .hazard-overlay::before, .hazard-overlay::after {
+            .hazard-overlay::before,
+            .hazard-overlay::after {
                 content: '';
                 position: absolute;
-                width: 6px; height: 6px;
+                width: 6px;
+                height: 6px;
                 background: #666;
                 border-radius: 50%;
-                top: 50%; transform: translateY(-50%);
-                box-shadow: 1px 1px 0 rgba(255,255,255,0.2);
+                top: 50%;
+                transform: translateY(-50%);
+                box-shadow: 1px 1px 0 rgba(255, 255, 255, 0.2);
             }
-            .hazard-overlay::before { left: 10px; }
-            .hazard-overlay::after { right: 10px; }
+
+            .hazard-overlay::before {
+                left: 10px;
+            }
+
+            .hazard-overlay::after {
+                right: 10px;
+            }
         </style>
 
         <div id="screen-overlay" class="hidden">
@@ -169,15 +184,18 @@
         </div>
 
         <div id="notification-bar">Aperte R novamente para Reboot</div>
-        
+
         <style>
             #ui-bottom {
                 position: relative;
-                z-index: 110; /* Above notification */
+                z-index: 110;
+                /* Above notification */
             }
+
             #notification-bar {
                 position: absolute;
-                bottom: 34px; /* Exactly flush with UI bottom bar top edge */
+                bottom: 34px;
+                /* Exactly flush with UI bottom bar top edge */
                 left: 50%;
                 background: rgba(180, 0, 40, 1);
                 color: #fff;
@@ -185,27 +203,29 @@
                 font-family: 'VT323', monospace;
                 font-size: 16px;
                 border: 2px solid #fff;
-                border-bottom: none; /* Look flush with UI */
+                border-bottom: none;
+                /* Look flush with UI */
                 box-shadow: 0 -5px 15px rgba(255, 0, 60, 0.4);
                 z-index: 100;
                 pointer-events: none;
                 text-transform: uppercase;
                 letter-spacing: 2px;
                 white-space: nowrap;
-                
+
                 /* Animation: Emerge from behind UI */
                 transform: translateX(-50%) translateY(40px);
                 opacity: 0;
                 transition: transform 0.3s ease-out, opacity 0.2s;
             }
+
             #notification-bar.show {
                 transform: translateX(-50%) translateY(0);
                 opacity: 1;
             }
         </style>
-        
+
         <canvas id="transitionCanvas"></canvas>
-        
+
         <style>
             #transitionCanvas {
                 position: absolute;
@@ -216,6 +236,7 @@
                 z-index: 1000;
                 pointer-events: none;
             }
+
             #game-container {
                 position: relative;
                 overflow: hidden;
@@ -229,8 +250,9 @@
     <script src="js/lib/popper.min.js"></script>
     <script src="js/lib/tippy-bundle.umd.js"></script>
     <script src="js/dialogue.js"></script>
-    
+
     <script src="js/audio/core.js"></script>
+    <script src="js/audio/robot_voice.js"></script>
     <script src="js/audio/mechanisms_doors.js"></script>
     <script src="js/audio/mechanisms_blocks.js"></script>
     <script src="js/audio/mechanisms_energy.js"></script>
@@ -238,6 +260,10 @@
     <script src="js/audio/ui.js"></script>
     <script src="js/audio/instruments.js"></script>
     <script src="js/audio/music.js"></script>
+    <script src="js/systems/hp.js"></script>
+    <script src="js/systems/game_progress.js"></script>
+    <script src="js/systems/stats_terminal.js"></script>
+    <script src="js/systems/shop.js"></script>
     <script src="js/graphics.js"></script>
     <script src="js/graphics/environment.js"></script>
     <script src="js/graphics/mechanisms/conveyors.js"></script>
@@ -245,6 +271,7 @@
     <script src="js/graphics/mechanisms/triggers.js"></script>
     <script src="js/graphics/mechanisms/lasers.js"></script>
     <script src="js/graphics/mechanisms/doors.js"></script>
+    <script src="js/graphics/mechanisms/shop.js"></script>
     <script src="js/graphics/entities.js"></script>
     <script src="js/graphics/particles.js"></script>
     <script src="js/graphics/trails.js"></script>
@@ -252,7 +279,10 @@
     <script src="js/levels.js"></script>
     <script src="js/levelSelector.js"></script>
     <script src="js/resultScreen.js"></script>
+    <script src="js/entities/launchers.js"></script>
+    <script src="js/entities/enemies.js"></script>
     <script src="js/game.js"></script>
     <script src="js/main.js"></script>
 </body>
+
 </html>

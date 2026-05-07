@@ -1,7 +1,7 @@
 // Industrial Ambience: Lasers, Conveyors, and Electrical Hum
 Object.assign(window.AudioSys, {
     playConveyorGear(type = 0) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         const duration = 0.05;
         const baseFreq = type === 0 ? 120 : 160;
@@ -48,7 +48,7 @@ Object.assign(window.AudioSys, {
     shepardGains: [],
     shepardPhase: 0,
     updateConveyorShepard(active) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
 
         if (active) {
@@ -88,7 +88,7 @@ Object.assign(window.AudioSys, {
 
     startHum() {
         if (this.humNodes.length > 0) return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const osc1 = audioCtx.createOscillator();
         const osc2 = audioCtx.createOscillator();
         osc1.type = 'sawtooth'; osc1.frequency.value = 120;
@@ -210,7 +210,7 @@ Object.assign(window.AudioSys, {
     },
 
     conveyorSlide() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         const duration = 0.15;
         const bufferSize = audioCtx.sampleRate * duration;
@@ -233,7 +233,7 @@ Object.assign(window.AudioSys, {
     },
 
     playBlackoutStart() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         
         // 1. Heavy Metal Slam (Breaker Trip)
@@ -260,7 +260,7 @@ Object.assign(window.AudioSys, {
     },
 
     playBlackoutEnd() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
 
         // 1. Reactor Power Up (Rise)
@@ -290,7 +290,7 @@ Object.assign(window.AudioSys, {
     },
 
     playDimensionInversion() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         const dur = 0.6;
         
@@ -318,7 +318,7 @@ Object.assign(window.AudioSys, {
     },
 
     playEarthquake() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         const dur = 1.0;
         
@@ -341,14 +341,14 @@ Object.assign(window.AudioSys, {
     },
 
     playSpark() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         this.playTone(2000 + Math.random() * 3000, 'square', 0.05, 0.02);
     },
 
     playAlarm() {
         if (typeof audioCtx === 'undefined') return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
         
         // Two-tone siren

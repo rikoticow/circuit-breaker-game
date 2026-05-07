@@ -1243,5 +1243,161 @@ Object.assign(window.AudioSys, {
         filter.connect(gain); gain.connect(this.musicGain);
         osc1.start(time); osc2.start(time); lfo.start(time);
         osc1.stop(time + duration); osc2.stop(time + duration); lfo.stop(time + duration);
+    },
+
+    // --- Nexus Hub / Crono Nexus Instruments ---
+
+    playVoidPad_Nexus(chordFreqs, time, intensity) {
+        const duration = intensity === 0 ? 4.5 : 2.5;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(0.05, time + 1.0); 
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(200, time);
+        filter.frequency.exponentialRampToValueAtTime(1000, time + 1.5); 
+        chordFreqs.forEach((freq, index) => {
+            const osc = audioCtx.createOscillator();
+            osc.type = index % 2 === 0 ? 'sine' : 'sawtooth'; 
+            osc.frequency.value = freq / 2;
+            osc.detune.value = index * -6;
+            osc.connect(filter);
+            osc.start(time);
+            osc.stop(time + duration);
+        });
+        filter.connect(gain); gain.connect(this.musicGain);
+    },
+
+    playCyberArp(freq, time) {
+        const duration = 0.1;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 1500;
+        gain.gain.setValueAtTime(0.05, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    },
+
+    playActionChug(freq, time) {
+        const duration = 0.12;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(4000, time);
+        filter.frequency.exponentialRampToValueAtTime(300, time + 0.05);
+        gain.gain.setValueAtTime(0.12, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    },
+
+    playSteamVent(time, isLong = false) {
+        const duration = isLong ? 2.0 : 0.4;
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for(let i=0; i<data.length; i++) data[i] = Math.random() * 2 - 1; 
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(isLong ? 1500 : 3000, time);
+        filter.frequency.exponentialRampToValueAtTime(200, time + duration);
+        filter.Q.value = 1.5;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(isLong ? 0.15 : 0.08, time + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration); 
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        noise.start(time);
+    },
+
+    playRadarBlip(time) {
+        const duration = 0.08;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, time);
+        gain.gain.setValueAtTime(0.04, time); 
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        osc.connect(gain); gain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    },
+
+    playNexusTechBass(freq, time) {
+        const duration = 0.15;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1200, time); 
+        filter.frequency.exponentialRampToValueAtTime(100, time + 0.1); 
+        gain.gain.setValueAtTime(0.35, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    },
+
+    playPiston(time) {
+        const duration = 0.4;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, time);
+        osc.frequency.exponentialRampToValueAtTime(10, time + 0.1);
+        gain.gain.setValueAtTime(0.6, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        const waveShaper = audioCtx.createWaveShaper();
+        waveShaper.curve = new Float32Array([-0.5, 0, 0.5]);
+        osc.connect(waveShaper); waveShaper.connect(gain); gain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    },
+
+    playSoftSnare_Nexus(time) {
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for(let i=0; i<data.length; i++) data[i] = Math.random() * 2 - 1; 
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass'; 
+        filter.frequency.value = 1500; 
+        filter.Q.value = 0.5; 
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.2, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        noise.start(time);
+    },
+
+    playMysticLead(freq, time, intensity) {
+        const duration = intensity === 0 ? 1.5 : 0.8; 
+        const osc1 = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc1.type = 'sine'; 
+        osc1.frequency.value = freq;
+        const lfo = audioCtx.createOscillator();
+        lfo.frequency.value = 4; 
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 8; 
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc1.detune);
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(0.15, time + 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        osc1.connect(gain); gain.connect(this.musicGain);
+        osc1.start(time); lfo.start(time);
+        osc1.stop(time + duration); lfo.stop(time + duration);
     }
 });
+

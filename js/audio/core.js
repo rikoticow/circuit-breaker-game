@@ -8,7 +8,9 @@ musicGain.connect(audioCtx.destination);
 const AudioSys = window.AudioSys = {
     musicGain: musicGain,
     playTone(freq, type, duration, vol=0.1, startTime=null) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state === 'suspended') {
+            return;
+        }
         const now = startTime || audioCtx.currentTime;
         
         const osc = audioCtx.createOscillator();
@@ -28,5 +30,9 @@ const AudioSys = window.AudioSys = {
 
     move() {
         this.playTone(150, 'square', 0.1, 0.05);
+    },
+
+    speak(mood = 'neutral') {
+        if (window.RobotVoice) window.RobotVoice.speak(mood);
     }
 };

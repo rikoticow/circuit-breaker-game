@@ -15,6 +15,7 @@ function init() {
     Graphics.initLevelContext(game);
     
     LevelSelector.init();
+    GameProgress.init();
 
     // Initial Start Gesture (Fixes AudioContext autoplay policy)
     let initTime = Date.now();
@@ -25,6 +26,17 @@ function init() {
     };
     document.addEventListener('keydown', globalAudioResume);
     document.addEventListener('mousedown', globalAudioResume);
+
+    const shopHandler = (e) => {
+        if (typeof ShopSystem !== 'undefined' && (ShopSystem.active || ShopSystem.state !== 'IDLE')) {
+            ShopSystem.handleInput(e.key);
+            return true;
+        }
+        return false;
+    };
+    document.addEventListener('keydown', (e) => {
+        if (shopHandler(e)) return;
+    });
 
     const startHandler = (e) => {
         // Ignore very early clicks/keys (likely focus or accidental)
@@ -40,6 +52,13 @@ function init() {
     };
     document.addEventListener('keydown', startHandler);
     document.addEventListener('mousedown', startHandler);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') game.isShiftHeld = true;
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') game.isShiftHeld = false;
+    });
 
     // Controls
 
@@ -99,10 +118,17 @@ function init() {
             return;
         }
 
+        // Stats Terminal input intercept
+        if (window.StatsTerminal && StatsTerminal.state !== 'IDLE') {
+            const key = e.key.toLowerCase();
+            if (e.key === ' ' || key === 'spacebar' || key === 'e' || key === 'Escape') {
+                StatsTerminal.close();
+            }
+            return;
+        }
+
         if (game.state === 'PLAYING') {
             if (game.inputLocked) {
-                // If there's a manual dismiss dialogue, the Enter key is handled by Dialogue.js
-                // but we block movement here
                 return;
             }
             if (e.key === 'ç') {
@@ -115,7 +141,8 @@ function init() {
                 ResultScreen.open({
                     levelIndex: game.levelIndex,
                     time: game.time,
-                    lives: game.lives,
+                    lives: HPSystem.currentQuarters / 4,
+                    hp: HPSystem.currentQuarters,
                     stars: 3,
                     score: game.score,
                     economyBonus: bonus
@@ -155,7 +182,7 @@ function init() {
             else if (key === 'arrowleft' || key === 'a') game.movePlayer(-1, 0);
             else if (key === 'arrowright' || key === 'd') game.movePlayer(1, 0);
             else if (e.key === ' ' || key === 'spacebar' || key === 'e') game.interact();
-            else if (key === 'shift') game.toggleGrab();
+            else if (key === 'q') game.toggleGrab();
             else if (key === 'z') game.doUndo();
             else if (key === 'r') {
                 if (rebootConfirmTimer) {
@@ -193,7 +220,7 @@ function init() {
             if (key === 'r') {
                 Graphics.clearParticles();
                 game.score = 0;
-                game.lives = 3;
+                HPSystem.fullHeal();
                 game.loadLevel(0);
 
                 // Open the door
@@ -203,7 +230,7 @@ function init() {
         } else if (game.state === 'VICTORY') {
             if (key === 'r') {
                 game.startTransition(() => {
-                    game.lives = 3;
+                    HPSystem.fullHeal();
                     game.score = 0;
                     game.loadLevel(0);
                 });
@@ -213,10 +240,14 @@ function init() {
 
     // Time loop (Counts DOWN)
     setInterval(() => {
-        if (game.state === 'PLAYING' && game.time > 0 && game.transitionState === 'NONE' && !LevelSelector.active) {
-            game.time--;
-            if (game.time === 0) {
-                game.handleDeath(false);
+        if (game.state === 'PLAYING' && game.time > 0 && game.transitionState === 'NONE' && !LevelSelector.active && !StatsTerminal.active) {
+            // "se o circuito for validado o tempo para se desvalidado continua"
+            if (!game.isExitOpen) {
+                game.time--;
+                if (window.AudioSys && AudioSys.timerTick) AudioSys.timerTick(game.time);
+                if (game.time === 0) {
+                    game.handleDeath(false);
+                }
             }
         }
     }, 1000);
@@ -249,133 +280,41 @@ function updateBar(id, current, max) {
 }
 
 let lastLevelIndex = -1;
-let levelDisplayName = "";
-let glitchTimer = 0;
-let cycleTimer = 600; // 10 seconds @ 60fps
-let currentDisplayMode = 0; // 0: Number, 1: Name
+window.glitchTimer = 0;
+let cycleTimer = 600; 
+window.currentDisplayMode = 0; 
 
 function updateUI() {
-    const levelNameEl = document.getElementById('ui-level-name');
-    const timeEl = document.getElementById('ui-time');
-    const scoreEl = document.getElementById('ui-score');
-
-    if (levelNameEl) {
-        const lvl = LEVELS[game.levelIndex];
-        const targetName = lvl ? lvl.name.toUpperCase() : "LABORATÓRIO";
-        const levelNumStr = `NÍVEL ${(game.levelIndex + 1).toString().padStart(2, '0')}`;
-
-        // Reset and trigger glitch on level change
-        if (lastLevelIndex !== game.levelIndex) {
-            lastLevelIndex = game.levelIndex;
-            glitchTimer = 80; // Slower: 1.3s
-            cycleTimer = 600;
-            currentDisplayMode = 1; // Start with name on load
-        }
-
-        // Cycle logic every 10s
-        cycleTimer--;
-        if (cycleTimer <= 0) {
-            cycleTimer = 600;
-            currentDisplayMode = (currentDisplayMode + 1) % 2;
-            glitchTimer = 80; // Slower switch
-        }
-
-        if (glitchTimer > 0) {
-            glitchTimer--;
-            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$#@!%&*";
-            const targetStr = (currentDisplayMode === 1) ? targetName : levelNumStr;
-            const prevStr = (currentDisplayMode === 1) ? levelNumStr : targetName;
-
-            let result = "";
-            const totalProgress = 1 - (glitchTimer / 80);
-
-            for (let i = 0; i < targetStr.length; i++) {
-                // Determine the life cycle of this specific character's transition
-                const charStart = (i / targetStr.length) * 0.5; // Starts at 0% to 50% of animation
-                const charLock = charStart + 0.3; // Locks 30% later
-
-                if (totalProgress < charStart) {
-                    // Still showing old character (or space if out of bounds)
-                    result += prevStr[i] || " ";
-                } else if (totalProgress < charLock) {
-                    // Glitching/Scrambling
-                    result += chars[Math.floor(Math.random() * chars.length)];
-                } else {
-                    // Locked in!
-                    result += targetStr[i];
-                }
-            }
-            levelNameEl.innerText = result;
-        } else {
-            levelNameEl.innerText = (currentDisplayMode === 1) ? targetName : levelNumStr;
-        }
-    }
-    if (scoreEl) scoreEl.innerText = `${game.scrapCollected}/${game.totalScrap}`;
-
-    if (timeEl) {
-        let min = Math.floor(game.time / 60);
-        let sec = game.time % 60;
-        timeEl.innerText = `${min.toString().padStart(2, '0')}:${sec < 10 ? '0' : ''}${sec}`;
-
-        // Dynamic Color based on percentage (matching Result Screen logic)
-        const lvl = LEVELS[game.levelIndex];
-        const totalTime = (lvl ? lvl.timer : 60) || 60;
-        const timePercent = (game.time / totalTime) * 100;
-
-        if (timePercent > 50) {
-            timeEl.style.color = 'var(--neon-green)';
-            timeEl.style.textShadow = '0 0 5px var(--neon-green)';
-        } else if (timePercent > 20) {
-            timeEl.style.color = '#ffcc00'; // Yellow/Gold
-            timeEl.style.textShadow = '0 0 5px #ffcc00';
-        } else {
-            timeEl.style.color = 'var(--neon-red)';
-            timeEl.style.textShadow = '0 0 5px var(--neon-red)';
-        }
+    // Level change glitch trigger
+    if (lastLevelIndex !== game.levelIndex) {
+        lastLevelIndex = game.levelIndex;
+        window.glitchTimer = 80;
+        cycleTimer = 600;
+        currentDisplayMode = 1;
     }
 
-    // Lives Bar (Fixed 3 slots, empty slots are black)
-    updateBar('lives-bar', game.lives, 3);
-
-    // Power Bar (1:1 Movement units)
-    const levelData = LEVELS[game.levelIndex];
-    const maxMoves = levelData ? levelData.time : 100;
-    updateBar('energy-bar-seg', game.moves, maxMoves);
-
-    const powerCountEl = document.getElementById('ui-power-count');
-    if (powerCountEl) powerCountEl.innerText = game.moves.toString().padStart(2, '0');
-
-    // Amps Bar (Progress)
-    let totalReq = 0;
-    let totalCurrent = 0;
-    for (const t of game.targets) {
-        totalReq += t.required;
-        const data = game.poweredTargets.get(`${t.x},${t.y}`);
-        const charge = data ? data.charge : 0;
-        totalCurrent += Math.min(t.required, charge);
+    // Cycle logic every 10s (Display Mode)
+    cycleTimer--;
+    if (cycleTimer <= 0) {
+        cycleTimer = 600;
+        currentDisplayMode = (currentDisplayMode + 1) % 2;
+        window.glitchTimer = 80;
     }
-    updateBar('amps-bar', totalCurrent, totalReq);
 
-    // Overlay
+    if (window.glitchTimer > 0) {
+        window.glitchTimer--;
+    }
+
+    // Overlay logic (Death/Result screens)
     const overlay = document.getElementById('screen-overlay');
-    const overlayTitle = document.getElementById('overlay-title');
-    const overlayText = document.getElementById('overlay-text');
+    if (!overlay) return;
 
     if (game.state === 'PLAYING' || game.state === 'WINNING' || game.state === 'REVERSING') {
         overlay.classList.add('hidden');
-        document.getElementById('game-container').classList.remove('flash-red');
     } else if (game.state === 'RESULT') {
         overlay.classList.add('hidden');
     } else {
         overlay.classList.remove('hidden');
-        if (game.state === 'GAMEOVER') {
-            overlay.classList.add('hidden');
-            document.getElementById('game-container').classList.remove('flash-red');
-        } else if (game.state === 'LEVEL_COMPLETE') {
-            overlay.classList.add('hidden'); // No text
-        } else if (game.state === 'VICTORY') {
-            overlay.classList.add('hidden'); // No text
-        }
     }
 }
 
@@ -416,24 +355,40 @@ function updateTransitionLogic() {
     }
 }
 
+const TICK_RATE = 60;
+const TICK_TIME = 1000 / TICK_RATE;
+let accumulator = 0;
+
 function gameLoop(timestamp) {
-    const dt = timestamp - lastTime;
+    if (!lastTime) {
+        lastTime = timestamp;
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    const frameTime = timestamp - lastTime;
     lastTime = timestamp;
+
+    accumulator += Math.min(frameTime, 100);
+
+    while (accumulator >= TICK_TIME) {
+        updateGameLogic();
+        accumulator -= TICK_TIME;
+    }
+
+    renderGameVisuals();
+    requestAnimationFrame(gameLoop);
+}
+
+function updateGameLogic() {
     animFrame++;
 
     // === LEVEL SELECTOR MODE ===
     if (LevelSelector.active) {
         LevelSelector.update();
-        const ctx = Graphics.ctx;
-        LevelSelector.render(ctx);
-
-        // Render transition doors OVER the selector if active
         if (game.transitionState !== 'NONE') {
             updateTransitionLogic();
-            Graphics.drawDoorTransition(game, game.transitionProgress);
         }
-
-        requestAnimationFrame(gameLoop);
         return;
     }
 
@@ -460,20 +415,31 @@ function gameLoop(timestamp) {
     // HIT STOP (Frame Freeze)
     if (game.hitStopTimer && game.hitStopTimer > 0) {
         game.hitStopTimer--;
-        requestAnimationFrame(gameLoop);
-        return; // Skip ALL updates and rendering!
+        return; // Skip updates
     }
 
     game.update();
     if (window.Dialogue) Dialogue.update();
     updateTransitionLogic();
+}
 
+function renderGameVisuals() {
+    const ctx = Graphics.ctx;
+    if (!game.map || !game.map[0]) return;
     const mapH = game.map.length;
     const mapW = game.map[0].length;
-
+    
     Graphics.clear();
 
-    const ctx = Graphics.ctx;
+    if (LevelSelector.active) {
+        LevelSelector.render(ctx);
+        if (game.transitionState !== 'NONE') {
+            Graphics.drawDoorTransition(game, game.transitionProgress);
+        }
+        updateUI();
+        return;
+    }
+
     ctx.save();
     
     // Screen Shake applied via centralized game state
@@ -492,8 +458,29 @@ function gameLoop(timestamp) {
     const startY = Math.floor(game.camera.y / 32);
     const endY = Math.ceil((game.camera.y + 480) / 32);
 
-    // Draw Static Background (Floors, Holes, Walls, Ceilings)
-    Graphics.drawStaticBackground(game, startX, endX, startY, endY);
+    // Draw Static Background (Floors, Holes, Walls, Ceilings, Energy Pillars)
+    Graphics.drawStaticBackground(game, startX, endX, startY, endY, animFrame);
+
+    // Pass 0.5: Draw Fog of War (Discovery)
+    Graphics.drawFogOfWar(game);
+
+    // Pass 1.0: Draw World Labels (Proximity-based)
+    if (game.worldLabels) {
+        for (const lbl of game.worldLabels) {
+            const dx = game.player.visualX - lbl.x;
+            const dy = game.player.visualY - lbl.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Starts appearing at dist 4, fully visible at dist 2
+            let alpha = 0;
+            if (dist <= 2) alpha = 1;
+            else if (dist < 4) alpha = 1 - (dist - 2) / 2;
+            
+            if (alpha > 0) {
+                Graphics.drawWorldLabel(lbl.x, lbl.y, lbl.text, lbl.color, alpha, 0.3);
+            }
+        }
+    }
 
     // Pass 1.01: Draw Wires (On floor, below trails/quantum/conveyors)
     for (const w of game.wires) {
@@ -527,6 +514,24 @@ function gameLoop(timestamp) {
         Graphics.drawGravityButton(gb.x, gb.y, gb.dir, animFrame, gb.flashTimer, isSliding);
     }
 
+    // Pass 1.09: Draw Shop Terminals
+    if (game.shopTerminals) {
+        for (const st of game.shopTerminals) {
+            Graphics.drawShopTerminal(st.x, st.y, animFrame);
+        }
+    }
+
+    // Pass 1.095: Draw Projectiles (Below Launchers to hide spawn)
+    for (const p of game.projectiles) {
+        p.draw(ctx);
+    }
+
+    // Pass 1.096: Draw Launchers
+    for (const l of game.launchers) {
+        l.draw(ctx);
+    }
+
+
     // Pass 1.1: Draw Charging Stations (Spawn + Extras)
     for (const s of game.chargingStations) {
         const powered = game.poweredStations.has(`${s.x},${s.y}`);
@@ -542,10 +547,7 @@ function gameLoop(timestamp) {
         }
     }
 
-    // Pass 1.8: Draw Doors (Drawn before walls/ceilings so they stay below them)
-    for (const d of game.doors) {
-        Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen);
-    }
+    // Pass 1.8: Draw Doors - MOVED to after player for better occlusion
 
     // Pass 2: Draw Scrap (Static in background but some have animations?) 
     // Actually scrap is dynamic, let's keep it here but without walls loop
@@ -592,12 +594,18 @@ function gameLoop(timestamp) {
         // Calculate velocity for squash and stretch
         const vx = game.player.x - game.player.visualX;
         const vy = game.player.y - game.player.visualY;
-        Graphics.drawRobot(game.player.visualX, game.player.visualY, game.player.dir, animFrame, visorColor, vx, vy, game.player.isDead, game.player.deathType, game.player.deathTimer, game.player.deathDir, game.player.isGrabbing);
+        Graphics.drawRobot(game.player.visualX, game.player.visualY, game.player.dir, animFrame, visorColor, vx, vy, game.player.isDead, game.player.deathType, game.player.deathTimer, game.player.deathDir, game.player.isGrabbing, game.player.flashTimer);
     }
 
-    // --- SINGULAR CORES (Drawn above everything in ADD mode) ---
+    // Pass 3.0: Draw Doors (Drawn after player to occlude them when entering)
+    for (const d of game.doors) {
+        const exitChan = game.levelData.exitChannel || 99;
+        const isExit = (d.channel == exitChan) || (d.exitTo !== undefined) || d.isExit;
+        Graphics.drawDoor(d.x, d.y, d.state, d.error, animFrame, d.orientation, d.pair ? d.pair.side : null, d.visualOpen, isExit, d.unlocked);
+    }
+
+    // --- SINGULAR CORES (Drawn above everything) ---
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (const s of game.sources) {
         Graphics.drawCore(s.x, s.y, 'B', true);
     }
@@ -613,8 +621,14 @@ function gameLoop(timestamp) {
     for (const f of game.forbiddens) {
         Graphics.drawCore(f.x, f.y, 'X', false);
     }
+    
+    // Singularity Switchers still use 'lighter' for their specific effects inside the function if needed,
+    // but here we call them in default mode or manage their own state.
     for (const sw of game.singularitySwitchers) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
         Graphics.drawSingularitySwitcher(sw.x, sw.y, game.isSolarPhase, animFrame, sw.lightningTimer, game.map, sw.lightningSeed);
+        ctx.restore();
     }
     ctx.restore();
     
@@ -637,6 +651,15 @@ function gameLoop(timestamp) {
     // Pass 3.0: Solar Portals (Top Layer)
     for (const p of game.portals) {
         Graphics.drawPortal(p.x, p.y, p.channel, animFrame, p.color);
+        // Draw content if any
+        if (p.slot && p.slot.content) {
+            Graphics.drawLimboHologram(p.x, p.y, p.slot.content, animFrame);
+        }
+    }
+
+    // Pass 3.1: Projectiles
+    for (const p of game.projectiles) {
+        p.onDraw(ctx);
     }
 
     // FINAL PASS: Out-of-phase holographic blocks (Above EVERYTHING in ADD mode)
@@ -687,14 +710,20 @@ function gameLoop(timestamp) {
         ResultScreen.render(ctx);
     }
 
+    if (window.StatsTerminal && StatsTerminal.state !== 'IDLE') {
+        StatsTerminal.render(ctx);
+    }
+
+    if (window.ShopSystem && ShopSystem.state !== 'IDLE') {
+        ShopSystem.render(ctx);
+    }
+
     // VHS Rewind Effect overlay
     if (game.state === 'REVERSING') {
         Graphics.drawVHSEffect();
     }
 
     updateUI();
-
-    requestAnimationFrame(gameLoop);
 }
 
 // Start

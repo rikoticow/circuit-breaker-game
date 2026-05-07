@@ -51,21 +51,32 @@ const server = http.createServer((req, res) => {
                 
                 let jsContent = "// Levels definition\nvar LEVELS = [\n";
                 data.levels.forEach((l, i) => {
-                    jsContent += `  {\n    name: "${l.name}",\n    time: ${l.time},\n    timer: ${l.timer || 60},\n    map: [\n`;
-                    l.map.forEach(row => jsContent += `      "${row}",\n`);
+                    jsContent += `  {\n`;
+                    jsContent += `    name: ${JSON.stringify(l.name)},\n`;
+                    if (l.timer !== undefined && l.timer > 0) jsContent += `    timer: ${l.timer},\n`;
+                    
+                    jsContent += `    map: [\n`;
+                    l.map.forEach(row => jsContent += `      ${JSON.stringify(row)},\n`);
                     jsContent += `    ]`;
                     
                     // Only save blocks layer if it exists and is not just empty space
                     if (l.blocks && l.blocks.some(row => row.trim() !== "")) {
                         jsContent += `,\n    blocks: [\n`;
-                        l.blocks.forEach(row => jsContent += `      "${row}",\n`);
+                        l.blocks.forEach(row => jsContent += `      ${JSON.stringify(row)},\n`);
                         jsContent += `    ]`;
                     }
 
                     // Only save overlays layer if it exists and is not just empty space
                     if (l.overlays && l.overlays.some(row => row.trim() !== "")) {
                         jsContent += `,\n    overlays: [\n`;
-                        l.overlays.forEach(row => jsContent += `      "${row}",\n`);
+                        l.overlays.forEach(row => jsContent += `      ${JSON.stringify(row)},\n`);
+                        jsContent += `    ]`;
+                    }
+
+                    // Only save wireMap layer if it exists and is not just empty space
+                    if (l.wireMap && l.wireMap.some(row => row.trim() !== "")) {
+                        jsContent += `,\n    wireMap: [\n`;
+                        l.wireMap.forEach(row => jsContent += `      ${JSON.stringify(row)},\n`);
                         jsContent += `    ]`;
                     }
                     
@@ -86,6 +97,10 @@ const server = http.createServer((req, res) => {
                     // Save blackout settings
                     if (l.startWithBlackout) {
                         jsContent += `,\n    startWithBlackout: true`;
+                    }
+                    // Save spawnIsStation setting
+                    if (l.spawnIsStation) {
+                        jsContent += `,\n    spawnIsStation: true`;
                     }
                     
                     jsContent += `\n  }${i < data.levels.length - 1 ? ',' : ''}\n`;
