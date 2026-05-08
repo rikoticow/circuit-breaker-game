@@ -189,6 +189,7 @@ const Dialogue = {
             
             // Remove listener
             document.removeEventListener('keydown', this.handleInput);
+            if (window.IAVoice) IAVoice.stop();
             if (window.game && this.currentConfig && this.currentConfig.lockPlayer) {
                 window.game.inputLocked = false;
             }
@@ -225,6 +226,11 @@ const Dialogue = {
         this.onCompleteCallback = onComplete;
         this.isDone = false;
         this.skipRequested = false;
+
+        // NEW: IA Voice Integration
+        if (isAI && window.IAVoice) {
+            IAVoice.speak(fullText);
+        }
 
         let activeEffects = new Map(); // name -> intensity
         let currentSize = '18px';

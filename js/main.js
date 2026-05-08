@@ -23,6 +23,7 @@ function init() {
         if (window.audioCtx && audioCtx.state !== 'running') {
             audioCtx.resume();
         }
+        if (window.IAVoice) IAVoice.init();
     };
     document.addEventListener('keydown', globalAudioResume);
     document.addEventListener('mousedown', globalAudioResume);

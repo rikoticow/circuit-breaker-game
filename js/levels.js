@@ -24,10 +24,16 @@ var LEVELS = [
       "               ",
       " ∞             ",
       "               ",
-      "               ",
+      "               "
     ],
     links: {"1,7_path":[{"x":1,"y":2},{"x":1,"y":7}],"1,7_enemy":{"loopType":"PING_PONG","damage":1},"4,4_enemy":{"isPeaceful":true,"loopType":"LOOP","damage":1},"4,4_path":[{"x":4,"y":2},{"x":6,"y":2},{"x":6,"y":3},{"x":5,"y":3},{"x":5,"y":4},{"x":6,"y":4},{"x":6,"y":5},{"x":5,"y":5},{"x":5,"y":6},{"x":6,"y":6},{"x":6,"y":7},{"x":5,"y":7},{"x":4,"y":7},{"x":3,"y":7},{"x":3,"y":4},{"x":3,"y":3},{"x":4,"y":3}],"11,5_launcher":{"type":"box","projectileType":"box","channel":0,"dir":3,"rotateDir":"CW","autoRotate":8,"rotateEvery":3,"fireRate":1,"rate":0.01},"13,5_launcher":{"type":"antimatter","projectileType":"antimatter","channel":0,"dir":2},"13,5_dir":2,"9,5_dir":0,"11,5_dir":3,"2,5_dir":2},
-    dialogues: {}
+    dialogues: {
+      "0,0": {
+        trigger: "start",
+        text: "[SISTEMA] Núcleo Central Online. Níveis de radiação estáveis. Aguardando comando do operador.",
+        icon: "central"
+      }
+    }
   },
   {
     name: "TESTDRIVE",
