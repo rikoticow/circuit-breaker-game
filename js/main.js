@@ -55,7 +55,10 @@ function init() {
     document.addEventListener('mousedown', startHandler);
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Shift') game.isShiftHeld = true;
+        if (e.key === 'Shift') {
+            game.isShiftHeld = true;
+            if (game && game.state === 'PLAYING') game.performDash();
+        }
     });
     document.addEventListener('keyup', (e) => {
         if (e.key === 'Shift') game.isShiftHeld = false;
@@ -465,28 +468,11 @@ function renderGameVisuals() {
     // Pass 0.5: Draw Fog of War (Discovery)
     Graphics.drawFogOfWar(game);
 
-    // Pass 1.0: Draw World Labels (Proximity-based)
-    if (game.worldLabels) {
-        for (const lbl of game.worldLabels) {
-            const dx = game.player.visualX - lbl.x;
-            const dy = game.player.visualY - lbl.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            // Starts appearing at dist 4, fully visible at dist 2
-            let alpha = 0;
-            if (dist <= 2) alpha = 1;
-            else if (dist < 4) alpha = 1 - (dist - 2) / 2;
-            
-            if (alpha > 0) {
-                Graphics.drawWorldLabel(lbl.x, lbl.y, lbl.text, lbl.color, alpha, 0.3);
-            }
-        }
-    }
-
     // Pass 1.01: Draw Wires (On floor, below trails/quantum/conveyors)
     for (const w of game.wires) {
         const flowDirs = game.poweredWires.get(`${w.x},${w.y}`) || null;
-        Graphics.drawWire(w.x, w.y, w.type, flowDirs, animFrame);
+        const isElectrified = game.electrifiedWires.has(`${w.x},${w.y}`);
+        Graphics.drawWire(w.x, w.y, w.type, flowDirs, animFrame, isElectrified);
     }
 
     // Pass 1.05: Draw Tread Trails (Directly on floor, below EVERYTHING else)
@@ -589,10 +575,15 @@ function renderGameVisuals() {
     }
 
 
-    // Pass 1.96: Draw Enemies
+    // Pass 1.99: Draw Ground-level Enemies (Patrolling, Surfing)
     for (const enemy of game.enemies) {
-        enemy.draw(ctx);
+        if (!enemy._jumpVisualHeight || enemy._jumpVisualHeight <= 0) {
+            enemy.draw(ctx);
+        }
     }
+
+    // Pass 1.99: Draw Echoes
+    Graphics.drawEchoes();
 
     // Draw Player
     if (game.state !== 'GAMEOVER') {
@@ -697,7 +688,34 @@ function renderGameVisuals() {
     }
     Graphics.drawParticles(game);
 
+    // Pass 4.0: Draw High-level Entities (Jumping robots above everything)
+    for (const enemy of game.enemies) {
+        if (enemy._jumpVisualHeight > 0) {
+            enemy.draw(ctx);
+        }
+    }
+
     ctx.restore();
+
+    // Pass 5.0: Screen-Space World Labels (Top Layer - Above everything)
+    if (game.worldLabels) {
+        for (const lbl of game.worldLabels) {
+            const dx = game.player.visualX - lbl.x;
+            const dy = game.player.visualY - lbl.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Increased falloff for better visibility in large rooms
+            let alpha = 0;
+            if (dist <= 15) alpha = 1;
+            else if (dist < 25) alpha = 1 - (dist - 15) / 10;
+            
+            if (alpha > 0) {
+                const screenX = (lbl.x + 0.5) * 32 - Math.floor(game.camera.x);
+                const screenY = (lbl.y + 0.5) * 32 - Math.floor(game.camera.y);
+                Graphics.drawWorldLabel(screenX, screenY, lbl.text, lbl.color, alpha, 0.3, true);
+            }
+        }
+    }
 
     // Draw Transition Door (Above Everything)
     if (game.transitionState !== 'NONE') {

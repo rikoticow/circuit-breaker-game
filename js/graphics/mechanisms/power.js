@@ -1,5 +1,5 @@
 Object.assign(Graphics, {
-    drawWire(x, y, type, flowData, time) {
+    drawWire(x, y, type, flowData, time, isElectrified = false) {
         const px = x * this.tileSize;
         const py = y * this.tileSize;
         const ts = this.tileSize;
@@ -12,7 +12,16 @@ Object.assign(Graphics, {
         let color = '#ff6a00';
         let borderColor = '#883300';
         
-        if (isPowered) {
+        if (isElectrified) {
+            // GOLDEN Electrified state (Spark Jumper)
+            color = '#f1c40f'; // Sun Flower Gold
+            borderColor = '#d35400'; // Pumpkin Orange
+            
+            // Pulsing effect for electrification
+            const pulse = Math.sin(time * 0.2) * 0.2 + 0.8;
+            this.ctx.shadowBlur = 10 * pulse;
+            this.ctx.shadowColor = '#f1c40f';
+        } else if (isPowered) {
             if (flowData.color === 'RED') {
                 color = '#ff003c';
                 borderColor = '#880011';
@@ -119,6 +128,7 @@ Object.assign(Graphics, {
                 drawArrowAt(d, false);
             }
         }
+        this.ctx.shadowBlur = 0;
     },
 
     drawChargingStation(x, y, isPowered, frame) {

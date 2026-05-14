@@ -252,5 +252,35 @@ Object.assign(window.AudioSys, {
         bassGain.connect(audioCtx.destination);
         bass.start(now + 0.3);
         bass.stop(now + 1.0);
+    },
+
+    playExplosion() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // Noise Layer
+        const duration = 0.5;
+        const bufferSize = audioCtx.sampleRate * duration;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.setValueAtTime(1000, now);
+        filter.frequency.exponentialRampToValueAtTime(100, now + duration);
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.start(now);
+
+        // Bass Layer
+        const osc = audioCtx.createOscillator();
+        const oscGain = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+        oscGain.gain.setValueAtTime(0.5, now); oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.4);
     }
 });

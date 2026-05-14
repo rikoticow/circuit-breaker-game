@@ -177,7 +177,7 @@ class LauncherBase {
  * Base class for all projectiles.
  */
 class ProjectileBase {
-    constructor(x, y, angleOrDir, speed) {
+    constructor(x, y, angleOrDir, speed, source = null) {
         if (this.constructor === ProjectileBase) {
             throw new Error("ProjectileBase is abstract and cannot be instantiated.");
         }
@@ -196,6 +196,7 @@ class ProjectileBase {
         this.startX = Math.floor(x / 32);
         this.startY = Math.floor(y / 32);
         this.age = 0;
+        this.source = source;
     }
 
     update(game) {
@@ -250,6 +251,10 @@ class ProjectileBase {
         if (game.enemies) {
             for (const e of game.enemies) {
                 if (e._dead) continue;
+                
+                // Ignore source to prevent self-shooting (especially for dynamic enemies like Data Courier)
+                if (e === this.source && this.age < 15) continue;
+
                 const edx = this.x - (e._visualX * 32 + 16);
                 const edy = this.y - (e._visualY * 32 + 16);
                 if (Math.sqrt(edx*edx + edy*edy) < 16 + this.radius) {
@@ -604,8 +609,8 @@ class VoidLauncher extends LauncherBase {
 // --- SPECIFIC IMPLEMENTATIONS (THE VARIANTS) ---
 
 class EnergyBallProjectile extends ProjectileBase {
-    constructor(x, y, dir, speed) {
-        super(x, y, dir, speed);
+    constructor(x, y, dir, speed, source = null) {
+        super(x, y, dir, speed, source);
         this.color = '#00f0ff';
         this.radius = 6;
     }
@@ -635,8 +640,8 @@ class EnergyBallProjectile extends ProjectileBase {
 }
 
 class BoxProjectile extends ProjectileBase {
-    constructor(x, y, dir, speed) {
-        super(x, y, dir, speed);
+    constructor(x, y, dir, speed, source = null) {
+        super(x, y, dir, speed, source);
         this.color = '#ffd700';
         this.radius = 10;
         this.rotationOffset = Math.random() * Math.PI * 2;
@@ -684,8 +689,8 @@ class BoxProjectile extends ProjectileBase {
 }
 
 class AntimatterProjectile extends ProjectileBase {
-    constructor(x, y, dir, speed) {
-        super(x, y, dir, speed);
+    constructor(x, y, dir, speed, source = null) {
+        super(x, y, dir, speed, source);
         this.color = '#bf00ff';
         this.radius = 8;
     }
@@ -726,16 +731,53 @@ class AntimatterProjectile extends ProjectileBase {
     }
 }
 
+class DataShardProjectile extends ProjectileBase {
+    constructor(x, y, dir, speed, source = null) {
+        super(x, y, dir, speed, source);
+        this.color = '#00ffcc';
+        this.radius = 4;
+    }
+
+    onDraw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        
+        // Sharp needle shape
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-6, -3);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-6, 3);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+
+    onHit(game, target) {
+        if (target === 'PLAYER') {
+            game.takeDamage('DATA_CORRUPTION', this.x/32, this.y/32);
+        }
+        super.onHit(game, target);
+    }
+}
+
 // --- FACTORIES AND REGISTRY ---
 
 const ProjectileFactory = {
-    create(x, y, angle, type, speed) {
+    create(x, y, angle, type, speed, source = null) {
         switch (type) {
-            case 'box': return new BoxProjectile(x, y, angle, speed);
-            case 'antimatter': return new AntimatterProjectile(x, y, angle, speed);
+            case 'box': return new BoxProjectile(x, y, angle, speed, source);
+            case 'antimatter': return new AntimatterProjectile(x, y, angle, speed, source);
+            case 'data-shard': return new DataShardProjectile(x, y, angle, speed, source);
             case 'energy':
             default:
-                return new EnergyBallProjectile(x, y, angle, speed);
+                return new EnergyBallProjectile(x, y, angle, speed, source);
         }
     }
 };

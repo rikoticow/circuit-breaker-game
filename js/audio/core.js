@@ -7,19 +7,39 @@ musicGain.connect(audioCtx.destination);
 
 const AudioSys = window.AudioSys = {
     musicGain: musicGain,
-    playTone(freq, type, duration, vol=0.1, startTime=null) {
+
+    getSpatialVolume(sourceX, sourceY, baseVolume, maxDistance = 20) {
+        if (sourceX === undefined || sourceY === undefined || !window.game || !window.game.player) {
+            return baseVolume;
+        }
+        const dx = sourceX - window.game.player.x;
+        const dy = sourceY - window.game.player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist >= maxDistance) return 0;
+
+        // Linear attenuation: 1.0 at 0 dist, 0.0 at maxDistance
+        const factor = 1 - (dist / maxDistance);
+        return baseVolume * factor;
+    },
+
+    playTone(freq, type, duration, vol=0.1, startTime=null, sourceX=undefined, sourceY=undefined) {
         if (audioCtx.state === 'suspended') {
             return;
         }
         const now = startTime || audioCtx.currentTime;
         
+        // Apply Spatial Audio
+        const finalVol = this.getSpatialVolume(sourceX, sourceY, vol);
+        if (finalVol <= 0) return;
+
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(freq, now);
         
-        gain.gain.setValueAtTime(vol, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+        gain.gain.setValueAtTime(finalVol, now);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, finalVol * 0.1), now + duration);
         
         osc.connect(gain);
         gain.connect(audioCtx.destination);

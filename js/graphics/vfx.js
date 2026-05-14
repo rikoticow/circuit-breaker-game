@@ -113,6 +113,7 @@ Object.assign(Graphics, {
         const d = new Date(); ctx.fillText(`00:04:${d.getSeconds().toString().padStart(2, '0')}:${Math.floor(d.getMilliseconds()/10).toString().padStart(2, '0')}`, 40, h - 40);
         for (let i = 0; i < 50; i++) { ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1); }
     },
+
     
     drawGravityOverlay(direction, frame, globalAlpha) {
         this.ctx.save();
@@ -219,6 +220,162 @@ Object.assign(Graphics, {
             
             for(let p=0; p<3; p++) this.spawnParticle(lastX, lastY, '#ffffff', 'micro-spark');
             ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.5; ctx.stroke();
+        }
+        ctx.restore();
+    },
+
+    // --- ANIME IMPACT EFFECT ---
+
+    createAnimeImpactConfig(x, y) {
+        const config = {
+            numPoints: 28,
+            outerPoints: [],
+            innerPoints: [],
+            numMajorSpikes: 3 + Math.floor(Math.random() * 3),
+            debris: [],
+            ringRotation: Math.random() * Math.PI * 2,
+            ringRadius: 25.6 + Math.random() * 19.2, // Reduzido mais 20%
+            ringDash: [],
+            spikeAngles: []
+        };
+
+        for(let i = 0; i < config.numMajorSpikes; i++) {
+            config.spikeAngles.push((i / config.numMajorSpikes) * Math.PI * 2 + (Math.random() * 0.8 - 0.4));
+        }
+
+        for(let i = 0; i < config.numPoints; i++) {
+            let angle = (i / config.numPoints) * Math.PI * 2;
+            let isSpike = i % 2 === 0;
+            let isMajor = false;
+            for(let sa of config.spikeAngles) {
+                let diff = Math.abs(angle - sa);
+                if (diff > Math.PI) diff = 2 * Math.PI - diff;
+                if (diff < 0.4) { isMajor = true; break; }
+            }
+
+            let outR = isSpike ? (isMajor ? (38.4 + Math.random() * 32) : (12.8 + Math.random() * 12.8)) : (6.4 + Math.random() * 4.8);
+            let inR = isSpike ? (outR * 0.5 + Math.random() * 6.4) : (3.2 + Math.random() * 3.2);
+
+            config.outerPoints.push({ angle, maxR: outR });
+            config.innerPoints.push({ angle: angle + (Math.random() * 0.2 - 0.1), maxR: inR });
+        }
+
+        config.ringDash = [config.ringRadius * (0.5 + Math.random()), config.ringRadius * 0.2, config.ringRadius * 0.8, config.ringRadius * 0.4];
+
+        let numDebris = 8 + Math.floor(Math.random() * 8);
+        for(let i = 0; i < numDebris; i++) {
+            config.debris.push({
+                angle: Math.random() * Math.PI * 2,
+                speed: 32 + Math.random() * 48,   // Reduzido mais 20%
+                size: 0.64 + Math.random() * 1.28, // Reduzido mais 20%
+                startDist: 6.4 + Math.random() * 9.6 // Reduzido mais 20%
+            });
+        }
+
+        return config;
+    },
+
+    drawAnimeImpact(x, y, progress, config, game, color = 'white') {
+        if (!config || progress <= 0) return;
+        const vctx = this.vfxCtx;
+        if (!vctx) return;
+
+        const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
+        const easeInCubic = t => t * t * t;
+
+        // Calculate screen-space coordinates for the VFX buffer
+        const camX = game ? game.camera.x : 0;
+        const camY = game ? game.camera.y : 0;
+        const sx = x - camX;
+        const sy = y - camY;
+        
+        vctx.save();
+        vctx.translate(sx, sy);
+
+        let outScale = easeOutQuint(Math.min(1, progress * 2.5)); // Faster pop
+        let inScale = easeInCubic(Math.max(0, (progress - 0.1) * 1.5));
+
+        // 1. Main Color Shape
+        if (outScale > 0 && inScale < 1) {
+            vctx.fillStyle = color;
+            vctx.beginPath();
+            for(let i = 0; i < config.outerPoints.length; i++) {
+                let p = config.outerPoints[i];
+                let r = p.maxR * outScale;
+                let px = Math.cos(p.angle) * r;
+                let py = Math.sin(p.angle) * r;
+                if (i === 0) vctx.moveTo(px, py);
+                else vctx.lineTo(px, py);
+            }
+            vctx.closePath();
+            vctx.fill();
+
+            // 2. Negative Space
+            if (inScale > 0) {
+                vctx.globalCompositeOperation = 'destination-out';
+                vctx.beginPath();
+                for(let i = 0; i < config.innerPoints.length; i++) {
+                    let p = config.innerPoints[i];
+                    let r = (p.maxR * outScale) + (150 * inScale); 
+                    let px = Math.cos(p.angle) * r;
+                    let py = Math.sin(p.angle) * r;
+                    if (i === 0) vctx.moveTo(px, py);
+                    else vctx.lineTo(px, py);
+                }
+                vctx.closePath();
+                vctx.fill();
+                vctx.globalCompositeOperation = 'source-over';
+            }
+        }
+        vctx.restore();
+
+        // 3. Debris & Ring (Draw directly on main context for simplicity)
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Debris
+        ctx.fillStyle = color;
+        for(let d of config.debris) {
+            let pDist = d.startDist + (d.speed * easeOutQuint(progress));
+            let alpha = 1 - Math.pow(progress, 3);
+            if (alpha <= 0) continue;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(Math.cos(d.angle) * pDist, Math.sin(d.angle) * pDist, d.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Ring
+        if (progress > 0.05 && progress < 0.9) {
+            let ringP = (progress - 0.05) / 0.85;
+            let currentRingR = config.ringRadius * easeOutQuint(ringP);
+            ctx.rotate(config.ringRotation + progress * 0.5);
+            ctx.beginPath();
+            ctx.arc(0, 0, currentRingR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${1 - ringP})`;
+            ctx.lineWidth = 1 + (1 - ringP) * 3;
+            ctx.setLineDash(config.ringDash);
+            ctx.stroke();
+        }
+
+        // Action Lines
+        if (progress < 0.4) {
+            let flashP = progress / 0.4;
+            let flashLen = 64 * easeOutQuint(flashP);  // Reduzido mais 20%
+            let flashWidth = 3.84 * (1 - flashP);       // Reduzido mais 20%
+            ctx.fillStyle = color;
+            for(let i = 0; i < 4; i++) {
+                ctx.save();
+                ctx.rotate((Math.PI / 2) * i + Math.PI / 4);
+                ctx.beginPath();
+                ctx.moveTo(0, -flashWidth/2);
+                ctx.lineTo(flashLen, 0);
+                ctx.lineTo(0, flashWidth/2);
+                ctx.fill();
+                ctx.restore();
+            }
         }
         ctx.restore();
     }

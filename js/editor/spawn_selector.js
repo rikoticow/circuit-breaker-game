@@ -209,6 +209,8 @@ class PortalSpawnSelector {
                         const labelText = (lvl.links && lvl.links[`${x},${y}_label`]) || "!";
                         const labelColor = (lvl.links && lvl.links[`${x},${y}_labelColor`]) || "#00f0ff";
                         targetMock.worldLabels.push({ x, y, text: labelText, color: labelColor });
+                    } else if (char === '∞' || char === '∆' || char === '░' || char === '®') {
+                        // Enemies are usually not rendered in spawn selector, but we could add a placeholder
                     }
                 };
 
@@ -329,6 +331,11 @@ class PortalSpawnSelector {
             } else if (char === '!') {
                 const label = targetMock.worldLabels.find(l => l.x === x && l.y === y);
                 Graphics.drawWorldLabel(x, y, label?.text || '!', label?.color || '#00f0ff', 1.0, 0.3);
+            } else if (char === '∞' || char === '∆' || char === '░' || char === '®') {
+                this.ctx.fillStyle = (char === '∆') ? '#3498db' : (char === '®' ? '#f1c40f' : '#00f0ff');
+                this.ctx.font = '24px VT323';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(char, x * 32 + 16, y * 32 + 24);
             }
             this.ctx.restore();
         };

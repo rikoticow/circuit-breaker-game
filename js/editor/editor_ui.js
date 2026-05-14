@@ -91,6 +91,8 @@ function createTilePreview(char) {
         tCtx.restore();
     } else if (char === 'M') {
         Graphics.drawBlock(0, 0, 0, null, 0, 0, 'PRISM');
+    } else if (char === 'ж') {
+        Graphics.drawBlock(0, 0, 0, null, 0, 0, 'BRICK_OBSTACLE');
     } else if (char === 'Q') {
         Graphics.drawCatalyst(0, 0, true, animFrame);
     } else if (char === 'G') {
@@ -101,6 +103,31 @@ function createTilePreview(char) {
         Graphics.drawWorldLabel(0, 0, "!");
     } else if (char === '$') {
         Graphics.drawShopTerminal(0, 0, animFrame);
+    } else if (char === '∞' || char === '∆' || char === '░' || char === '®' || char === '£' || char === '▒' || char === '🧱' || char === '§' || char === 'ʬ') {
+        if (window.EnemySystem) {
+            let type = 'logistic';
+            if (char === 'ʬ') type = 'glitch';
+            if (char === '∆') type = 'repair';
+            if (char === '░') type = 'courier';
+            if (char === '®') type = 'spark';
+            if (char === '£') type = 'weld';
+            if (char === '▒' || char === '🧱') type = 'brick';
+            if (char === '§') type = 'cable';
+            const enemy = EnemySystem.EnemyFactory.create(0, 0, type, { isStatic: true });
+            if (enemy) enemy.draw(tCtx);
+        } else {
+            tCtx.fillStyle = '#00d4aa';
+            if (char === 'ʬ') tCtx.fillStyle = '#9b59b6';
+            if (char === '∆') tCtx.fillStyle = '#3498db';
+            if (char === '∞') tCtx.fillStyle = '#00f0ff';
+            if (char === '®') tCtx.fillStyle = '#f1c40f';
+            if (char === '£') tCtx.fillStyle = '#7f8c8d';
+            if (char === '▒' || char === '🧱') tCtx.fillStyle = '#f39c12';
+            if (char === '§') tCtx.fillStyle = '#e74c3c';
+            tCtx.font = '24px VT323';
+            tCtx.textAlign = 'center';
+            tCtx.fillText(char, 16, 24);
+        }
     } else if (['n', 's', 'e', 'w'].includes(char)) {
         let d = DIRS.UP;
         if (char === 's') d = DIRS.DOWN;
@@ -131,7 +158,7 @@ function buildPalette() {
     PALETTE.forEach(group => {
         // Filter groups based on activeLayer
         const isOverlayGroup = group.title === "Esteiras" || group.title === "Coletáveis" || group.title === "Estrutura (Overlay)" || group.title === "Quântico" || group.title === "Núcleos";
-        const isBlockGroup = group.title === "Amplificadores";
+        const isBlockGroup = group.title === "Amplificadores" || group.title === "Blocos & Caixas";
         const isWireGroup = group.title === "Fios (Rede)";
         const isEventGroup = group.title === "Eventos";
         const isGravityGroup = group.title === "Gravidade";
@@ -1589,12 +1616,12 @@ function updatePropertyPanel() {
         document.getElementById('prop-label-color').value = lvl.links?.[`${p.x},${p.y}_labelColor`] || "#00f0ff";
     }
 
-    const isEnemy = char === '∞';
+    const isEnemy = ['∞', '∆', '░', '®', '£', '▒', '🧱', '§', 'ʬ'].includes(char);
     document.getElementById('prop-enemy-container').style.display = isEnemy ? 'flex' : 'none';
     if (isEnemy) {
         const config = lvl.links?.[`${p.x},${p.y}_enemy`] || {};
-        document.getElementById('prop-enemy-speed').value = config.speed || 2.0;
-        document.getElementById('prop-enemy-damage').value = config.damage || 1;
+        document.getElementById('prop-enemy-speed').value = config.speed || (char === 'ʬ' ? 1.8 : (char === '§' ? 1.5 : (char === '∆' ? 1.2 : (char === '®' ? 1.5 : (char === '£' ? 1.0 : (char === '▒' || char === '🧱' ? 1.2 : 2.0))))));
+        document.getElementById('prop-enemy-damage').value = config.damage || (char === 'ʬ' ? 2 : (char === '§' ? 2 : (char === '∆' ? 2 : (char === '®' ? 3 : (char === '▒' || char === '🧱' ? 2 : 1)))));
         document.getElementById('prop-enemy-peaceful').checked = config.isPeaceful === true;
         document.getElementById('prop-enemy-loop').value = config.loopType || 'LOOP';
         document.getElementById('prop-enemy-move-style').value = config.moveStyle || 'CONTINUOUS';

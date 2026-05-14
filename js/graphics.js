@@ -44,6 +44,8 @@ const Graphics = {
     blackoutCtx: null,
     bgCanvas: null,
     bgCtx: null,
+    vfxCanvas: null,
+    vfxCtx: null,
 
     init(canvas) {
         this.ctx = canvas.getContext('2d');
@@ -56,7 +58,11 @@ const Graphics = {
         this.trailCanvas.height = 2000;
         this.trailCtx = this.trailCanvas.getContext('2d');
 
-        // Background Buffer removed, rendering directly now
+        // VFX Buffer (for complex composition effects)
+        this.vfxCanvas = document.createElement('canvas');
+        this.vfxCanvas.width = 640;
+        this.vfxCanvas.height = 560;
+        this.vfxCtx = this.vfxCanvas.getContext('2d');
 
         // Transition Canvas (covers entire UI)
         this.tCanvas = document.getElementById('transitionCanvas');
@@ -69,7 +75,7 @@ const Graphics = {
         // Blackout Buffer
         this.blackoutCanvas = document.createElement('canvas');
         this.blackoutCanvas.width = 640;
-        this.blackoutCanvas.height = 480;
+        this.blackoutCanvas.height = 560;
         this.blackoutCtx = this.blackoutCanvas.getContext('2d');
     },
     initLevelContext(game) {
@@ -925,6 +931,8 @@ const Graphics = {
      * Shared logic with Dialogue system but optimized for Canvas
      */
     scrambleText(text, intensity, seed = 0) {
+        if (!text) return "";
+        text = String(text);
         if (intensity <= 0) return text;
         const symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*()";
         const timeStep = Math.floor(Date.now() / 100);
@@ -935,7 +943,7 @@ const Graphics = {
             const charSeed = (timeStep * (i + 1) + seed) % 1000;
             const rand = (Math.sin(charSeed) * 10000) % 1;
             if (Math.abs(rand) < (0.3 * intensity)) {
-                const symIdx = Math.floor(Math.abs(Math.cos(charSeed) * symbols.length));
+                const symIdx = Math.floor(Math.abs(Math.cos(charSeed)) * symbols.length) % symbols.length;
                 scrambled += symbols[symIdx];
             } else {
                 scrambled += text[i];

@@ -30,7 +30,7 @@ const PALETTE = [
     { title: "Setor: Compilador", tiles: [{c: 'z', n: 'Chão Compilador'}, {c: 'q', n: 'Parede Compilador'}, {c: 'x', n: 'Teto Compilador'}] },
     { title: "Setor: Processamento", tiles: [{c: 'Σ', n: 'Parede Ind. Sólida'}, {c: 'σ', n: 'Piso Perfurado Log.'}, {c: 'ρ', n: 'Piso Tátil Rosa'}, {c: 'π', n: 'Parede Servidor'}, {c: 'Ω', n: 'Teto Modular (Proc)'}] },
     { title: "Setor: Quântico", tiles: [{c: '.', n: 'Abismo de Vácuo'}, {c: "'", n: 'Chão Quântico (Rúnico)'}, {c: '"', n: 'Parede Quântica (Circuito)'}, {c: '|', n: 'Teto Quântico (Mandala)'}] },
-    { title: "Estrutura (Overlay)", tiles: [{c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}, {c: 'D', n: 'Porta'}, {c: 'U', n: 'Porta de Saída'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}, {c: 'R', n: 'Lançador Modular'}, {c: '$', n: 'Loja'}, {c: '%', n: 'Botão Singularidade'}, {c: '∞', n: 'LogisticBot'}] },
+    { title: "Estrutura (Overlay)", tiles: [{c: '@', n: 'Robô'}, {c: 'K', n: 'Estação'}, {c: 'D', n: 'Porta'}, {c: 'U', n: 'Porta de Saída'}, {c: '_', n: 'Botão Industrial'}, {c: 'E', n: 'Emissor (Canhão)'}, {c: 'R', n: 'Lançador Modular'}, {c: '$', n: 'Loja'}, {c: '%', n: 'Botão Singularidade'}, {c: '∞', n: 'LogisticBot'}, {c: '∆', n: 'Repair Unit'}, {c: '░', n: 'Data Courier'}, {c: '®', n: 'Spark Jumper'}, {c: '£', n: 'Weld Bot'}, {c: '▒', n: 'Brick Stack'}, {c: '§', n: 'Cable Snake'}, {c: 'ʬ', n: 'Glitch Walker'}] },
     { title: "Quântico", tiles: [{c: '?', n: 'Chão Quântico'}, {c: 'Q', n: 'Catalisador'}, {c: 'O', n: 'Portal Quântico'}] },
     { title: "Gravidade", tiles: [{c: 'n', n: 'Gravidade N'}, {c: 's', n: 'Gravidade S'}, {c: 'e', n: 'Gravidade L'}, {c: 'w', n: 'Gravidade O'}] },
     { title: "Núcleos", tiles: [{c: 'T', n: 'Alvo'}, {c: 'B', n: 'Fonte Azul'}, {c: 'X', n: 'Fonte Vermelha'}, {c: 'Z', n: 'Quebrado'}] },
@@ -40,6 +40,7 @@ const PALETTE = [
         {c: 'u', n: '┻'}, {c: 'd', n: '┳'}, {c: 'l', n: '┫'}, {c: 'r', n: '┣'}
     ] },
     { title: "Amplificadores", tiles: [{c: '>', n: 'Dir'}, {c: '<', n: 'Esq'}, {c: 'v', n: 'Baixo'}, {c: '^', n: 'Cima'}, {c: 'M', n: 'Prisma'}, {c: 'y', n: 'Solar'}, {c: 'p', n: 'Lunar'}] },
+    { title: "Blocos & Caixas", tiles: [{c: 'ж', n: 'Caixa Destrutível (Brick)'}] },
     { title: "Esteiras", tiles: [{c: ')', n: 'Esteira Dir'}, {c: '(', n: 'Esteira Esq'}, {c: ']', n: 'Esteira Baixo'}, {c: '[', n: 'Esteira Cima'}] },
     { title: "Coletáveis", tiles: [{c: 'S', n: 'Tralha'}] },
     { title: "Eventos", tiles: [{c: '💬', n: 'Fala/Diálogo'}, {c: '⚡', n: 'Gatilho'}, {c: '!', n: 'Rótulo'}] }
@@ -262,17 +263,21 @@ function rebuildMock() {
                 const chan = (lvl.links && lvl.links[`${x},${y}`]) || (isExit ? 99 : 0);
                 const exitTo = lvl.links && lvl.links[`${x},${y}_exitTo`];
                 mockGame.doors.push({ x, y, state: 'CLOSED', error: false, channel: chan, isExit: isExit, exitTo: exitTo });
-            } else if (oc === '?') {
+            } else if (oc === '?' || oc === '®') {
                 const chan = (lvl.links && lvl.links[`${x},${y}`]) || 0;
-                mockGame.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, entrySide: null, whiteGlow: 0 });
-            } else if (oc === '∞' || c === '∞') {
+                if (oc === '?') {
+                    mockGame.quantumFloors.push({ x, y, active: true, channel: chan, flashTimer: 0, pulseIntensity: 1.0, entrySide: null, whiteGlow: 0 });
+                }
+            } else if (oc === '∞' || c === '∞' || oc === '∆' || c === '∆' || oc === '░' || c === '░' || oc === '®' || c === '®' || oc === '£' || c === '£' || oc === '▒' || c === '▒' || oc === '🧱' || c === '🧱' || oc === '§' || c === '§' || oc === 'ʬ' || c === 'ʬ') {
                 if (window.EnemySystem) {
+                    const symbol = (oc === 'ʬ' || c === 'ʬ') ? 'ʬ' : ((oc === '§' || c === '§') ? '§' : ((oc === '▒' || c === '▒' || oc === '🧱' || c === '🧱') ? '▒' : ((oc === '∆' || c === '∆') ? '∆' : ((oc === '░' || c === '░') ? '░' : ((oc === '®' || c === '®') ? '®' : ((oc === '£' || c === '£') ? '£' : '∞'))))));
                     const enemyConfig = (lvl.links && lvl.links[`${x},${y}_enemy`]) || {};
                     const path = (lvl.links && lvl.links[`${x},${y}_path`]) || [];
-                    const enemy = EnemySystem.EnemyFactory.create(x, y, 'logistic', { 
+                    const enemyType = symbol === 'ʬ' ? 'glitch' : (symbol === '§' ? 'cable' : (symbol === '▒' ? 'brick' : (symbol === '∆' ? 'repair' : (symbol === '░' ? 'courier' : (symbol === '®' ? 'spark' : (symbol === '£' ? 'weld' : 'logistic'))))));
+                    const enemy = EnemySystem.EnemyFactory.create(x, y, enemyType, { 
                         path: path,
-                        speed: enemyConfig.speed || 2.0,
-                        damage: enemyConfig.damage || 1,
+                        speed: enemyConfig.speed || (symbol === 'ʬ' ? 1.8 : (symbol === '§' ? 1.5 : (symbol === '░' ? 2.0 : (symbol === '∆' ? 1.2 : (symbol === '®' ? 1.5 : (symbol === '£' ? 1.0 : (symbol === '▒' ? 1.2 : 2.0))))))),
+                        damage: enemyConfig.damage || (symbol === 'ʬ' ? 2 : (symbol === '§' ? 2 : (symbol === '∆' ? 2 : (symbol === '░' ? 2 : (symbol === '®' ? 3 : (symbol === '£' ? 1 : (symbol === '▒' ? 2 : 1))))))),
                         loopType: enemyConfig.loopType || 'LOOP',
                         moveStyle: enemyConfig.moveStyle || 'CONTINUOUS'
                     });
@@ -620,6 +625,7 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         }
     }
     else if (c === 'M') Graphics.drawBlock(x, y, (mockGame.blocks.find(b => b.x === x && b.y === y)?.dir || 0) * (Math.PI/2), null, 0, 0, 'PRISM');
+    else if (c === 'ж') Graphics.drawBlock(x, y, 0, null, 0, 0, 'BRICK_OBSTACLE');
     else if (c === 'O') {
         const p = mockGame.portals.find(p => p.x === x && p.y === y);
         Graphics.drawPortal(x, y, p?.channel || 0, animFrame, p?.color || '#ffd700');
@@ -634,16 +640,24 @@ function drawChar(x, y, c, alpha = 1.0, isSecondLayer = false) {
         const labelColor = (lvl.links && lvl.links[`${x},${y}_labelColor`]) || "#00f0ff";
         Graphics.drawWorldLabel(x, y, labelText, labelColor, 1.0, 0.3);
     }
-    else if (c === '∞') {
+    else if (c === '∞' || c === '∆' || c === '░' || c === '®' || c === '£' || c === '▒' || c === '🧱' || c === '§' || c === 'ʬ') {
         if (window.EnemySystem) {
             const config = (levelsData[currentLevelIdx].links?.[`${x},${y}_enemy`]) || {};
-            const enemy = EnemySystem.EnemyFactory.create(x, y, 'logistic', { ...config, isStatic: true });
+            let type = 'logistic';
+            if (c === 'ʬ') type = 'glitch';
+            if (c === '∆') type = 'repair';
+            if (c === '░') type = 'courier';
+            if (c === '®') type = 'spark';
+            if (c === '£') type = 'weld';
+            if (c === '▒' || c === '🧱') type = 'brick';
+            if (c === '§') type = 'cable';
+            const enemy = EnemySystem.EnemyFactory.create(x, y, type, { ...config, isStatic: true });
             if (enemy) enemy.draw(ctx);
         } else {
-            ctx.fillStyle = '#00f0ff';
+            ctx.fillStyle = (c === 'ʬ') ? '#9b59b6' : ((c === '§') ? '#e74c3c' : ((c === '∆') ? '#3498db' : (c === '®' ? '#f1c40f' : (c === '£' ? '#7f8c8d' : (c === '▒' || c === '🧱' ? '#f39c12' : '#00f0ff')))));
             ctx.font = '24px VT323';
             ctx.textAlign = 'center';
-            ctx.fillText('∞', x * 32 + 16, y * 32 + 24);
+            ctx.fillText(c, x * 32 + 16, y * 32 + 24);
         }
     }
     else if (c === '$') {
@@ -743,6 +757,9 @@ function renderLoop() {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const c = currentMap[y][x];
         const oc = currentOverlayMap[y][x];
+        // Skip world labels in base pass to draw them later above walls
+        if (c === '!') continue;
+        
         // If there's an overlay tile that suppresses floor (like a nucleus), 
         // we might want to skip the base floor if the base is just a space.
         const suppressesFloor = ['B', 'X', 'T', 'Z', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(oc);
@@ -756,7 +773,8 @@ function renderLoop() {
         const wc = currentWiresMap[y][x]; if (wc !== ' ') drawChar(x, y, wc, 1.0, true);
     }
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const oc = currentOverlayMap[y][x]; if (oc !== ' ') drawChar(x, y, oc, 1.0, true);
+        const oc = currentOverlayMap[y][x]; 
+        if (oc !== ' ' && oc !== '!') drawChar(x, y, oc, 1.0, true);
     }
     const ghostBlocks = [];
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -765,6 +783,7 @@ function renderLoop() {
         drawChar(x, y, bc, 1.0, true);
     }
     for (const e of mockGame.emitters) Graphics.drawLaser(e, animFrame);
+    // Pass 6: Re-draw Walls (ensure they are above lasers/wires)
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const c = currentMap[y][x];
         const oc = currentOverlayMap[y][x];
@@ -772,6 +791,8 @@ function renderLoop() {
         if (wallChars.includes(c)) drawChar(x, y, c);
         if (wallChars.includes(oc)) drawChar(x, y, oc);
     }
+
+
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         if (lvl.dialogues?.[`${x},${y}`]) { ctx.fillStyle = '#00ff9f'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('💬', x*32+16, y*32+24); }
         if (lvl.zoneTriggers?.some(t => t.x === x && t.y === y)) { ctx.fillStyle = '#ffcc00'; ctx.font = '20px VT323'; ctx.textAlign = 'center'; ctx.fillText('⚡', x*32+16, y*32+24); }
@@ -827,6 +848,13 @@ function renderLoop() {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.lineWidth = 1;
     for(let x=0; x<=w*32; x+=32) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h*32); ctx.stroke(); }
     for(let y=0; y<=h*32; y+=32) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w*32,y); ctx.stroke(); }
+
+    // Pass 7: World Labels (!) - Final Pass ABOVE EVERYTHING (Grid and Paths)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (currentOverlayMap[y][x] === '!') {
+            drawChar(x, y, '!', 1.0, true);
+        }
+    }
     if (selectionStart && selectionEnd) {
         ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
         if (currentTool === 'line') {
@@ -1011,7 +1039,7 @@ function setupEvents() {
                 return;
             }
             const overlayChar = currentOverlayMap[p.y][p.x];
-            if (overlayChar === '∞') {
+            if (overlayChar === '∞' || overlayChar === '∆' || overlayChar === '░') {
                 togglePathEditMode(p.x, p.y);
                 return;
             }
@@ -1041,7 +1069,14 @@ function setupEvents() {
             }
         } else if (currentTool === 'brush' || e.button === 2) {
             const char = (e.button === 2) ? ' ' : selectedTile;
-            const map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            let map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            if (char === '!') map = currentOverlayMap;
+            
+            // Clean up old data if clearing or changing an interactive tile
+            if (char === ' ' || map[p.y][p.x] !== char) {
+                scrubTileData(p.x, p.y);
+            }
+
             map[p.y][p.x] = char;
             if (activeLayer === 'events') {
                 const lvl = levelsData[currentLevelIdx];
@@ -1081,7 +1116,13 @@ function setupEvents() {
             selectionEnd = { ...p };
         } else if (currentTool === 'brush' || e.buttons & 2) {
             const char = (e.buttons & 2) ? ' ' : selectedTile;
-            const map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            let map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            if (char === '!') map = currentOverlayMap;
+            
+            if (char === ' ' || map[p.y][p.x] !== char) {
+                scrubTileData(p.x, p.y);
+            }
+
             map[p.y][p.x] = char; rebuildMock();
         }
     };
@@ -1112,14 +1153,25 @@ function setupEvents() {
                 updatePropertyPanel();
             }
         } else if ((currentTool === 'rect' || currentTool === 'line') && selectionStart && selectionEnd) {
-            const map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            let map = (activeLayer === 'base') ? currentMap : (activeLayer === 'overlays' ? currentOverlayMap : (activeLayer === 'wires' ? currentWiresMap : currentBlocksMap));
+            if (selectedTile === '!') map = currentOverlayMap;
             if (currentTool === 'rect') {
                 const x1 = Math.min(selectionStart.x, selectionEnd.x), x2 = Math.max(selectionStart.x, selectionEnd.x);
                 const y1 = Math.min(selectionStart.y, selectionEnd.y), y2 = Math.max(selectionStart.y, selectionEnd.y);
-                for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) map[y][x] = selectedTile;
+                for (let y = y1; y <= y2; y++) {
+                    for (let x = x1; x <= x2; x++) {
+                        if (map[y][x] !== selectedTile) scrubTileData(x, y);
+                        map[y][x] = selectedTile;
+                    }
+                }
             } else {
                 const points = getLinePoints(selectionStart.x, selectionStart.y, selectionEnd.x, selectionEnd.y);
-                points.forEach(pt => { if (map[pt.y]) map[pt.y][pt.x] = selectedTile; });
+                points.forEach(pt => { 
+                    if (map[pt.y] && map[pt.y][pt.x] !== selectedTile) {
+                        scrubTileData(pt.x, pt.y);
+                        map[pt.y][pt.x] = selectedTile; 
+                    }
+                });
             }
             selectionStart = null; selectionEnd = null;
             saveHistory(); rebuildMock();
@@ -1240,4 +1292,38 @@ function setupEvents() {
     });
 }
 
-Object.assign(window, { loadLevel, rebuildMock, saveHistory, undo, getGridPos, getNextRotation, drawChar, renderLoop, setupEvents, getLinePoints });
+function scrubTileData(x, y) {
+    const lvl = levelsData[currentLevelIdx];
+    if (!lvl) return;
+    
+    const key = `${x},${y}`;
+    
+    // 1. Clear Links (Properties)
+    if (lvl.links) {
+        const prefixes = [
+            '', '_behavior', '_init', '_isGlobal', '_dir', '_color', 
+            '_exitTo', '_spawnX', '_spawnY', '_label', '_labelColor', 
+            '_launcher', '_enemy', '_path'
+        ];
+        prefixes.forEach(p => {
+            delete lvl.links[key + p];
+        });
+        
+        // Also clear any coordinate-based keys that might be orphaned
+        // (like link connections if we had a more complex link system)
+    }
+    
+    // 2. Clear Dialogues
+    if (lvl.dialogues && lvl.dialogues[key]) {
+        delete lvl.dialogues[key];
+        if (window.updateDialogueManager) updateDialogueManager();
+    }
+    
+    // 3. Clear Zone Triggers
+    if (lvl.zoneTriggers) {
+        lvl.zoneTriggers = lvl.zoneTriggers.filter(t => t.x !== x || t.y !== y);
+        if (window.updateTriggerManagerList) updateTriggerManagerList();
+    }
+}
+
+Object.assign(window, { loadLevel, rebuildMock, saveHistory, undo, getGridPos, getNextRotation, drawChar, renderLoop, setupEvents, getLinePoints, scrubTileData });

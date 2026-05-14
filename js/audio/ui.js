@@ -181,5 +181,58 @@ Object.assign(window.AudioSys, {
         const duration = isEmergency ? 0.08 : 0.12;
         
         this.playTone(freq, type, duration, vol, now);
+    },
+
+    playAnimeImpactSFX(sourceX = undefined, sourceY = undefined) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        const spatialFactor = window.AudioSys ? AudioSys.getSpatialVolume(sourceX, sourceY, 1.0) : 1.0;
+        if (spatialFactor <= 0) return;
+
+        // 1. THE "CRACK" (High Frequency Snap)
+        const snap = audioCtx.createOscillator();
+        const snapGain = audioCtx.createGain();
+        snap.type = 'square';
+        snap.frequency.setValueAtTime(1800, now);
+        snap.frequency.exponentialRampToValueAtTime(400, now + 0.04);
+        snapGain.gain.setValueAtTime(0.25 * spatialFactor, now);
+        snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        snap.connect(snapGain);
+        snapGain.connect(audioCtx.destination);
+        snap.start(now);
+        snap.stop(now + 0.06);
+
+        // 2. THE "DON" (Deep Heavy Thump)
+        const thump = audioCtx.createOscillator();
+        const thumpGain = audioCtx.createGain();
+        thump.type = 'sine';
+        thump.frequency.setValueAtTime(140, now);
+        thump.frequency.exponentialRampToValueAtTime(35, now + 0.2);
+        thumpGain.gain.setValueAtTime(0.5 * spatialFactor, now);
+        thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        thump.connect(thumpGain);
+        thumpGain.connect(audioCtx.destination);
+        thump.start(now);
+        thump.stop(now + 0.25);
+
+        // 3. THE "SHATTER" (Noise Layer)
+        const duration = 0.15;
+        const bufferSize = audioCtx.sampleRate * duration;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1200;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.2 * spatialFactor, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        noise.connect(filter);
+        filter.connect(g);
+        g.connect(audioCtx.destination);
+        noise.start(now);
     }
 });

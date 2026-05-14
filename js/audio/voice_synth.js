@@ -138,6 +138,17 @@ const IAVoice = {
         const cleanText = text.replace(/\[.*?\]/g, '');
         const speakOptions = { ...this.defaultOptions, ...options };
         
+        // Spatial Audio Attenuation
+        if (window.AudioSys && speakOptions.sourceX !== undefined && speakOptions.sourceY !== undefined) {
+            const spatialVolFactor = AudioSys.getSpatialVolume(speakOptions.sourceX, speakOptions.sourceY, 1.0);
+            if (spatialVolFactor <= 0) {
+                console.log("IA Voice: Skipping silent voice (too far)");
+                return;
+            }
+            // Adjust overall amplitude if using meSpeak directly, or we'll handle it in playLayer for WebAudio
+            speakOptions.amplitude = (speakOptions.amplitude || 100) * spatialVolFactor;
+        }
+
         try {
             console.log("IA Voice speaking: " + cleanText);
             
@@ -273,7 +284,12 @@ const IAVoice = {
             if (options.playbackRate) source.playbackRate.value = options.playbackRate;
             if (options.detune) source.detune.value = options.detune;
 
-            source.connect(audioCtx.destination);
+            const finalGain = audioCtx.createGain();
+            let baseVol = options.volume || 1.0;
+            finalGain.gain.value = window.AudioSys ? AudioSys.getSpatialVolume(options.sourceX, options.sourceY, baseVol) : baseVol;
+
+            source.connect(finalGain);
+            finalGain.connect(audioCtx.destination);
             source.start();
         });
     },
@@ -295,7 +311,10 @@ const IAVoice = {
             const bitCrusher = options.bitcrusher ? audioCtx.createWaveShaper() : null;
 
             // Configuration
-            mainGain.gain.value = (options.volume || (options.demonMode ? 0.7 : 1.0));
+            let baseVol = (options.volume || (options.demonMode ? 0.7 : 1.0));
+            const finalVol = window.AudioSys ? AudioSys.getSpatialVolume(options.sourceX, options.sourceY, baseVol) : baseVol;
+            
+            mainGain.gain.value = finalVol;
             if (panner) panner.pan.value = options.pan || 0;
 
             // Thunder Filter (removes highs from sub layers)
@@ -336,7 +355,12 @@ const IAVoice = {
             filter.frequency.value = 2500; // Industrial muffle
 
             // Pitch manipulation via Web Audio Source Node
-            if (options.playbackRate) {
+            if (options.powerDownMode) {
+                const initialRate = options.playbackRate || 1.0;
+                sourceNode.playbackRate.setValueAtTime(initialRate, startTime);
+                // Ramp down to 40% of original speed over the duration of the clip
+                sourceNode.playbackRate.exponentialRampToValueAtTime(initialRate * 0.4, startTime + audioBuffer.duration);
+            } else if (options.playbackRate) {
                 sourceNode.playbackRate.value = options.playbackRate;
             }
             if (options.detune) {

@@ -1,4 +1,63 @@
 Object.assign(Graphics, {
+    echoes: [],
+    glitchEchoes: [],
+
+    spawnEcho(x, y, dir, frame, isGrabbing) {
+        this.echoes.push({
+            x, y, dir, frame, isGrabbing,
+            life: 1.0,
+            maxLife: 1.0
+        });
+    },
+
+    spawnGlitchEcho(x, y, rotation, frame, state) {
+        this.glitchEchoes.push({
+            x, y, rotation, frame, state,
+            life: 1.0
+        });
+    },
+
+    drawEchoes() {
+        if (this.echoes.length > 0) {
+            this.ctx.save();
+            for (let i = this.echoes.length - 1; i >= 0; i--) {
+                const e = this.echoes[i];
+                e.life -= 0.05; // Fades out over 20 frames
+                
+                if (e.life <= 0) {
+                    this.echoes.splice(i, 1);
+                    continue;
+                }
+
+                this.ctx.globalAlpha = e.life * 0.4;
+                this.drawRobot(e.x, e.y, e.dir, e.frame, '#00f0ff', 0, 0, false, null, 0, {x:0,y:0}, e.isGrabbing, 0);
+            }
+            this.ctx.restore();
+            this.ctx.globalAlpha = 1.0;
+        }
+
+        if (this.glitchEchoes.length > 0) {
+            this.ctx.save();
+            for (let i = this.glitchEchoes.length - 1; i >= 0; i--) {
+                const e = this.glitchEchoes[i];
+                e.life -= 0.08; // Rastro ligeiramente mais rápido/fantasmagórico
+                
+                if (e.life <= 0) {
+                    this.glitchEchoes.splice(i, 1);
+                    continue;
+                }
+
+                this.ctx.save();
+                if (this.drawGlitchWalker) {
+                    this.drawGlitchWalker(e.x, e.y, e.rotation, e.frame, e.state, 0, e.life * 0.4, 0);
+                }
+                this.ctx.restore();
+            }
+            this.ctx.restore();
+            this.ctx.globalAlpha = 1.0;
+        }
+    },
+
     drawBlock(x, y, visualAngle, powerData, distToTarget = 0, logicalDir = 0, type = 'NORMAL', fallProgress = 0, phase = null, isSolarGlobal = true) {
         const ts = this.tileSize;
         const cx = (x + 0.5) * ts;
@@ -134,6 +193,44 @@ Object.assign(Graphics, {
             this.ctx.fillRect(px + 4, py + 4, bs, bs); this.ctx.fillRect(px + ts - 6, py + 4, bs, bs); this.ctx.fillRect(px + 4, py + ts - 6, bs, bs); this.ctx.fillRect(px + ts - 6, py + ts - 6, bs, bs);
             this.ctx.restore(); this.ctx.restore();
             return;
+        } else if (type === 'BRICK_OBSTACLE') {
+            // --- HEAVY INDUSTRIAL REINFORCED BARRIER BLOCK ---
+            this.ctx.save();
+            // Base Concrete Texture
+            this.ctx.fillStyle = '#7f8c8d'; this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
+            // Steel Frame Borders
+            this.ctx.fillStyle = '#34495e'; const bw = 4;
+            this.ctx.fillRect(px + 2, py + 2, ts - 4, bw);
+            this.ctx.fillRect(px + 2, py + ts - 2 - bw, ts - 4, bw);
+            this.ctx.fillRect(px + 2, py + 2, bw, ts - 4);
+            this.ctx.fillRect(px + ts - 2 - bw, py + 2, bw, ts - 4);
+            
+            // Industrial Hazard Stripes (Orange and Dark Gray)
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.rect(px + 6, py + 6, ts - 12, ts - 12);
+            this.ctx.clip();
+            this.ctx.fillStyle = '#2c3e50';
+            this.ctx.fillRect(px + 6, py + 6, ts - 12, ts - 12);
+            this.ctx.fillStyle = '#f39c12'; // Industrial Orange
+            this.ctx.lineWidth = 6;
+            for (let o = -ts; o < ts * 2; o += 10) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(px + o, py);
+                this.ctx.lineTo(px + o + ts, py + ts);
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#f39c12';
+                this.ctx.stroke();
+            }
+            this.ctx.restore();
+
+            // Central Heavy Rivet/Plate
+            this.ctx.fillStyle = '#ecf0f1';
+            this.ctx.beginPath(); this.ctx.arc(0, 0, 4, 0, Math.PI * 2); this.ctx.fill();
+            this.ctx.strokeStyle = '#2c3e50'; this.ctx.lineWidth = 1; this.ctx.stroke();
+
+            this.ctx.restore(); this.ctx.restore();
+            return;
         }
 
         this.ctx.fillStyle = baseMetal; this.ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
@@ -248,7 +345,32 @@ Object.assign(Graphics, {
     },
 
     drawDebris(p) {
-        this.ctx.save(); this.ctx.translate(p.x, p.y); this.ctx.rotate(p.rot); this.ctx.fillStyle = p.color; this.ctx.beginPath(); this.ctx.moveTo(p.vertices[0].x, p.vertices[0].y); for (let i = 1; i < p.vertices.length; i++) this.ctx.lineTo(p.vertices[i].x, p.vertices[i].y); this.ctx.closePath(); this.ctx.fill(); this.ctx.strokeStyle = 'rgba(0,0,0,0.3)'; this.ctx.lineWidth = 1; this.ctx.stroke(); this.ctx.restore();
+        this.ctx.save();
+        this.ctx.translate(p.x, p.y);
+        this.ctx.rotate(p.rot);
+        
+        if (p.age !== undefined && p.maxAge !== undefined) {
+            const shrinkStart = p.maxAge * 0.7;
+            if (p.age > shrinkStart) {
+                const scale = Math.max(0, 1.0 - (p.age - shrinkStart) / (p.maxAge - shrinkStart));
+                this.ctx.scale(scale, scale);
+            }
+        }
+        
+        this.ctx.fillStyle = p.color;
+        this.ctx.beginPath();
+        if (p.vertices && p.vertices.length > 0) {
+            this.ctx.moveTo(p.vertices[0].x, p.vertices[0].y);
+            for (let i = 1; i < p.vertices.length; i++) {
+                this.ctx.lineTo(p.vertices[i].x, p.vertices[i].y);
+            }
+        }
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+        this.ctx.restore();
     },
 
     drawCoreRequirement(x, y, required, current) {
@@ -408,5 +530,854 @@ Object.assign(Graphics, {
         }
 
         this.ctx.restore();
+    },
+
+    drawRepairUnit(x, y, rotation, frame, state = 'PATROL', flashTimer = 0, isDying = false, deathTimer = 0, deathDir = {x:0, y:0}, fragmentOffsets = null) {
+        const ts = this.tileSize, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // SHATTER LOGIC
+        const applyFragment = (index, weight = 1.0) => {
+            if (!isDying) return;
+            
+            const key = Math.floor(index * 10);
+            if (fragmentOffsets && !fragmentOffsets.has(key)) {
+                // Momentum Blast: Initial kick
+                const angle = (index * 1.37) % (Math.PI * 2);
+                const power = (Math.random() * 0.5 + 0.5) * 12 * weight;
+                const vx = Math.cos(angle) * power + (deathDir.x * 0.8);
+                const vy = Math.sin(angle) * power + (deathDir.y * 0.8);
+                fragmentOffsets.set(key, { x: 0, y: 0, vx, vy, weight });
+            }
+            
+            const fOff = fragmentOffsets ? fragmentOffsets.get(key) : { x: 0, y: 0 };
+            
+            // 1. Position from physics
+            ctx.translate(fOff.x, fOff.y);
+            ctx.rotate((index * 1.37) + deathTimer * 0.05 * (fOff.vx / 10)); // Inertial rotation
+
+            // 2. Persistence & Random Shrink (600-1000 frames)
+            const shrinkStart = 600 + (index * 73) % 300; 
+            let scale = 1.0;
+            if (deathTimer > shrinkStart) {
+                scale = Math.max(0, 1 - (deathTimer - shrinkStart) / 60);
+            }
+            ctx.scale(scale, scale);
+        };
+
+        const bob = !isDying ? Math.sin(frame * 0.08) * 0.6 : 0;
+        ctx.translate(0, bob);
+        ctx.rotate(rotation);
+
+        if (flashTimer > 0 && Math.floor(frame / 2) % 2 === 0) {
+            ctx.filter = 'brightness(5)';
+        }
+
+        // --- 1. CHASSIS ---
+        ctx.save();
+        applyFragment(1, 0.4);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(-10, -10, 10, 10); // Top Left
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.5, 0.6);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, -10, 10, 10); // Top Right
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.8, 0.5);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(-10, 0, 10, 10); // Bottom Left
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.2, 0.7);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, 10, 10); // Bottom Right
+        ctx.restore();
+        
+        // Steam Vents
+        ctx.save();
+        applyFragment(2.1, 0.9);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-11, -11, 4, 4);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.2, 0.9);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(7, -11, 4, 4);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.3, 0.9);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-11, 7, 4, 4);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.4, 0.9);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(7, 7, 4, 4);
+        ctx.restore();
+
+        // Armor Plates
+        ctx.save();
+        applyFragment(3.1, 0.6);
+        const plateShift = !isDying ? Math.sin(frame * 0.05) * 2 : 0;
+        ctx.fillStyle = '#2c3e50';
+        ctx.beginPath();
+        ctx.moveTo(12 + plateShift, -10); ctx.lineTo(15 + plateShift, -4); 
+        ctx.lineTo(15 + plateShift, 4); ctx.lineTo(12 + plateShift, 10);
+        ctx.lineTo(6, 10); ctx.lineTo(6, -10); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        
+        ctx.save();
+        applyFragment(4.1, 0.7);
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(-12, -13, 18, 4); 
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(4.2, 0.8);
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(-12, 9, 18, 4);
+        ctx.restore();
+
+        // --- 2. WEAPONRY ---
+        ctx.save();
+        applyFragment(5, 1.2);
+        ctx.translate(0, 11);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(-2, -2, 10, 4);
+        const ramThump = (!isDying && frame % 40 < 10) ? (1 - (frame % 10) / 10) * 8 : 0;
+        ctx.fillStyle = '#7f8c8d';
+        ctx.fillRect(8 + ramThump, -5, 6, 10);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(6, 1.2);
+        ctx.translate(2, -11);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(-2, -2, 8, 4);
+        ctx.translate(6, 0);
+        if (!isDying) ctx.rotate(frame * 0.8);
+        ctx.fillStyle = '#bdc3c7';
+        ctx.beginPath();
+        for(let i=0; i<12; i++) {
+            const a = (i/12) * Math.PI*2;
+            const r = (i%2 === 0) ? 9 : 6;
+            ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+        }
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+
+        // --- 3. VISOR ---
+        ctx.save();
+        applyFragment(7, 1.1);
+        ctx.translate(10, 0);
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(-2, -8, 5, 16);
+        if (!isDying) {
+            const scanPos = Math.sin(frame * 0.1) * 6;
+            const grad = ctx.createLinearGradient(0, scanPos - 4, 0, scanPos + 4);
+            grad.addColorStop(0, 'rgba(255, 0, 0, 0)'); grad.addColorStop(0.5, '#ff0000'); grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            ctx.fillStyle = grad; ctx.fillRect(0, scanPos - 3, 3, 6);
+        }
+        ctx.restore();
+
+        ctx.restore();
+    },
+
+    drawDataCourier(x, y, rotation, frame, state = 'DELIVER', flashTimer = 0, isDying = false, deathTimer = 0, deathDir = {x:0, y:0}, fragmentOffsets = null) {
+        const ts = this.tileSize, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // SHATTER LOGIC
+        const applyFragment = (index, weight = 1.0) => {
+            if (!isDying) return;
+            
+            const key = Math.floor(index * 10);
+            if (fragmentOffsets && !fragmentOffsets.has(key)) {
+                // Momentum Blast: Initial kick
+                const angle = (index * 1.37) % (Math.PI * 2);
+                const power = (Math.random() * 0.5 + 0.5) * 12 * weight;
+                const vx = Math.cos(angle) * power + (deathDir.x * 0.8);
+                const vy = Math.sin(angle) * power + (deathDir.y * 0.8);
+                fragmentOffsets.set(key, { x: 0, y: 0, vx, vy, weight });
+            }
+            
+            const fOff = fragmentOffsets ? fragmentOffsets.get(key) : { x: 0, y: 0 };
+            
+            // 1. Position from physics
+            ctx.translate(fOff.x, fOff.y);
+            ctx.rotate((index * 1.37) + deathTimer * 0.05 * (fOff.vx / 10)); // Inertial rotation
+
+            // 2. Persistence & Random Shrink (600-1000 frames)
+            const shrinkStart = 600 + (index * 73) % 300; 
+            let scale = 1.0;
+            if (deathTimer > shrinkStart) {
+                scale = Math.max(0, 1 - (deathTimer - shrinkStart) / 60);
+            }
+            ctx.scale(scale, scale);
+        };
+
+        const bounce = !isDying ? Math.sin(frame * 0.2) * 1.5 : 0;
+        ctx.translate(0, bounce);
+
+        if (state === 'CHARGING' && !isDying) {
+            ctx.translate((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
+        }
+        
+        ctx.rotate(rotation);
+
+        if (flashTimer > 0 && Math.floor(frame / 2) % 2 === 0) {
+            ctx.filter = 'brightness(5)';
+        }
+
+        // --- 1. CHASSIS ---
+        ctx.save();
+        applyFragment(1.1, 0.4);
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.roundRect(-10, -10, 10, 10, 2); ctx.fill(); // TL
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.2, 0.5);
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.roundRect(0, -10, 10, 10, 2); ctx.fill(); // TR
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.3, 0.6);
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.roundRect(-10, 0, 10, 10, 2); ctx.fill(); // BL
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.4, 0.7);
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.roundRect(0, 0, 10, 10, 2); ctx.fill(); // BR
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.1, 0.6);
+        ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(-8, -11, 8, 18, 2); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.2, 0.7);
+        ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(0, -11, 8, 18, 2); ctx.fill();
+        ctx.restore();
+
+        // Face Plate / Eyes
+        ctx.save();
+        applyFragment(3.1, 1.1);
+        ctx.fillStyle = '#1d2b1d'; ctx.fillRect(-2, -4, 10, 4); // Top face
+        ctx.fillStyle = '#e74c3c';
+        const eyePulse = !isDying ? 0.8 + Math.sin(frame * 0.1) * 0.2 : 0.5;
+        ctx.globalAlpha = eyePulse * (isDying ? (1 - deathTimer/40) : 1);
+        ctx.fillRect(4, -3, 3, 3);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(3.2, 1.2);
+        ctx.fillStyle = '#1d2b1d'; ctx.fillRect(-2, 0, 10, 4); // Bottom face
+        ctx.fillStyle = '#e74c3c';
+        ctx.globalAlpha = eyePulse * (isDying ? (1 - deathTimer/40) : 1);
+        ctx.fillRect(4, 1, 3, 3);
+        ctx.restore();
+
+        // --- 2. BACKPACK ---
+        ctx.save();
+        applyFragment(4, 0.8);
+        ctx.fillStyle = '#00ffcc';
+        ctx.fillRect(-10, -3, 2, 6);
+        ctx.restore();
+
+        // --- 3. FEET ---
+        ctx.save();
+        applyFragment(5, 1.3);
+        ctx.fillStyle = '#333';
+        const legSwing = !isDying ? Math.sin(frame * 0.4) * 2 : 0;
+        ctx.fillRect(-6, 8 + legSwing, 4, 3); ctx.fillRect(2, 8 - legSwing, 4, 3);
+        ctx.restore();
+
+        ctx.restore();
+    },
+
+    drawWeldBot(x, y, rotation, frame, state = 'PATROL', flashTimer = 0, weldProgress = 0, headRotationOffset = 0, isDying = false, deathTimer = 0, deathDir = {x:0, y:0}, fragmentOffsets = null) {
+        const ts = this.tileSize, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // SHATTER LOGIC
+        const applyFragment = (index, weight = 1.0) => {
+            if (!isDying) return;
+            
+            const key = Math.floor(index * 10);
+            if (fragmentOffsets && !fragmentOffsets.has(key)) {
+                // Momentum Blast: Initial kick
+                const angle = (index * 1.37) % (Math.PI * 2);
+                const power = (Math.random() * 0.5 + 0.5) * 12 * weight;
+                const vx = Math.cos(angle) * power + (deathDir.x * 0.8);
+                const vy = Math.sin(angle) * power + (deathDir.y * 0.8);
+                fragmentOffsets.set(key, { x: 0, y: 0, vx, vy, weight });
+            }
+            
+            const fOff = fragmentOffsets ? fragmentOffsets.get(key) : { x: 0, y: 0 };
+            
+            // 1. Position from physics
+            ctx.translate(fOff.x, fOff.y);
+            ctx.rotate((index * 1.37) + deathTimer * 0.05 * (fOff.vx / 10)); // Inertial rotation
+
+            // 2. Persistence & Random Shrink (600-1000 frames)
+            const shrinkStart = 600 + (index * 73) % 300; 
+            let scale = 1.0;
+            if (deathTimer > shrinkStart) {
+                scale = Math.max(0, 1 - (deathTimer - shrinkStart) / 60);
+            }
+            ctx.scale(scale, scale);
+        };
+
+        const bob = !isDying ? Math.sin(frame * 0.05) * 0.4 : 0;
+        ctx.translate(0, bob);
+        ctx.rotate(rotation);
+
+        if (flashTimer > 0 && Math.floor(frame / 2) % 2 === 0) {
+            ctx.filter = 'brightness(5)';
+        }
+
+        // --- 1. CHASSIS ---
+        ctx.save();
+        applyFragment(1.1, 0.4);
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.roundRect(-12, -12, 12, 12, 4); ctx.fill(); // TL
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.2, 0.5);
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.roundRect(0, -12, 12, 12, 4); ctx.fill(); // TR
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.3, 0.6);
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.roundRect(-12, 0, 12, 12, 4); ctx.fill(); // BL
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.4, 0.7);
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.roundRect(0, 0, 12, 12, 4); ctx.fill(); // BR
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.5, 0.8);
+        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-12, -12, 24, 4);
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(1.6, 0.9);
+        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-12, 8, 24, 4);
+        ctx.restore();
+
+        // --- 2. TANKS ---
+        ctx.save();
+        applyFragment(2.1, 1.1);
+        ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.roundRect(-16, -10, 8, 8, 2); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.2, 1.2);
+        ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.roundRect(-16, 2, 8, 8, 2); ctx.fill();
+        ctx.restore();
+
+        // --- 3. TORCH ---
+        ctx.save();
+        applyFragment(3, 1.2);
+        const torchAngle = (!isDying && (state !== 'AIM' && state !== 'WELD')) ? Math.sin(frame * 0.1) * 0.1 : 0;
+        ctx.rotate(torchAngle + headRotationOffset);
+        ctx.fillStyle = '#95a5a6'; ctx.fillRect(8, -3, 8, 6);
+        ctx.fillStyle = '#333'; ctx.fillRect(16, -2, 4, 4);
+        ctx.restore();
+        
+        // --- 4. SENSOR ---
+        ctx.save();
+        applyFragment(4, 1.1);
+        ctx.rotate(headRotationOffset);
+        ctx.fillStyle = '#000'; ctx.fillRect(6, -6, 4, 12);
+        ctx.fillStyle = (state === 'WELD') ? '#e74c3c' : '#f1c40f'; ctx.fillRect(7, -1, 2, 2);
+        ctx.restore();
+
+        ctx.restore();
+    },
+
+    drawWeldFlame(x, y, rotation, progress, frame) {
+        // Agora processado via sistema de partículas para um efeito volumétrico de lança-chamas
+    },
+
+    drawBrickStack(x, y, rotation, frame, state = 'PATROL', flashTimer = 0, armProgress = 0, headRotationOffset = 0, isDying = false, deathTimer = 0, deathDir = {x:0, y:0}, fragmentOffsets = null, targetCtx = null) {
+        const ts = this.tileSize || 32, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
+        const ctx = targetCtx || this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // SHATTER LOGIC
+        const applyFragment = (index, weight = 1.0) => {
+            if (!isDying) return;
+            
+            const key = Math.floor(index * 10);
+            if (fragmentOffsets && !fragmentOffsets.has(key)) {
+                const angle = (index * 1.37) % (Math.PI * 2);
+                const power = (Math.random() * 0.5 + 0.5) * 14 * weight;
+                const vx = Math.cos(angle) * power + (deathDir.x * 0.8);
+                const vy = Math.sin(angle) * power + (deathDir.y * 0.8);
+                fragmentOffsets.set(key, { x: 0, y: 0, vx, vy, weight });
+            }
+            
+            const fOff = fragmentOffsets ? fragmentOffsets.get(key) : { x: 0, y: 0 };
+            
+            ctx.translate(fOff.x, fOff.y);
+            ctx.rotate((index * 1.37) + deathTimer * 0.05 * (fOff.vx / 10));
+
+            const shrinkStart = 600 + (index * 73) % 300; 
+            let scale = 1.0;
+            if (deathTimer > shrinkStart) {
+                scale = Math.max(0, 1 - (deathTimer - shrinkStart) / 60);
+            }
+            ctx.scale(scale, scale);
+        };
+
+        const bob = !isDying ? Math.sin(frame * 0.1) * 0.5 : 0;
+        ctx.translate(0, bob);
+        
+        if (state === 'THROW_ATTACK' || state === 'THROW_BARRIER' || state === 'THROW_VOLLEY') {
+            // Intense pre-throw trembling
+            if (!isDying && frame % 2 === 0) {
+                ctx.translate((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
+            }
+        } else if (state === 'WEAK_RELOAD') {
+            if (!isDying) {
+                ctx.translate((Math.random() - 0.5) * 1, (Math.random() - 0.5) * 1);
+            }
+        }
+        
+        ctx.rotate(rotation);
+
+        if (flashTimer > 0 && Math.floor(frame / 2) % 2 === 0) {
+            ctx.filter = 'brightness(5)';
+        }
+
+        // --- 1. HEAVY TRACKS (Bottom Layer) ---
+        ctx.save();
+        applyFragment(1, 0.8);
+        ctx.fillStyle = '#2c3e50';
+        // Wider treads for artillery stability
+        ctx.fillRect(-14, -14, 28, 6);
+        ctx.fillRect(-14, 8, 28, 6);
+        ctx.fillStyle = '#1a252f';
+        const treadMove = !isDying ? (frame % 8) : 0;
+        for (let tx = -12; tx <= 12; tx += 6) {
+            const actualTx = -12 + ((tx + 12 + treadMove) % 24);
+            ctx.fillRect(actualTx, -15, 3, 8);
+            ctx.fillRect(actualTx, 7, 3, 8);
+        }
+        ctx.restore();
+
+        // --- 2. MAIN CHASSIS (Industrial Orange) ---
+        ctx.save();
+        applyFragment(2.1, 0.5);
+        ctx.fillStyle = '#f39c12'; // Industrial Orange Primary
+        ctx.beginPath(); ctx.roundRect(-12, -10, 12, 10, 2); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.2, 0.6);
+        ctx.fillStyle = '#f39c12';
+        ctx.beginPath(); ctx.roundRect(0, -10, 12, 10, 2); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.3, 0.7);
+        ctx.fillStyle = '#f39c12';
+        ctx.beginPath(); ctx.roundRect(-12, 0, 12, 10, 2); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        applyFragment(2.4, 0.8);
+        ctx.fillStyle = '#f39c12';
+        ctx.beginPath(); ctx.roundRect(0, 0, 12, 10, 2); ctx.fill();
+        ctx.restore();
+
+        // Engine / Core Grid
+        ctx.save();
+        applyFragment(3, 1.1);
+        ctx.fillStyle = '#d35400';
+        ctx.fillRect(-8, -6, 16, 12);
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(-6, -4, 12, 2);
+        ctx.fillRect(-6, 2, 12, 2);
+        ctx.restore();
+
+        // --- 3. BUILDER HARD HAT (Yellow) ---
+        ctx.save();
+        applyFragment(4, 0.9);
+        ctx.rotate(headRotationOffset);
+        // Helmet base
+        ctx.fillStyle = '#f1c40f'; // Classic Construction Yellow
+        ctx.beginPath();
+        ctx.arc(0, 0, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#d4ac0d';
+        ctx.stroke();
+        // Helmet Ridge (Top reinforcement)
+        ctx.fillStyle = '#f39c12';
+        ctx.fillRect(-4, -1.5, 8, 3);
+        // Front Headlamp / Sensor
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(5, -2.5, 3, 5);
+        ctx.fillStyle = (state === 'DETECT') ? '#e74c3c' : '#00f0ff';
+        ctx.fillRect(6, -1.5, 2, 3);
+        // Glow if active
+        if (state === 'DETECT' && !isDying) {
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#e74c3c';
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath(); ctx.arc(7, 0, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+
+        // --- 4. FUNCTIONAL CRANE ARM ---
+        ctx.save();
+        applyFragment(5, 1.3);
+        ctx.rotate(headRotationOffset);
+        
+        // Base Swivel
+        ctx.fillStyle = '#7f8c8d';
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+
+        // Determine Crane Arm Extension based on state & progress
+        let armAngle = 0;
+        let armLength = 10;
+        let clawOpen = 0;
+        
+        if (state === 'THROW_ATTACK' || state === 'THROW_BARRIER' || state === 'THROW_VOLLEY') {
+            // Winding up and releasing
+            if (armProgress < 0.4) { // Wind up backwards
+                armAngle = -armProgress * Math.PI;
+                armLength = 8;
+                clawOpen = 0;
+            } else { // Strike forward
+                const releaseP = (armProgress - 0.4) / 0.6;
+                armAngle = Math.sin(releaseP * Math.PI) * Math.PI * 0.4;
+                armLength = 10 + Math.sin(releaseP * Math.PI) * 6;
+                clawOpen = releaseP > 0.5 ? 1 : 0;
+            }
+        } else if (state === 'DETECT') {
+            armAngle = Math.sin(frame * 0.3) * 0.2;
+            armLength = 12;
+            clawOpen = 0.5;
+        } else if (state === 'WEAK_RELOAD') {
+            armAngle = Math.sin(frame * 0.5) * 0.1;
+            armLength = 8;
+            clawOpen = 0.8;
+        } else {
+            // Idle compact arm
+            armAngle = Math.sin(frame * 0.05) * 0.08;
+            armLength = 9;
+            clawOpen = 0.1;
+        }
+
+        // Primary Boom
+        ctx.rotate(armAngle);
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(0, -2, armLength, 4);
+        ctx.strokeStyle = '#2c3e50';
+        ctx.strokeRect(0, -2, armLength, 4);
+
+        // Secondary Boom / Piston
+        ctx.fillStyle = '#bdc3c7';
+        ctx.fillRect(armLength - 2, -1.5, 6, 3);
+
+        // Industrial Claw
+        const clawBaseX = armLength + 4;
+        ctx.fillStyle = '#e67e22';
+        ctx.fillRect(clawBaseX - 2, -3, 4, 6);
+        
+        // Grippers
+        const spread = 3 + clawOpen * 4;
+        ctx.fillStyle = '#2c3e50';
+        // Left Gripper
+        ctx.beginPath();
+        ctx.moveTo(clawBaseX, -spread);
+        ctx.lineTo(clawBaseX + 5, -spread + 1);
+        ctx.lineTo(clawBaseX + 3, -1);
+        ctx.closePath();
+        ctx.fill();
+        // Right Gripper
+        ctx.beginPath();
+        ctx.moveTo(clawBaseX, spread);
+        ctx.lineTo(clawBaseX + 5, spread - 1);
+        ctx.lineTo(clawBaseX + 3, 1);
+        ctx.closePath();
+        ctx.fill();
+
+        // If carrying a block preparing to throw
+        if ((state === 'THROW_ATTACK' || state === 'THROW_BARRIER' || state === 'THROW_VOLLEY') && armProgress < 0.52 && !isDying) {
+            ctx.save();
+            ctx.translate(clawBaseX + 4, 0);
+            ctx.rotate(frame * 0.1);
+            // Miniature block preview
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(-4, -4, 8, 8);
+            ctx.strokeStyle = '#f39c12';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-4, -4, 8, 8);
+            ctx.restore();
+        }
+
+        ctx.restore();
+        ctx.restore();
+    },
+
+    drawGlitchWalker(x, y, rotation, frame, state = 'PATROL', flashTimer = 0, opacity = 1.0, portalScale = 0, isDying = false, deathTimer = 0, deathDir = {x:0, y:0}, fragmentOffsets = null, targetCtx = null) {
+        const ts = this.tileSize || 32, px = x * ts, py = y * ts, cx = px + ts/2, cy = py + ts/2;
+        const ctx = targetCtx || this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // --- 1. DESENHO DO PORTAL DE TELEPORTE (SE ATIVO E NÃO DESINTEGRANDO) ---
+        if (portalScale > 0 && !isDying) {
+            ctx.save();
+            ctx.scale(portalScale, portalScale);
+            const pSeed = (x * 11.3 + y * 19.7);
+            const pFrame = frame * 1.2 + pSeed;
+
+            // Fundo incandescente do portal (Roxo Vibrante com Ciano)
+            const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+            glow.addColorStop(0, 'rgba(155, 89, 182, 0.6)'); // #9b59b6
+            glow.addColorStop(0.5, 'rgba(0, 255, 204, 0.3)'); // #00ffcc
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = glow;
+            ctx.globalCompositeOperation = 'screen';
+            ctx.fillRect(-32, -32, 64, 64);
+
+            // Anéis rotativos distorcidos
+            for (let i = 0; i < 3; i++) {
+                const rot = pFrame * (0.05 + i * 0.02);
+                const scaleR = 1.1 - i * 0.2;
+                ctx.save();
+                ctx.rotate(rot);
+                ctx.scale(scaleR, scaleR);
+                ctx.beginPath();
+                for (let a = 0; a <= Math.PI * 2; a += Math.PI / 4) {
+                    const r = 14 + Math.sin(a * 3 + pFrame * 0.15) * 4;
+                    const ax = Math.cos(a) * r;
+                    const ay = Math.sin(a) * r;
+                    if (a === 0) ctx.moveTo(ax, ay);
+                    else ctx.lineTo(ax, ay);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = i % 2 === 0 ? '#9b59b6' : '#00ffcc';
+                ctx.lineWidth = 2.5 - i * 0.5;
+                ctx.globalAlpha = 0.8 - i * 0.2;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Partículas quadradas orbitando a borda do portal
+            for (let j = 0; j < 10; j++) {
+                const pRot = pFrame * 0.1 + j * (Math.PI * 2 / 10);
+                const pDist = 12 + Math.sin(pFrame * 0.1 + j) * 6;
+                const px = Math.cos(pRot) * pDist;
+                const py = Math.sin(pRot) * pDist;
+                const pSize = 2 + Math.sin(pFrame * 0.2 + j) * 1.5;
+                ctx.fillStyle = j % 2 === 0 ? '#00ffcc' : '#9b59b6';
+                ctx.fillRect(px - pSize/2, py - pSize/2, pSize, pSize);
+            }
+            ctx.restore();
+        }
+
+        // Se totalmente invisível, não desenha o corpo
+        if (opacity <= 0) {
+            ctx.restore();
+            return;
+        }
+
+        // --- SHATTER LOGIC (DESINTEGRAÇÃO CRISTALINA) ---
+        const applyFragment = (index, weight = 1.0) => {
+            if (!isDying) return;
+            const key = Math.floor(index * 10);
+            if (fragmentOffsets && !fragmentOffsets.has(key)) {
+                const angle = (index * 1.37) % (Math.PI * 2);
+                const power = (Math.random() * 0.5 + 0.5) * 15 * weight;
+                const vx = Math.cos(angle) * power + (deathDir.x * 0.8);
+                const vy = Math.sin(angle) * power + (deathDir.y * 0.8);
+                fragmentOffsets.set(key, { x: 0, y: 0, vx, vy, weight });
+            }
+            const fOff = fragmentOffsets ? fragmentOffsets.get(key) : { x: 0, y: 0 };
+            ctx.translate(fOff.x, fOff.y);
+            ctx.rotate((index * 1.37) + deathTimer * 0.05 * (fOff.vx / 10));
+
+            const shrinkStart = 600 + (index * 73) % 300; 
+            let scale = 1.0;
+            if (deathTimer > shrinkStart) {
+                scale = Math.max(0, 1 - (deathTimer - shrinkStart) / 60);
+            }
+            ctx.scale(scale, scale);
+        };
+
+        // Aplica a opacidade geral de fade/fade_in
+        ctx.globalAlpha = opacity * (isDying ? Math.max(0, 1 - deathTimer / 40) : 1.0);
+
+        // --- CONSTANT GLITCH EFFECT (JITTER) ---
+        // Offset pseudo-aleatório contínuo para tremedeira digital
+        const gSeed = frame * 13.7 + x * 7.1 + y * 3.3;
+        const jitterX = !isDying ? (Math.sin(gSeed) > 0.3 ? (Math.random() - 0.5) * 3 : 0) : 0;
+        const jitterY = !isDying ? (Math.cos(gSeed * 1.1) > 0.3 ? (Math.random() - 0.5) * 3 : 0) : 0;
+
+        ctx.translate(jitterX, jitterY);
+        ctx.rotate(rotation);
+
+        if (flashTimer > 0 && Math.floor(frame / 2) % 2 === 0) {
+            ctx.filter = 'brightness(5)';
+        }
+
+        // --- 2. PARTÍCULAS DIGITAIS/QUADRADAS ORBITANDO O CORPO ---
+        if (!isDying) {
+            ctx.save();
+            for (let k = 0; k < 6; k++) {
+                const oAngle = frame * 0.08 + k * (Math.PI / 3);
+                const oRadius = 11 + Math.sin(frame * 0.15 + k) * 3;
+                const ox = Math.cos(oAngle) * oRadius;
+                const oy = Math.sin(oAngle) * oRadius;
+                const oSize = 2;
+                ctx.fillStyle = k % 2 === 0 ? '#00ffcc' : '#9b59b6';
+                // Efeito de piscar nas partículas
+                if (Math.sin(frame * 0.3 + k) > -0.5) {
+                    ctx.fillRect(ox - oSize/2, oy - oSize/2, oSize, oSize);
+                }
+            }
+            ctx.restore();
+        }
+
+        // --- 3. CHASSIS CORRUPTO E CRISTALINO ---
+        // Desenhamos as facetas de cristal com polígonos assimétricos
+        
+        // Faceta Superior Esquerda
+        ctx.save();
+        applyFragment(1.1, 0.5);
+        ctx.fillStyle = '#4a154b'; // Roxo escuro profundo
+        ctx.beginPath();
+        ctx.moveTo(-12, -2); ctx.lineTo(-6, -12); ctx.lineTo(0, -9); ctx.lineTo(0, 0); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.restore();
+
+        // Faceta Superior Direita
+        ctx.save();
+        applyFragment(1.2, 0.6);
+        ctx.fillStyle = '#6c2b70'; // Roxo médio
+        ctx.beginPath();
+        ctx.moveTo(0, -9); ctx.lineTo(6, -12); ctx.lineTo(12, -2); ctx.lineTo(0, 0); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.restore();
+
+        // Faceta Inferior Esquerda
+        ctx.save();
+        applyFragment(1.3, 0.5);
+        ctx.fillStyle = '#361038';
+        ctx.beginPath();
+        ctx.moveTo(-12, -2); ctx.lineTo(0, 0); ctx.lineTo(0, 10); ctx.lineTo(-8, 12); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.restore();
+
+        // Faceta Inferior Direita
+        ctx.save();
+        applyFragment(1.4, 0.7);
+        ctx.fillStyle = '#8e44ad'; // Roxo vibrante principal
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(12, -2); ctx.lineTo(8, 12); ctx.lineTo(0, 10); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.restore();
+
+        // --- 4. NÚCLEO CENTRAL DE ENERGIA INSTÁVEL (CRIANDO O GLITCH DE CORES) ---
+        ctx.save();
+        applyFragment(2.1, 1.0);
+        // Efeito de aberração cromática aleatória no núcleo
+        const rgbSplit = (!isDying && Math.random() > 0.7) ? 2 : 0;
+        
+        if (rgbSplit > 0) {
+            ctx.fillStyle = 'rgba(255, 0, 128, 0.7)';
+            ctx.beginPath(); ctx.arc(-rgbSplit, 0, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(0, 255, 204, 0.7)';
+            ctx.beginPath(); ctx.arc(rgbSplit, 0, 4, 0, Math.PI * 2); ctx.fill();
+        } else {
+            ctx.fillStyle = '#00ffcc';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#00ffcc';
+            ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+
+        // --- 5. CABEÇA / SENSOR CRISTALINO ---
+        ctx.save();
+        applyFragment(3.1, 0.8);
+        const headShift = !isDying ? Math.sin(frame * 0.4) * 1.5 : 0;
+        ctx.translate(0, -11 + headShift);
+        
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.moveTo(-5, 0); ctx.lineTo(0, -6); ctx.lineTo(5, 0); ctx.lineTo(3, 4); ctx.lineTo(-3, 4); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Olho Glitch (Ciano brilhante)
+        ctx.fillStyle = (frame % 10 < 5) ? '#00ffcc' : '#9b59b6';
+        ctx.fillRect(-1.5, -2, 3, 3);
+        ctx.restore();
+
+        // --- 6. MEMBROS / PROPULSORES FLUTUANTES ---
+        // O Glitch Walker flutua/levita através do teleporte
+        ctx.save();
+        applyFragment(4.1, 1.2);
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(-9, 13, 4, 3);
+        ctx.fillRect(5, 13, 4, 3);
+        // Rastro digital de propulsão
+        if (!isDying) {
+            ctx.fillStyle = 'rgba(0, 255, 204, 0.5)';
+            const thrusterH = 2 + Math.random() * 4;
+            ctx.fillRect(-8, 16, 2, thrusterH);
+            ctx.fillRect(6, 16, 2, thrusterH);
+        }
+        ctx.restore();
+
+        // Ocasional fatia horizontal de glitch (Slice shift)
+        if (!isDying && Math.random() > 0.85) {
+            const sliceY = (Math.random() - 0.5) * 16;
+            const sliceH = 4 + Math.random() * 4;
+            const sliceShiftX = (Math.random() - 0.5) * 8;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(-20, sliceY, 40, sliceH);
+            ctx.clip();
+            // Desenhamos uma barra ciano/magenta semi-transparente sobrepondo a fatia
+            ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0, 255, 204, 0.3)' : 'rgba(155, 89, 182, 0.3)';
+            ctx.fillRect(-20, sliceY, 40, sliceH);
+            ctx.restore();
+        }
+
+        ctx.restore();
     }
 });

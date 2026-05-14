@@ -2790,27 +2790,73 @@ Object.assign(Graphics, {
         this.ctx.restore();
     },
 
-    drawWorldLabel(x, y, text, color = '#00f0ff', alpha = 1.0, cryptIntensity = 0) {
-        if (alpha <= 0 || !text) return;
-        const px = (x + 0.5) * this.tileSize;
-        const py = (y + 0.5) * this.tileSize;
+    drawWorldLabel(x, y, text, color = '#00f0ff', alpha = 1.0, cryptIntensity = 0.3, isScreenSpace = false) {
+        // Strict safety check for undefined/null strings
+        if (text === undefined || text === null || text === "undefined" || text === "null") text = "!";
+        text = String(text);
+        if (alpha <= 0 || !text || text === "undefined") return;
         
-        // Use shared Crypt Scrambler Logic
-        const renderText = this.scrambleText(text, cryptIntensity, x * 13 + y * 37);
+        const ts = this.tileSize;
+        const px = isScreenSpace ? x : (x + 0.5) * ts;
+        const py = isScreenSpace ? y : (y + 0.5) * ts;
+        
+        const width = ts * 3;
+        const height = ts * 0.5;
 
         this.ctx.save();
         this.ctx.globalAlpha = alpha;
-        this.ctx.globalCompositeOperation = 'lighter';
-        this.ctx.font = '20px "VT323"';
-        this.ctx.textAlign = 'center';
+        this.ctx.translate(px - width/2, py - height/2);
         
-        // Glow effect
-        this.ctx.shadowBlur = 4;
+        // 1. Casing
+        this.ctx.fillStyle = '#050a0a';
+        this.ctx.fillRect(0, 0, width, height);
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 1;
+        this.ctx.globalAlpha = alpha * 0.3;
+        this.ctx.strokeRect(0, 0, width, height);
+        this.ctx.globalAlpha = alpha;
+
+        // 2. Clipping
+        this.ctx.beginPath();
+        this.ctx.rect(2, 0, width - 4, height);
+        this.ctx.clip();
+
+        // 3. Drawing logic
+        this.ctx.font = '14px "VT323", monospace';
+        const charAdvance = 9; 
+        const totalTextWidth = text.length * charAdvance;
+        
+        const scrollSpeed = 40; 
+        const totalLoopWidth = totalTextWidth + width;
+        const time = Date.now() / 1000;
+        const offset = (time * scrollSpeed) % totalLoopWidth;
+        const scrollX = width - offset;
+
+        // Apply Glitch Scramble to the text
+        let renderText = this.scrambleText(text, cryptIntensity, x * 13 + y * 37 + Math.floor(time * 10));
+        if (!renderText || renderText === "undefined") renderText = text;
+
+        this.ctx.shadowBlur = 5;
         this.ctx.shadowColor = color;
-        
         this.ctx.fillStyle = color;
-        this.ctx.fillText(renderText, px, py);
-        
+        this.ctx.textAlign = 'left';
+
+        const drawText = (baseX) => {
+            for (let i = 0; i < renderText.length; i++) {
+                let jx = 0, jy = 0;
+                // Subtle Jitter for extra glitch feel
+                if (cryptIntensity > 0 && Math.sin(time * 15 + i) > 0.85) {
+                    jx = (Math.sin(time * 40 + i) * 1.5) * cryptIntensity;
+                    jy = (Math.cos(time * 40 + i) * 1.5) * cryptIntensity;
+                }
+                // Even if the char width varies, charAdvance forces it into its slot
+                this.ctx.fillText(renderText[i], baseX + i * charAdvance + jx, height / 2 + 5 + jy);
+            }
+        };
+
+        drawText(scrollX);
+        if (scrollX < 0) drawText(scrollX + totalLoopWidth);
+
         this.ctx.restore();
     }
 });

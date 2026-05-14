@@ -346,6 +346,37 @@ Object.assign(window.AudioSys, {
         this.playTone(2000 + Math.random() * 3000, 'square', 0.05, 0.02);
     },
 
+    playElectricityHum() {
+        if (audioCtx.state !== 'running') return;
+        const now = audioCtx.currentTime;
+        const duration = 0.5;
+        
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        
+        osc1.type = 'sawtooth'; osc1.frequency.setValueAtTime(60, now);
+        osc2.type = 'square'; osc2.frequency.setValueAtTime(120, now);
+        
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.setValueAtTime(1000, now);
+        
+        g.gain.setValueAtTime(0.1, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        
+        osc1.connect(filter); osc2.connect(filter);
+        filter.connect(g); g.connect(audioCtx.destination);
+        
+        osc1.start(now); osc2.start(now);
+        osc1.stop(now + duration); osc2.stop(now + duration);
+        
+        // Add a few crackles
+        for (let i = 0; i < 3; i++) {
+            const crackTime = now + Math.random() * duration;
+            this.playTone(1500 + Math.random() * 1000, 'square', 0.02, 0.01, crackTime);
+        }
+    },
+
     playAlarm() {
         if (typeof audioCtx === 'undefined') return;
         if (audioCtx.state !== 'running') return;
